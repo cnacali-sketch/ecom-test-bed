@@ -8,6 +8,7 @@ import { PriceBlock } from "@/components/product/PriceBlock";
 import { TrustBadges } from "@/components/product/TrustBadges";
 import { VariantSelector } from "@/components/product/VariantSelector";
 import { useCart } from "@/lib/cart-context";
+import { formatPrice } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
 interface ProductDetailProps {
@@ -17,7 +18,7 @@ interface ProductDetailProps {
 
 export function ProductDetail({ product, relatedProducts }: ProductDetailProps) {
   const [activeVariantId, setActiveVariantId] = useState(product.variants[0]?.id ?? "");
-  const { addItem } = useCart();
+  const { addItem, openCart } = useCart();
 
   const activeVariant =
     product.variants.find((variant) => variant.id === activeVariantId) ?? product.variants[0];
@@ -35,17 +36,21 @@ export function ProductDetail({ product, relatedProducts }: ProductDetailProps) 
       currency: product.currency,
       quantity: 1,
     });
+    openCart();
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+    // pb-24 on mobile clears the sticky add-to-cart bar
+    <div className="mx-auto max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:pb-10 lg:pt-10">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12">
         <ImageGallery images={product.images} />
 
         <div className="flex flex-col gap-6">
           <div>
-            <p className="text-xs uppercase tracking-wide text-neutral-500">{product.brand}</p>
-            <h1 className="text-2xl font-semibold text-neutral-900">{product.name}</h1>
+            <p className="eyebrow">{product.type}</p>
+            <h1 className="font-display mt-1 text-3xl italic text-ink sm:text-4xl">
+              {product.name}
+            </h1>
           </div>
 
           <PriceBlock price={product.price} mrp={product.mrp} currency={product.currency} size="lg" />
@@ -58,21 +63,22 @@ export function ProductDetail({ product, relatedProducts }: ProductDetailProps) 
             />
           )}
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          {/* Desktop actions — on mobile the sticky bar below takes over */}
+          <div className="hidden gap-3 lg:flex">
             <button
               type="button"
               onClick={handleAddToCart}
               disabled={!canAddToCart}
-              className="flex-1 rounded bg-neutral-900 py-3 text-sm font-medium text-white hover:bg-neutral-700 disabled:cursor-not-allowed disabled:bg-neutral-300"
+              className="flex-1 bg-teal py-3.5 text-xs uppercase tracking-[0.18em] text-white transition-colors hover:bg-teal-deep disabled:cursor-not-allowed disabled:bg-ink/20"
             >
-              {canAddToCart ? "Add to Cart" : "Sold Out"}
+              {canAddToCart ? "Add to cart" : "Sold out"}
             </button>
             <button
               type="button"
               disabled={!canAddToCart}
-              className="flex-1 rounded border border-neutral-900 py-3 text-sm font-medium text-neutral-900 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:border-neutral-300 disabled:text-neutral-300"
+              className="flex-1 border border-teal py-3.5 text-xs uppercase tracking-[0.18em] text-teal transition-colors hover:bg-teal hover:text-white disabled:cursor-not-allowed disabled:border-ink/20 disabled:text-ink/30"
             >
-              Buy It Now
+              Buy it now
             </button>
           </div>
 
@@ -90,6 +96,28 @@ export function ProductDetail({ product, relatedProducts }: ProductDetailProps) 
       </div>
 
       <CrossSellRail products={relatedProducts} />
+
+      {/* Sticky mobile add-to-cart bar */}
+      <div className="fixed inset-x-0 bottom-0 z-[70] border-t border-ink/10 bg-paper/95 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="flex items-center gap-4">
+          <div className="min-w-0">
+            <p className="truncate text-[11px] uppercase tracking-[0.1em] text-ink-soft">
+              {product.name}
+            </p>
+            <p className="text-base font-semibold text-ink">
+              {formatPrice(product.price, product.currency)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleAddToCart}
+            disabled={!canAddToCart}
+            className="ml-auto shrink-0 bg-teal px-7 py-3.5 text-xs uppercase tracking-[0.16em] text-white transition-colors hover:bg-teal-deep disabled:cursor-not-allowed disabled:bg-ink/20"
+          >
+            {canAddToCart ? "Add to cart" : "Sold out"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

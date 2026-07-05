@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from decimal import Decimal
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -19,7 +20,7 @@ class Order(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
     status: Mapped[str] = mapped_column(String(32), default="pending")
-    total_amount: Mapped[float] = mapped_column(Numeric(10, 2))
+    total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     items: Mapped[list[OrderItem]] = relationship(
@@ -36,6 +37,6 @@ class OrderItem(Base):
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id"), index=True)
     product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id"), index=True)
     quantity: Mapped[int] = mapped_column(Integer())
-    unit_price: Mapped[float] = mapped_column(Numeric(10, 2))
+    unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
 
     order: Mapped[Order] = relationship(back_populates="items")

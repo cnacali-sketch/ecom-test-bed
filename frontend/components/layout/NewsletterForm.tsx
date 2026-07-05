@@ -1,9 +1,28 @@
 "use client";
 
-/** Newsletter signup form — isolated as a Client Component since Footer stays server-rendered. */
-export function NewsletterForm() {
+import { useState } from "react";
+
+interface NewsletterFormProps {
+  placeholder?: string;
+  buttonLabel?: string;
+}
+
+/** Newsletter signup — client component so Footer stays server-rendered. */
+export function NewsletterForm({ placeholder = "Your email", buttonLabel = "Sign up" }: NewsletterFormProps) {
+  const [done, setDone] = useState(false);
+
+  if (done) {
+    return <p className="text-sm text-teal">You&apos;re on the list — first drop note coming soon.</p>;
+  }
+
   return (
-    <form className="flex flex-col gap-2" onSubmit={(event) => event.preventDefault()}>
+    <form
+      className="flex max-w-sm gap-0"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setDone(true);
+      }}
+    >
       <label htmlFor="newsletter-email" className="sr-only">
         Email address
       </label>
@@ -11,14 +30,14 @@ export function NewsletterForm() {
         id="newsletter-email"
         type="email"
         required
-        placeholder="Your email"
-        className="rounded border border-neutral-300 px-3 py-2 text-sm"
+        placeholder={placeholder}
+        className="w-full border border-ink/20 bg-card px-3 py-2.5 text-sm text-ink placeholder:text-ink-soft/60 focus:border-teal focus:outline-none"
       />
       <button
         type="submit"
-        className="rounded bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700"
+        className="shrink-0 bg-teal px-5 py-2.5 text-xs uppercase tracking-[0.14em] text-white transition-colors hover:bg-teal-deep"
       >
-        Sign Up
+        {buttonLabel}
       </button>
     </form>
   );

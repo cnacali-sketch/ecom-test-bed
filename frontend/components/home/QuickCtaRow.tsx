@@ -1,25 +1,30 @@
+import Image from "next/image";
 import Link from "next/link";
+import { siteConfig } from "@/content/site.config";
+import { Reveal } from "@/components/ui/Reveal";
 
-const CTA_TILES = [
-  { label: "Clearance Sale", href: "/collections/bags" },
-  { label: "Gifts Under 999", href: "/collections/jewellery" },
-  { label: "Shop Jewellery", href: "/collections/jewellery" },
-  { label: "Shop All", href: "/collections/bags" },
-];
-
-/** 3-4 promo tile row (Accessorize pattern). */
+/** Category shortcut tiles under the hero — config-driven. */
 export function QuickCtaRow() {
   return (
-    <section className="mx-auto max-w-6xl px-6 py-10">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {CTA_TILES.map((tile) => (
-          <Link
-            key={tile.label}
-            href={tile.href}
-            className="flex items-center justify-center rounded border border-neutral-200 px-4 py-6 text-center text-sm font-medium text-neutral-900 hover:border-neutral-900"
-          >
-            {tile.label}
-          </Link>
+    <section className="border-y border-ink/10 bg-paper-tint">
+      <div className="mx-auto flex max-w-6xl snap-x snap-mandatory gap-3 overflow-x-auto px-4 py-8 [scrollbar-width:none] sm:px-6 md:grid md:grid-cols-4 md:gap-px md:overflow-visible [&::-webkit-scrollbar]:hidden">
+        {siteConfig.home.quickCtas.map((cta, index) => (
+          <Reveal key={cta.label} delay={index * 70} className="w-36 shrink-0 snap-start md:w-auto">
+            <Link href={cta.href} className="group block p-2 text-center">
+              <span className="relative mx-auto block aspect-square w-full max-w-[180px] overflow-hidden rounded-full ring-1 ring-ink/10 transition-shadow duration-300 group-hover:ring-2 group-hover:ring-teal">
+                <Image
+                  src={cta.image}
+                  alt={cta.label}
+                  fill
+                  sizes="180px"
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </span>
+              <span className="mt-3 inline-block text-xs uppercase tracking-[0.16em] text-ink transition-colors group-hover:text-teal">
+                {cta.label}
+              </span>
+            </Link>
+          </Reveal>
         ))}
       </div>
     </section>

@@ -7,8 +7,16 @@ import {
 } from "./mock-data";
 import type { Collection, Product } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Backend is OPT-IN during the frontend-first phase: the storefront uses
+// the bundled catalog (content/catalog.ts) unless NEXT_PUBLIC_API_URL is
+// explicitly set. This prevents a stale locally-running backend from
+// hijacking the storefront with old seed data.
 const FETCH_TIMEOUT_MS = 3000;
+
+/** Backend base URL, or null when the storefront should stay on the bundled catalog. */
+function apiBaseUrl(): string | null {
+  return process.env.NEXT_PUBLIC_API_URL ?? null;
+}
 
 /**
  * Small fetch wrapper around the FastAPI backend. The backend is being built
@@ -17,11 +25,13 @@ const FETCH_TIMEOUT_MS = 3000;
  * JSON) instead of throwing — pages must never hard-crash for this reason.
  */
 async function fetchJson<T>(path: string): Promise<T | null> {
+  const baseUrl = apiBaseUrl();
+  if (!baseUrl) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
     });

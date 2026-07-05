@@ -72,6 +72,7 @@ function sortProducts(products: Product[], sort: SortOption): Product[] {
 export function ProductGrid({ products }: ProductGridProps) {
   const [filters, setFilters] = useState<ActiveFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<SortOption>("featured");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const priceCeiling = useMemo(
     () => Math.max(...products.map((product) => product.price), 0),
@@ -99,19 +100,41 @@ export function ProductGrid({ products }: ProductGridProps) {
     setFilters((current) => ({ ...current, maxPrice }));
   };
 
+  const activeFilterCount =
+    filters.brand.length +
+    filters.type.length +
+    filters.color.length +
+    filters.material.length +
+    (filters.maxPrice !== null ? 1 : 0);
+
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[240px_1fr]">
-      <FilterSidebar
-        counts={counts}
-        activeFilters={filters}
-        priceCeiling={priceCeiling}
-        onToggleFilter={toggleFilter}
-        onPriceChange={handlePriceChange}
-      />
+      {/* Desktop: persistent sidebar. Mobile: filters live in a bottom sheet. */}
+      <div className="hidden lg:block">
+        <FilterSidebar
+          counts={counts}
+          activeFilters={filters}
+          priceCeiling={priceCeiling}
+          onToggleFilter={toggleFilter}
+          onPriceChange={handlePriceChange}
+        />
+      </div>
 
       <div>
-        <div className="mb-4 flex items-center justify-between">
-          <p className="text-sm text-neutral-500">{visibleProducts.length} products</p>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setMobileFiltersOpen(true)}
+            className="flex items-center gap-2 border border-ink/20 px-4 py-2.5 text-xs uppercase tracking-[0.14em] text-ink lg:hidden"
+          >
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal text-[10px] text-white">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+          <p className="hidden text-sm text-ink-soft lg:block">{visibleProducts.length} products</p>
           <SortDropdown value={sort} onChange={setSort} />
         </div>
 
@@ -120,13 +143,55 @@ export function ProductGrid({ products }: ProductGridProps) {
             No products match the selected filters.
           </p>
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 sm:gap-4">
             {visibleProducts.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
         )}
       </div>
+
+      {/* Mobile filter bottom sheet */}
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-[85] lg:hidden">
+          <button
+            type="button"
+            aria-label="Close filters"
+            onClick={() => setMobileFiltersOpen(false)}
+            className="absolute inset-0 bg-ink/40"
+          />
+          <div className="animate-rise absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col bg-paper">
+            <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
+              <span className="eyebrow">Filter</span>
+              <button
+                type="button"
+                onClick={() => setFilters(EMPTY_FILTERS)}
+                className="text-xs uppercase tracking-[0.14em] text-ink-soft"
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <FilterSidebar
+                counts={counts}
+                activeFilters={filters}
+                priceCeiling={priceCeiling}
+                onToggleFilter={toggleFilter}
+                onPriceChange={handlePriceChange}
+              />
+            </div>
+            <div className="border-t border-ink/10 p-4">
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(false)}
+                className="w-full bg-teal py-3.5 text-xs uppercase tracking-[0.18em] text-white"
+              >
+                Show {visibleProducts.length} products
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

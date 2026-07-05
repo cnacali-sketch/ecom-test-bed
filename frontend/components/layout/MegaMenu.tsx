@@ -19,17 +19,17 @@ interface MegaMenuProps {
  */
 export function MegaMenu({ columns, promoImage, promoLabel, promoHref }: MegaMenuProps) {
   return (
-    <div className="absolute left-0 top-full z-40 w-full border-t border-neutral-200 bg-white shadow-lg">
+    <div className="absolute left-0 top-full z-40 w-full border-t border-ink/10 bg-paper shadow-lg">
       <div className="mx-auto grid max-w-6xl grid-cols-[1fr_1fr_1fr_320px] gap-8 px-6 py-8">
         {columns.map((column) => (
           <div key={column.heading}>
-            <p className="mb-3 text-sm font-semibold text-neutral-900">{column.heading}</p>
+            <p className="mb-3 eyebrow">{column.heading}</p>
             <ul className="flex flex-col gap-2">
               {column.links.map((link) => (
-                <li key={link.href}>
+                <li key={`${column.heading}-${link.label}`}>
                   <Link
                     href={link.href}
-                    className="text-sm text-neutral-600 hover:text-neutral-900"
+                    className="text-sm text-ink-soft transition-colors hover:text-teal"
                   >
                     {link.label}
                   </Link>
@@ -49,7 +49,7 @@ export function MegaMenu({ columns, promoImage, promoLabel, promoHref }: MegaMen
               className="object-cover transition-transform duration-300 group-hover:scale-105"
             />
           </div>
-          <p className="mt-2 text-sm font-medium text-neutral-900">{promoLabel}</p>
+          <p className="mt-2 text-xs uppercase tracking-[0.14em] text-ink">{promoLabel}</p>
         </Link>
       </div>
     </div>

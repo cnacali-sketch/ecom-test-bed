@@ -1,81 +1,96 @@
-"""Integration tests for /api/products/* endpoints, backed by SQLite in-memory."""
-from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
+"""Tests for /api/products endpoints.
 
-from app.models.product import Product, ProductVariant
+Uses an in-memory SQLite DB via conftest. All tests are sync-friendly through
+pytest-asyncio. No Postgres required.
+"""
+import pytest
+from httpx import AsyncClient
 
 
-class TestProductsRouter:
-    def test_create_and_list_product(self, client: TestClient):
-        create_response = client.post(
-            "/api/products",
-            json={"sku": "ACME-HAT-L-0001", "name": "Sun Hat", "price": 19.99, "mrp": 24.99},
-        )
-        assert create_response.status_code == 201
-        created = create_response.json()
-        assert created["sku"] == "ACME-HAT-L-0001"
-        assert created["variants"] == []
+VALID_PRODUCT = {
+    "sku": "TEST-SKU-01",
+    "slug": "test-product-one",
+    "name": "Test Product",
+    "price": "299.00",
+    "mrp": "399.00",
+    "in_stock": True,
+    "description": "A test product.",
+    "images": [],
+    "attrs": {"collectionSlugs": ["hair-accessories"], "tags": []},
+    "variants": [
+        {"sku": "TEST-VAR-01", "color": "Teal", "color_hex": "#1f6f6b", "in_stock": True}
+    ],
+}
 
-        list_response = client.get("/api/products")
-        assert list_response.status_code == 200
-        products = list_response.json()
-        assert any(p["sku"] == "ACME-HAT-L-0001" for p in products)
 
-    def test_get_product_returns_404_when_not_found(self, client: TestClient):
-        response = client.get("/api/products/00000000-0000-0000-0000-000000000000")
-        assert response.status_code == 404
+@pytest.mark.asyncio
+async def test_create_product(client: AsyncClient) -> None:
+    resp = await client.post("/api/products", json=VALID_PRODUCT)
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["slug"] == "test-product-one"
+    assert data["price"] == "299.00"
+    assert len(data["variants"]) == 1
+    assert data["variants"][0]["color"] == "Teal"
 
-    def test_create_product_returns_422_on_missing_fields(self, client: TestClient):
-        response = client.post("/api/products", json={"name": "Missing SKU"})
-        assert response.status_code == 422
 
-    async def test_list_products_includes_variants(
-        self, client: TestClient, db_session: AsyncSession
-    ) -> None:
-        product = Product(sku="VAR-TEST-01", name="Test Product", price=10, mrp=15)
-        product.variants.append(
-            ProductVariant(
-                sku="VAR-TEST-01-RED",
-                name="Test Product - Red",
-                price=10,
-                mrp=15,
-                attrs={"color": "Red"},
-            )
-        )
-        db_session.add(product)
-        await db_session.commit()
-        # The test reuses the same session the endpoint runs against (see
-        # conftest's dependency override), so `variants` is already resident
-        # in the identity map after commit. Expire it to force a real reload,
-        # otherwise this test would pass even with selectinload removed.
-        db_session.expire(product, ["variants"])
+@pytest.mark.asyncio
+async def test_list_products_empty(client: AsyncClient) -> None:
+    resp = await client.get("/api/products")
+    assert resp.status_code == 200
+    assert resp.json() == []
 
-        response = client.get("/api/products")
-        assert response.status_code == 200
-        found = next(p for p in response.json() if p["sku"] == "VAR-TEST-01")
-        assert len(found["variants"]) == 1
-        assert found["variants"][0]["sku"] == "VAR-TEST-01-RED"
-        assert found["variants"][0]["attrs"]["color"] == "Red"
 
-    async def test_get_product_includes_variants(
-        self, client: TestClient, db_session: AsyncSession
-    ) -> None:
-        product = Product(sku="VAR-TEST-02", name="Test Product 2", price=20, mrp=25)
-        product.variants.append(
-            ProductVariant(
-                sku="VAR-TEST-02-BLU",
-                name="Test Product 2 - Blue",
-                price=20,
-                mrp=25,
-                attrs={"color": "Blue"},
-            )
-        )
-        db_session.add(product)
-        await db_session.commit()
-        db_session.expire(product, ["variants"])
+@pytest.mark.asyncio
+async def test_list_products_pagination(client: AsyncClient) -> None:
+    # Create two products
+    for i in range(2):
+        payload = {**VALID_PRODUCT, "sku": f"PAG-{i}", "slug": f"pag-product-{i}", "variants": []}
+        await client.post("/api/products", json=payload)
+    resp = await client.get("/api/products?limit=1&offset=0")
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
 
-        response = client.get(f"/api/products/{product.id}")
-        assert response.status_code == 200
-        body = response.json()
-        assert len(body["variants"]) == 1
-        assert body["variants"][0]["sku"] == "VAR-TEST-02-BLU"
+
+@pytest.mark.asyncio
+async def test_get_by_slug(client: AsyncClient) -> None:
+    await client.post("/api/products", json=VALID_PRODUCT)
+    resp = await client.get("/api/products/slug/test-product-one")
+    assert resp.status_code == 200
+    assert resp.json()["slug"] == "test-product-one"
+
+
+@pytest.mark.asyncio
+async def test_get_by_slug_404(client: AsyncClient) -> None:
+    resp = await client.get("/api/products/slug/does-not-exist")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_duplicate_slug_returns_409(client: AsyncClient) -> None:
+    await client.post("/api/products", json=VALID_PRODUCT)
+    resp = await client.post("/api/products", json=VALID_PRODUCT)
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_delete_product(client: AsyncClient) -> None:
+    create = await client.post("/api/products", json=VALID_PRODUCT)
+    product_id = create.json()["id"]
+    resp = await client.delete(f"/api/products/{product_id}")
+    assert resp.status_code == 204
+    resp2 = await client.get(f"/api/products/{product_id}")
+    assert resp2.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_collection_filter(client: AsyncClient) -> None:
+    hair = {**VALID_PRODUCT, "sku": "HAIR-01", "slug": "hair-prod",
+            "attrs": {"collectionSlugs": ["hair-accessories"]}, "variants": []}
+    jwl = {**VALID_PRODUCT, "sku": "JWL-01", "slug": "jwl-prod",
+           "attrs": {"collectionSlugs": ["jewellery"]}, "variants": []}
+    await client.post("/api/products", json=hair)
+    await client.post("/api/products", json=jwl)
+    resp = await client.get("/api/products?collection=jewellery")
+    assert resp.status_code == 200
+    assert all("jewellery" in p["attrs"]["collectionSlugs"] for p in resp.json())
