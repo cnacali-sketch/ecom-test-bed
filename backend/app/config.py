@@ -25,9 +25,12 @@ class Settings(BaseSettings):
 
     app_name: str = "savvyarchitect-backend"
     app_env: str = "development"
-    debug: bool = True
+    debug: bool = False  # override via DEBUG=true in .env
 
     cors_origins: str = "http://localhost:3000"
+
+    # Leave empty in dev; set a secret in production .env
+    api_key: str = ""
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/savvyarchitect"
     redis_url: str = "redis://localhost:6379/0"

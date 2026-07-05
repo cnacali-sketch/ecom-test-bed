@@ -1,57 +1,39 @@
 """Pure pricing calculator functions for the Pricing Agent.
 
-All functions are side-effect-free and raise `ValueError` on invalid input
-(zero/negative costs or prices) rather than silently returning garbage
-(e.g. division by zero or a negative break-even count).
+All functions are side-effect-free and raise `ValueError` on invalid input.
+Types use Decimal throughout so results are exact and safe for invoicing.
 """
+from decimal import Decimal
 
 
-def markup(cost: float, margin_pct: float) -> float:
-    """Compute the retail price from `cost` given a desired `margin_pct`.
-
-    price = cost * (1 + margin_pct / 100)
-
-    Raises:
-        ValueError: if `cost` is not strictly positive, or `margin_pct` is negative.
-    """
+def markup(cost: Decimal, margin_pct: Decimal) -> Decimal:
+    """price = cost * (1 + margin_pct / 100)"""
+    cost, margin_pct = Decimal(str(cost)), Decimal(str(margin_pct))
     if cost <= 0:
         raise ValueError("cost must be greater than zero")
     if margin_pct < 0:
         raise ValueError("margin_pct must not be negative")
-    return cost * (1 + margin_pct / 100)
+    return cost * (1 + margin_pct / Decimal("100"))
 
 
-def profit_margin(cost: float, price: float) -> float:
-    """Compute the profit margin percentage given `cost` and selling `price`.
-
-    margin_pct = (price - cost) / price * 100
-
-    Raises:
-        ValueError: if `price` is not strictly positive, or `cost` is negative.
-    """
+def profit_margin(cost: Decimal, price: Decimal) -> Decimal:
+    """margin_pct = (price - cost) / price * 100"""
+    cost, price = Decimal(str(cost)), Decimal(str(price))
     if price <= 0:
         raise ValueError("price must be greater than zero")
     if cost < 0:
         raise ValueError("cost must not be negative")
-    return (price - cost) / price * 100
+    return (price - cost) / price * Decimal("100")
 
 
-def break_even(fixed_costs: float, price: float, variable_cost: float) -> float:
-    """Compute the number of units that must be sold to cover `fixed_costs`.
-
-    units = fixed_costs / (price - variable_cost)
-
-    Raises:
-        ValueError: if `price` is not strictly positive, if `fixed_costs` is
-            negative, or if `variable_cost` is greater than or equal to
-            `price` (i.e. the contribution margin is not positive, making
-            break-even unreachable).
-    """
+def break_even(fixed_costs: Decimal, price: Decimal, variable_cost: Decimal) -> Decimal:
+    """units = fixed_costs / (price - variable_cost)"""
+    fixed_costs, price, variable_cost = Decimal(str(fixed_costs)), Decimal(str(price)), Decimal(str(variable_cost))
     if price <= 0:
         raise ValueError("price must be greater than zero")
     if fixed_costs < 0:
         raise ValueError("fixed_costs must not be negative")
-    contribution_margin = price - variable_cost
-    if contribution_margin <= 0:
-        raise ValueError("variable_cost must be less than price for break-even to be reachable")
-    return fixed_costs / contribution_margin
+    contribution = price - variable_cost
+    if contribution <= 0:
+        raise ValueError("variable_cost must be less than price")
+    return fixed_costs / contribution

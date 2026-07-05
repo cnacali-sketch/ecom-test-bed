@@ -1,270 +1,160 @@
-"""Seed the products/product_variants tables with catalog data.
+"""Seed the database from the frontend catalog.
 
-Mirrors frontend/lib/mock-data.ts 1:1 (same ids/slugs/skus) so PLP/PDP
-routes render identical content whether backend or mock-data fallback
-serves the request. Extra display fields the Product/ProductVariant
-models don't have columns for (slug, brand, collectionSlugs, etc.) are
-kept in `attrs`, which the frontend adapter reads back out.
+Single source of truth: reads `frontend/content/catalog.ts` via a small
+TypeScript→JSON bridge so backend and frontend always stay in sync.
 
-Safe to re-run: skips any product whose sku already exists.
+Usage:
+    cd backend
+    python scripts/seed.py                      # uses catalog.ts via tsx
+    python scripts/seed.py --json path/to/file  # skip tsx, pass JSON directly
+
+Safe to re-run: skips products whose slug already exists.
+
+ponytail: tsx bridge is one subprocess call; no separate ETL pipeline.
+Add a proper ETL step only when catalog.ts exceeds ~500 products or needs
+transformation that can't be done in the TypeScript dumper script.
 """
+import argparse
 import asyncio
+import json
+import subprocess
+import sys
+from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import select
 
 from app.db import async_session_factory
+from app.models.collection import Collection
 from app.models.product import Product, ProductVariant
 
-CATALOG = [
-    {
-        "sku": "prod-tote-01",
-        "name": "Everyday Structured Tote",
-        "price": 2799,
-        "mrp": 3999,
-        "description": (
-            "A structured tote built for the daily commute — padded laptop sleeve, "
-            "wide top opening, and a base that keeps its shape whether you're "
-            "carrying two things or twenty."
-        ),
-        "images": [
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Tote+Front",
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Tote+Side",
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Tote+Detail",
-        ],
-        "attrs": {
-            "slug": "everyday-structured-tote",
-            "brand": "Savvy",
-            "type": "Tote",
-            "material": "Vegan Leather",
-            "careInstructions": (
-                "Wipe clean with a soft, dry cloth. Avoid prolonged sun exposure. "
-                "Store flat or upright with light stuffing to retain shape. Keep "
-                "away from sharp objects and rough surfaces."
-            ),
-            "measurements": "Height: 32cm · Width: 40cm · Depth: 14cm · Strap drop: 22cm",
-            "shippingInfo": "Ships within 2 business days. Free shipping on orders over ₹2,999. Easy 15-day returns.",
-            "currency": "INR",
-            "collectionSlugs": ["bags"],
-            "isNew": True,
-            "isSale": True,
-            "inStock": True,
-            "tags": ["new-in", "work", "best-seller"],
-        },
-        "variants": [
-            {"sku": "TOTE-BLK-01", "color": "Black", "colorHex": "#1a1a1a", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Tote+Black", "inStock": True},
-            {"sku": "TOTE-TAN-01", "color": "Tan", "colorHex": "#c8a06a", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Tote+Tan", "inStock": True},
-            {"sku": "TOTE-RED-01", "color": "Brick Red", "colorHex": "#a13d2b", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Tote+Red", "inStock": False},
-        ],
-    },
-    {
-        "sku": "prod-sling-02",
-        "name": "Hands-Free Crossbody Sling",
-        "price": 1499,
-        "mrp": 1499,
-        "description": (
-            "A lightweight nylon sling with an adjustable strap and a "
-            "water-resistant lining — made for days when you need both hands "
-            "free and your essentials close."
-        ),
-        "images": [
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Sling+Front",
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Sling+Worn",
-        ],
-        "attrs": {
-            "slug": "hands-free-crossbody-sling",
-            "brand": "Savvy",
-            "type": "Sling Bag",
-            "material": "Nylon",
-            "careInstructions": "Spot clean with a damp cloth and mild detergent. Do not machine wash. Air dry only, away from direct heat.",
-            "measurements": "Height: 18cm · Width: 24cm · Depth: 7cm · Strap length: adjustable up to 130cm",
-            "shippingInfo": "Ships within 2 business days. Free shipping on orders over ₹2,999. Easy 15-day returns.",
-            "currency": "INR",
-            "collectionSlugs": ["bags"],
-            "isNew": True,
-            "isSale": False,
-            "inStock": True,
-            "tags": ["new-in", "travel"],
-        },
-        "variants": [
-            {"sku": "SLNG-BLK-02", "color": "Black", "colorHex": "#1a1a1a", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Sling+Black", "inStock": True},
-            {"sku": "SLNG-OLV-02", "color": "Olive", "colorHex": "#5c6b45", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Sling+Olive", "inStock": True},
-        ],
-    },
-    {
-        "sku": "prod-clutch-03",
-        "name": "Satin Evening Clutch",
-        "price": 1899,
-        "mrp": 2599,
-        "description": (
-            "A slim satin clutch with a magnetic clasp and detachable chain "
-            "strap — enough room for the essentials, small enough to disappear "
-            "into an evening."
-        ),
-        "images": [
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Clutch+Front",
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Clutch+Open",
-        ],
-        "attrs": {
-            "slug": "satin-evening-clutch",
-            "brand": "Savvy Atelier",
-            "type": "Clutch",
-            "material": "Satin",
-            "careInstructions": "Dry clean only. Store in the provided dust bag. Avoid contact with water and oils.",
-            "measurements": "Height: 11cm · Width: 21cm · Depth: 4cm · Chain drop: 55cm",
-            "shippingInfo": "Ships within 2 business days. Free shipping on orders over ₹2,999. Easy 15-day returns.",
-            "currency": "INR",
-            "collectionSlugs": ["bags"],
-            "isNew": False,
-            "isSale": True,
-            "inStock": True,
-            "tags": ["evening"],
-        },
-        "variants": [
-            {"sku": "CLTC-CHM-03", "color": "Champagne", "colorHex": "#e8d9b5", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Clutch+Champagne", "inStock": True},
-            {"sku": "CLTC-BLK-03", "color": "Black", "colorHex": "#1a1a1a", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Clutch+Black", "inStock": False},
-        ],
-    },
-    {
-        "sku": "prod-hoops-04",
-        "name": "Waterproof Gold Hoops",
-        "price": 599,
-        "mrp": 899,
-        "description": (
-            "18k gold-plated hoops with a waterproof coating that resists "
-            "tarnish from sweat, showers, and daily wear. Lightweight enough "
-            "to forget you're wearing them."
-        ),
-        "images": [
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Hoops+Front",
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Hoops+Worn",
-        ],
-        "attrs": {
-            "slug": "waterproof-gold-hoops",
-            "brand": "Savvy",
-            "type": "Earrings",
-            "material": "Gold Plated Brass",
-            "careInstructions": "Wipe with a soft cloth after wear. Avoid perfume and lotion contact directly on the plating. Store in a dry pouch.",
-            "measurements": "Diameter: 3cm · Weight: 4g per pair",
-            "shippingInfo": "Ships within 2 business days. Free shipping on orders over ₹2,999. Easy 15-day returns.",
-            "currency": "INR",
-            "collectionSlugs": ["jewellery"],
-            "isNew": True,
-            "isSale": True,
-            "inStock": True,
-            "tags": ["new-in", "best-seller", "waterproof"],
-        },
-        "variants": [
-            {"sku": "HOOP-GLD-04", "color": "Gold", "colorHex": "#d4af37", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Hoops+Gold", "inStock": True},
-            {"sku": "HOOP-SLV-04", "color": "Silver", "colorHex": "#c0c0c0", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Hoops+Silver", "inStock": True},
-        ],
-    },
-    {
-        "sku": "prod-necklace-05",
-        "name": "Layered Pendant Necklace Set",
-        "price": 1299,
-        "mrp": 1299,
-        "description": (
-            "A two-piece layered necklace set pairing a fine chain with a coin "
-            "pendant — designed to be worn together or split across looks."
-        ),
-        "images": [
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Necklace+Front",
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Necklace+Detail",
-        ],
-        "attrs": {
-            "slug": "layered-pendant-necklace-set",
-            "brand": "Savvy Atelier",
-            "type": "Necklace",
-            "material": "Sterling Silver",
-            "careInstructions": "Store flat to avoid tangling. Remove before swimming or showering. Polish with a jewellery cloth.",
-            "measurements": "Chain lengths: 40cm and 45cm · Pendant diameter: 1.6cm",
-            "shippingInfo": "Ships within 2 business days. Free shipping on orders over ₹2,999. Easy 15-day returns.",
-            "currency": "INR",
-            "collectionSlugs": ["jewellery"],
-            "isNew": False,
-            "isSale": False,
-            "inStock": True,
-            "tags": ["layered", "gifting"],
-        },
-        "variants": [
-            {"sku": "NECK-SLV-05", "color": "Silver", "colorHex": "#c0c0c0", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Necklace+Silver", "inStock": True},
-            {"sku": "NECK-GLD-05", "color": "Gold", "colorHex": "#d4af37", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Necklace+Gold", "inStock": True},
-        ],
-    },
-    {
-        "sku": "prod-claw-clip-06",
-        "name": "Acetate Claw Clip Duo",
-        "price": 349,
-        "mrp": 499,
-        "description": (
-            "A two-pack of large acetate claw clips with a strong, gentle "
-            "grip — sized for thick hair, styled for every day."
-        ),
-        "images": [
-            "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Claw+Clip",
-        ],
-        "attrs": {
-            "slug": "acetate-claw-clip-duo",
-            "brand": "Savvy",
-            "type": "Hair Clip",
-            "material": "Cellulose Acetate",
-            "careInstructions": "Wipe clean with a dry cloth. Avoid dropping on hard surfaces.",
-            "measurements": "Length: 10cm · Pack of 2",
-            "shippingInfo": "Ships within 2 business days. Free shipping on orders over ₹2,999. Easy 15-day returns.",
-            "currency": "INR",
-            "collectionSlugs": ["jewellery"],
-            "isNew": True,
-            "isSale": True,
-            "inStock": False,
-            "tags": ["new-in", "hair", "thick-hair"],
-        },
-        "variants": [
-            {"sku": "CLAW-TRT-06", "color": "Tortoise", "colorHex": "#6b4423", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Claw+Tortoise", "inStock": True},
-            {"sku": "CLAW-BLK-06", "color": "Black", "colorHex": "#1a1a1a", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Claw+Black", "inStock": True},
-            {"sku": "CLAW-BLS-06", "color": "Blush", "colorHex": "#e8b4b8", "image": "https://placehold.co/800x1000/f3ede4/1a1a1a?text=Claw+Blush", "inStock": False},
-        ],
-    },
-]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CATALOG_TS = REPO_ROOT / "frontend" / "content" / "catalog.ts"
+DUMPER_TS = REPO_ROOT / "backend" / "scripts" / "_dump_catalog.ts"
 
 
-async def seed() -> None:
+def _write_dumper() -> None:
+    """Write a tiny TS script that imports the catalog and prints JSON."""
+    DUMPER_TS.write_text(
+        """
+import { products, collections } from "../../frontend/content/catalog";
+console.log(JSON.stringify({ products, collections }, null, 0));
+""".strip()
+    )
+
+
+def _load_catalog_via_tsx() -> dict:
+    """Run the dumper with tsx and parse its stdout as JSON."""
+    _write_dumper()
+    try:
+        result = subprocess.run(
+            ["npx", "tsx", str(DUMPER_TS)],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT / "frontend"),
+            timeout=30,
+        )
+    except FileNotFoundError:
+        sys.exit("tsx not found. Run 'npm install' in frontend/ first.")
+    if result.returncode != 0:
+        sys.exit(f"tsx failed:\n{result.stderr}")
+    DUMPER_TS.unlink(missing_ok=True)
+    return json.loads(result.stdout)
+
+
+async def seed(catalog: dict) -> None:
     async with async_session_factory() as db:
-        for entry in CATALOG:
-            existing = await db.execute(select(Product).where(Product.sku == entry["sku"]))
+        for p in catalog["products"]:
+            existing = await db.execute(select(Product).where(Product.slug == p["slug"]))
             if existing.scalar_one_or_none() is not None:
-                print(f"skip (exists): {entry['sku']}")
+                print(f"skip (exists): {p['slug']}")
                 continue
 
+            attrs = {
+                "brand": p.get("brand", ""),
+                "type": p.get("type", ""),
+                "material": p.get("material", ""),
+                "careInstructions": p.get("careInstructions", ""),
+                "measurements": p.get("measurements", ""),
+                "shippingInfo": p.get("shippingInfo", ""),
+                "collectionSlugs": p.get("collectionSlugs", []),
+                "isNew": p.get("isNew", False),
+                "isSale": p.get("isSale", False),
+                "tags": p.get("tags", []),
+            }
+
             product = Product(
-                sku=entry["sku"],
-                name=entry["name"],
-                price=entry["price"],
-                mrp=entry["mrp"],
-                description=entry["description"],
-                images=entry["images"],
-                attrs=entry["attrs"],
+                sku=p["id"],  # use the catalog id as the SKU until a proper SKU field lands
+                slug=p["slug"],
+                name=p["name"],
+                price=Decimal(str(p["price"])),
+                mrp=Decimal(str(p["mrp"])),
+                in_stock=p.get("inStock", True),
+                description=p.get("description"),
+                images=[img["url"] for img in p.get("images", [])],
+                attrs=attrs,
             )
-            for v in entry["variants"]:
+
+            for v in p.get("variants", []):
                 product.variants.append(
                     ProductVariant(
                         sku=v["sku"],
-                        name=f"{entry['name']} - {v['color']}",
-                        price=entry["price"],
-                        mrp=entry["mrp"],
-                        description=None,
-                        images=[v["image"]],
-                        attrs={
-                            "color": v["color"],
-                            "colorHex": v["colorHex"],
-                            "inStock": v["inStock"],
-                        },
+                        color=v["color"],
+                        color_hex=v["colorHex"],
+                        image=v.get("image"),
+                        in_stock=v.get("inStock", True),
                     )
                 )
+
             db.add(product)
-            print(f"seeded: {entry['sku']}")
+            print(f"seeded: {p['slug']}")
 
         await db.commit()
 
+        # Seed collections and wire product → collection relationships
+        for c in catalog.get("collections", []):
+            existing = await db.execute(select(Collection).where(Collection.slug == c["slug"]))
+            col = existing.scalar_one_or_none()
+            if col is None:
+                col = Collection(
+                    slug=c["slug"],
+                    name=c["name"],
+                    description=c.get("description"),
+                    hero_image=c.get("heroImage"),
+                )
+                db.add(col)
+                print(f"seeded collection: {c['slug']}")
+            else:
+                print(f"skip collection (exists): {c['slug']}")
+
+        await db.flush()
+
+        # Wire products to collections via product_ids in each collection
+        for c in catalog.get("collections", []):
+            col_result = await db.execute(select(Collection).where(Collection.slug == c["slug"]))
+            col = col_result.scalar_one_or_none()
+            if not col:
+                continue
+            for prod_id in c.get("productIds", []):
+                prod_result = await db.execute(
+                    select(Product).where(Product.attrs["id"].astext == prod_id)  # type: ignore[union-attr]
+                )
+                prod = prod_result.scalar_one_or_none()
+                if prod and col not in prod.collections:
+                    prod.collections.append(col)
+
+        await db.commit()
+        print("done.")
+
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--json", help="Path to pre-dumped catalog JSON (skips tsx)")
+    args = parser.parse_args()
+
+    if args.json:
+        catalog = json.loads(Path(args.json).read_text())
+    else:
+        catalog = _load_catalog_via_tsx()
+
+    asyncio.run(seed(catalog))

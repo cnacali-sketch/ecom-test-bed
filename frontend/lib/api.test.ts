@@ -13,7 +13,7 @@ function backendProduct(overrides: Partial<BackendProduct> = {}): BackendProduct
     mrp: 600,
     description: "Fetched from the live backend.",
     images: ["https://example.com/live.jpg"],
-    attrs: { slug: "live-product", collectionSlugs: ["bags"] },
+    attrs: { slug: "live-product", collectionSlugs: ["hair-accessories"] },
     variants: [],
     ...overrides,
   };
@@ -36,9 +36,12 @@ function mockFetchOnce(response: { ok: boolean; json?: () => unknown } | null) {
 describe("fetchProducts", () => {
   beforeEach(() => {
     vi.unstubAllGlobals();
+    // Backend is opt-in: these tests exercise the live-backend path.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:8000");
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   test("maps a live 200 response through the adapter", async () => {
@@ -84,8 +87,12 @@ describe("fetchProducts", () => {
 });
 
 describe("fetchProductsByCollectionSlug", () => {
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:8000");
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   test("filters the live catalog by collectionSlugs when the backend is reachable", async () => {
@@ -93,12 +100,12 @@ describe("fetchProductsByCollectionSlug", () => {
       ok: true,
       json: () =>
         Promise.resolve([
-          backendProduct({ sku: "in-bags", attrs: { collectionSlugs: ["bags"] } }),
+          backendProduct({ sku: "in-bags", attrs: { collectionSlugs: ["hair-accessories"] } }),
           backendProduct({ sku: "in-jewellery", attrs: { collectionSlugs: ["jewellery"] } }),
         ]),
     });
 
-    const result = await fetchProductsByCollectionSlug("bags");
+    const result = await fetchProductsByCollectionSlug("hair-accessories");
 
     expect(result.map((p) => p.id)).toEqual(["in-bags"]);
   });
@@ -106,9 +113,9 @@ describe("fetchProductsByCollectionSlug", () => {
   test("falls back to mock filtering when the backend is unreachable", async () => {
     mockFetchOnce(null);
 
-    const result = await fetchProductsByCollectionSlug("bags");
+    const result = await fetchProductsByCollectionSlug("hair-accessories");
 
-    expect(result.every((p) => p.collectionSlugs.includes("bags"))).toBe(true);
+    expect(result.every((p) => p.collectionSlugs.includes("hair-accessories"))).toBe(true);
     expect(result.length).toBeGreaterThan(0);
   });
 });

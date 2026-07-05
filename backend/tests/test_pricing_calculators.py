@@ -1,3 +1,4 @@
+from decimal import Decimal
 """Unit tests for app.services.pricing_calculators (pure functions, no I/O)."""
 import pytest
 
@@ -17,19 +18,19 @@ class TestMarkup:
         assert price == pytest.approx(60.0)
 
     def test_markup_zero_margin_returns_cost(self):
-        assert markup(100.0, 0.0) == pytest.approx(100.0)
+        assert markup(Decimal("100.0"), Decimal("0.0")) == pytest.approx(Decimal('100'))
 
     def test_markup_raises_on_zero_cost(self):
         with pytest.raises(ValueError):
-            markup(0.0, 20.0)
+            markup(Decimal("0.0"), Decimal("20.0"))
 
     def test_markup_raises_on_negative_cost(self):
         with pytest.raises(ValueError):
-            markup(-10.0, 20.0)
+            markup(-Decimal("10.0"), Decimal("20.0"))
 
     def test_markup_raises_on_negative_margin(self):
         with pytest.raises(ValueError):
-            markup(50.0, -5.0)
+            markup(Decimal("50.0"), -Decimal("5.0"))
 
 
 class TestProfitMargin:
@@ -42,23 +43,23 @@ class TestProfitMargin:
         margin_pct = profit_margin(cost, price)
 
         # Assert
-        assert margin_pct == pytest.approx(50.0)
+        assert margin_pct == pytest.approx(Decimal('50'))
 
     def test_profit_margin_raises_on_zero_price(self):
         with pytest.raises(ValueError):
-            profit_margin(50.0, 0.0)
+            profit_margin(Decimal("50.0"), Decimal("0.0"))
 
     def test_profit_margin_raises_on_negative_price(self):
         with pytest.raises(ValueError):
-            profit_margin(50.0, -1.0)
+            profit_margin(Decimal("50.0"), -Decimal("1.0"))
 
     def test_profit_margin_raises_on_negative_cost(self):
         with pytest.raises(ValueError):
-            profit_margin(-5.0, 100.0)
+            profit_margin(-Decimal("5.0"), Decimal("100.0"))
 
     def test_profit_margin_allows_zero_cost(self):
         # A free item sold at any price has 100% margin
-        assert profit_margin(0.0, 100.0) == pytest.approx(100.0)
+        assert profit_margin(Decimal("0.0"), Decimal("100.0")) == pytest.approx(Decimal('100'))
 
 
 class TestBreakEven:
@@ -73,20 +74,20 @@ class TestBreakEven:
         units = break_even(fixed_costs, price, variable_cost)
 
         # Assert
-        assert units == pytest.approx(50.0)
+        assert units == pytest.approx(Decimal('50'))
 
     def test_break_even_raises_on_zero_price(self):
         with pytest.raises(ValueError):
-            break_even(1000.0, 0.0, 10.0)
+            break_even(Decimal("1000.0"), Decimal("0.0"), Decimal("10.0"))
 
     def test_break_even_raises_when_variable_cost_exceeds_price(self):
         # Contribution margin would be <= 0, break-even is impossible
         with pytest.raises(ValueError):
-            break_even(1000.0, 20.0, 30.0)
+            break_even(Decimal("1000.0"), Decimal("20.0"), Decimal("30.0"))
 
     def test_break_even_raises_on_negative_fixed_costs(self):
         with pytest.raises(ValueError):
-            break_even(-100.0, 50.0, 30.0)
+            break_even(-Decimal("100.0"), Decimal("50.0"), Decimal("30.0"))
 
     def test_break_even_zero_fixed_costs_returns_zero_units(self):
-        assert break_even(0.0, 50.0, 30.0) == pytest.approx(0.0)
+        assert break_even(Decimal("0.0"), Decimal("50.0"), Decimal("30.0")) == pytest.approx(Decimal('0'))

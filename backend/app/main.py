@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import health, inventory, pricing, products, recommendation
+from app.routers import collections, health, inventory, orders, pricing, products, recommendation
 
 
 def create_app() -> FastAPI:
@@ -25,6 +25,8 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(inventory.router)
     fastapi_app.include_router(recommendation.router)
     fastapi_app.include_router(products.router)
+    fastapi_app.include_router(collections.router)
+    fastapi_app.include_router(orders.router)
 
     return fastapi_app
 

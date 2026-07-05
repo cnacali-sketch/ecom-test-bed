@@ -1,6 +1,8 @@
-# Savvyarchitect E-Commerce
+# Savvy In Teal — E-Commerce Test Bed
 
-Full-stack e-commerce project: AI-agent-ready backend (FastAPI) + storefront frontend (Next.js), open-source stack only. Frontend design is synthesized from three scraped reference sites (Accessorize London, France Luxe, Zara) — see `graphify-out/` in the scrape scratchpad for the cross-site design graph this was derived from.
+Full-stack e-commerce project: AI-agent-ready backend (FastAPI) + storefront frontend (Next.js), open-source stack only. The storefront is **Savvy In Teal** — hair accessories & everyday jewellery — with design direction synthesized from three reference-site blueprints (Accessorize London, France Luxe, Zara; see `docs/research/`).
+
+**The frontend is built to be edited by any LLM or by the owner in plain language.** All content lives in `frontend/content/` (brand/nav/homepage in `site.config.ts`, products in `catalog.ts`) and the palette in `app/globals.css` tokens; components read from config and contain no copy. See `docs/EDITING.md` for owner prompts and `.claude/skills/storefront-editing/` + `.claude/skills/karpathy/` for the agent rules. Cloning the store to another product genre = rewriting the two content files and swapping `frontend/public/brand/`. Product/editorial photography is Pexels (free license, no attribution required).
 
 ## Structure
 

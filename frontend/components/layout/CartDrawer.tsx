@@ -5,14 +5,12 @@ import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import { formatPrice } from "@/lib/format";
 
-const EMPTY_STATE_SHORTCUTS = [
-  { label: "New In", href: "/collections/bags" },
-  { label: "Best Sellers", href: "/collections/jewellery" },
-  { label: "Bags", href: "/collections/bags" },
-  { label: "Jewellery", href: "/collections/jewellery" },
-];
+import { siteConfig } from "@/content/site.config";
 
-const FREE_SHIPPING_THRESHOLD = 2999;
+// Empty-cart shortcuts mirror the main nav (config-driven).
+const EMPTY_STATE_SHORTCUTS = siteConfig.nav.map(({ label, href }) => ({ label, href }));
+
+const FREE_SHIPPING_THRESHOLD = 1499;
 
 /** Slide-out cart: line items, subtotal, checkout CTA, empty-state w/ category shortcuts. */
 export function CartDrawer() {
@@ -31,9 +29,9 @@ export function CartDrawer() {
         className="absolute inset-0 bg-black/40"
       />
 
-      <div className="relative flex h-full w-full max-w-md flex-col bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-neutral-900">Your Cart</h2>
+      <div className="relative flex h-full w-full sm:max-w-md flex-col bg-paper shadow-xl">
+        <div className="flex items-center justify-between border-b border-ink/10 px-6 py-4">
+          <h2 className="font-display text-xl italic text-ink">Your cart</h2>
           <button
             type="button"
             aria-label="Close cart"
@@ -105,7 +103,7 @@ export function CartDrawer() {
               ))}
             </ul>
 
-            <div className="border-t border-neutral-200 px-6 py-4">
+            <div className="border-t border-ink/10 px-6 py-4">
               {remainingForFreeShipping > 0 ? (
                 <p className="mb-3 text-xs text-neutral-500">
                   Add {formatPrice(remainingForFreeShipping)} more for free shipping
@@ -119,7 +117,7 @@ export function CartDrawer() {
               </div>
               <button
                 type="button"
-                className="w-full rounded bg-neutral-900 py-3 text-sm font-medium text-white hover:bg-neutral-700"
+                className="w-full rounded bg-teal py-3 text-sm font-medium text-white hover:bg-teal-deep"
               >
                 Checkout
               </button>

@@ -6,8 +6,8 @@ from app.schemas.pricing import (
     BreakEvenResponse,
     MarkupRequest,
     MarkupResponse,
-    ProfitMarginRequest,
-    ProfitMarginResponse,
+    MarginRequest,
+    MarginResponse,
 )
 from app.services import pricing_calculators
 
@@ -24,14 +24,14 @@ async def calculate_markup(payload: MarkupRequest) -> MarkupResponse:
     return MarkupResponse(price=price)
 
 
-@router.post("/margin", response_model=ProfitMarginResponse)
-async def calculate_profit_margin(payload: ProfitMarginRequest) -> ProfitMarginResponse:
+@router.post("/margin", response_model=MarginResponse)
+async def calculate_profit_margin(payload: MarginRequest) -> MarginResponse:
     """Compute the profit margin percentage from cost and selling price."""
     try:
         margin_pct = pricing_calculators.profit_margin(payload.cost, payload.price)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return ProfitMarginResponse(margin_pct=margin_pct)
+    return MarginResponse(margin_pct=margin_pct)
 
 
 @router.post("/break-even", response_model=BreakEvenResponse)
@@ -43,4 +43,4 @@ async def calculate_break_even(payload: BreakEvenRequest) -> BreakEvenResponse:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return BreakEvenResponse(units=units)
+    return BreakEvenResponse(break_even=units)

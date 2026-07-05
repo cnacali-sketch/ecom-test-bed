@@ -25,6 +25,7 @@ class Base(DeclarativeBase):
 def create_engine() -> AsyncEngine:
     """Create (but do not connect) the async SQLAlchemy engine."""
     settings = get_settings()
+    # ponytail: echo=debug only — SQL logging in prod is a perf hit and a log-injection risk
     return create_async_engine(settings.database_url, echo=settings.debug, future=True)
 
 

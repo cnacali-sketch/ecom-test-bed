@@ -1,36 +1,31 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import "@fontsource-variable/fraunces";
+import "@fontsource-variable/archivo";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
+import { siteConfig } from "@/content/site.config";
 import { CartProvider } from "@/lib/cart-context";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Typefaces: Fraunces (display serif, echoes the gold-script logo) +
+// Archivo (grotesk body/UI), self-hosted via @fontsource-variable so
+// builds never depend on Google Fonts at compile time. To re-typeset
+// the store: install another @fontsource-variable package, swap the
+// imports above, and update --font-* in app/globals.css.
 
 export const metadata: Metadata = {
-  title: "Savvy — Everyday Accessories",
-  description:
-    "Bags, jewellery, and hair accessories built for everyday wear. Affordable, stackable, sturdy.",
+  title: `${siteConfig.brand.name} — ${siteConfig.brand.tagline}`,
+  description: siteConfig.brand.description,
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang={siteConfig.brand.locale.split("-")[0]}
+      className="h-full antialiased"
     >
       <body className="flex min-h-full flex-col">
         <CartProvider>
