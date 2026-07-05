@@ -1,0 +1,87 @@
+{
+  "fl_scraped_data.json": {
+    "mtime": 1783240155.0342808,
+    "ast_hash": "7eb2f5088c3bd01e6dc5c325ff425e27",
+    "semantic_hash": "7eb2f5088c3bd01e6dc5c325ff425e27"
+  },
+  "scraped_data.json": {
+    "mtime": 1783239224.0398986,
+    "ast_hash": "69bf25d1f564d16a5871e1552f47ad50",
+    "semantic_hash": "69bf25d1f564d16a5871e1552f47ad50"
+  },
+  "zara_scraped_data.json": {
+    "mtime": 1783241104.3122506,
+    "ast_hash": "b9384e2e1348e24e8698a78c75cfb6cb",
+    "semantic_hash": "b9384e2e1348e24e8698a78c75cfb6cb"
+  },
+  "about.md": {
+    "mtime": 1783239155.594946,
+    "ast_hash": "045dfff1cadcaf9b8bac419e3e318ad2",
+    "semantic_hash": "045dfff1cadcaf9b8bac419e3e318ad2"
+  },
+  "build_prompt.md": {
+    "mtime": 1783239253.9077823,
+    "ast_hash": "4c567f72bff981f43ec9b40862c02d66",
+    "semantic_hash": "4c567f72bff981f43ec9b40862c02d66"
+  },
+  "collection_bags.md": {
+    "mtime": 1783239152.1184678,
+    "ast_hash": "3ce2266e655e019d746d97e9f1d14c15",
+    "semantic_hash": "3ce2266e655e019d746d97e9f1d14c15"
+  },
+  "contact.md": {
+    "mtime": 1783239157.7403803,
+    "ast_hash": "c1764919f3ff75f8506c2d8a2068ed8d",
+    "semantic_hash": "c1764919f3ff75f8506c2d8a2068ed8d"
+  },
+  "faq.md": {
+    "mtime": 1783239156.7120793,
+    "ast_hash": "19b635f3a24a0ac8a3a500955368e36b",
+    "semantic_hash": "19b635f3a24a0ac8a3a500955368e36b"
+  },
+  "fl_build_prompt.md": {
+    "mtime": 1783240183.5962133,
+    "ast_hash": "827755894108c7ae54083268b47cdcbe",
+    "semantic_hash": "827755894108c7ae54083268b47cdcbe"
+  },
+  "fl_collection.md": {
+    "mtime": 1783240070.081276,
+    "ast_hash": "51f22270c003491599e2455622446431",
+    "semantic_hash": "51f22270c003491599e2455622446431"
+  },
+  "home.md": {
+    "mtime": 1783239098.8723018,
+    "ast_hash": "320f4f97c038f19e5a8460911a5edc9b",
+    "semantic_hash": "320f4f97c038f19e5a8460911a5edc9b"
+  },
+  "product_bag2.md": {
+    "mtime": 1783239154.496031,
+    "ast_hash": "d63d03b01a4701401dbbdb3fe316843f",
+    "semantic_hash": "d63d03b01a4701401dbbdb3fe316843f"
+  },
+  "product_tote.md": {
+    "mtime": 1783239153.364172,
+    "ast_hash": "4211214bf50f51334b1ea685725fa5d6",
+    "semantic_hash": "4211214bf50f51334b1ea685725fa5d6"
+  },
+  "zara_build_prompt.md": {
+    "mtime": 1783241135.2635388,
+    "ast_hash": "3a841b272a30cbbf04fa31fa4f3dce4c",
+    "semantic_hash": "3a841b272a30cbbf04fa31fa4f3dce4c"
+  },
+  "zara_get.html": {
+    "mtime": 1783240908.4308543,
+    "ast_hash": "a2a66e8a8b0eff10ccb4768364d289b7",
+    "semantic_hash": "a2a66e8a8b0eff10ccb4768364d289b7"
+  },
+  "zara_product.md": {
+    "mtime": 1783241064.4367263,
+    "ast_hash": "7a4ea61f0b034c6cbed7252efd16701f",
+    "semantic_hash": "7a4ea61f0b034c6cbed7252efd16701f"
+  },
+  "zara_stealth.md": {
+    "mtime": 1783240977.0952597,
+    "ast_hash": "d0d13e3e09da7bd09f17673f6684057a",
+    "semantic_hash": "d0d13e3e09da7bd09f17673f6684057a"
+  }
+}

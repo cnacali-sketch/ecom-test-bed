@@ -1,0 +1,47 @@
+{
+  "site": "franceluxe.com",
+  "page_scraped": "/collections/hair-accessories",
+  "platform": "Shopify",
+  "brand": {
+    "vendors_sold": ["France Luxe", "L. Erickson"],
+    "guarantee_badge": "100% Guaranteed",
+    "announcement_bar": "FREE SHIPPING ON ALL DOMESTIC ORDERS OVER $50"
+  },
+  "site_structure": {
+    "top_nav": [
+      {"label": "New", "url": "/collections/new-hair-accessories-jewelry", "subcategories": ["New Arrivals (Midsummer Dream, Knit Pony, Signature Collection)", "Trending (For Thick Hair, For Fine Hair, Grab & Go Ponies, Hair Bows, Bridal)"], "has_promo_tiles": true},
+      {"label": "Bestsellers", "url": "/collections/bestsellers", "subcategories": ["L. Erickson (Grab and Go Ponies, Claw Clips)", "France Luxe (Classic Barrettes, Couture Claw Clips, Ultracomfort Headbands, Hair Clips for Thick Hair)"], "has_promo_tiles": true},
+      {"label": "Hair Accessories", "url": "/collections/hair-accessories", "subcategories": ["Ponytails (Hair Ties, Scrunchies, Decorative Ponies, Pony Cuffs)", "Barrettes (Classic French, Mini & Small, Large)", "Hair Clips (Claw, Small, Large, Banana, Pinch)", "Headbands (Skinny, Wide, Padded, Silk, Top Knot, Bandeaus & Wraps)", "Hair Pins & Combs (Bobby Pins, Hair Pin Sticks, Chignon Pins, Decorative Combs, Slides)"]},
+      {"label": "Home & Body", "url": "/collections/bath-body", "subcategories": ["Hair Care (Brushes & Combs)", "Home (Bath & Spa, Soaps & Cleaners, Laundry Detergent)"], "has_promo_tiles": true},
+      {"label": "Brands", "url": "#", "subcategories": ["Hair (France Luxe, L. Erickson)", "Home (France Luxe Body, Maison France Luxe)"], "has_promo_tiles": true},
+      {"label": "Sale", "url": "/collections/sale", "subcategories": ["Sale Hair Ties", "Sale Barrettes", "Sale Claws & Clips", "Sale Headbands", "Sale Pins & Combs", "Sale Styling Tools"], "has_promo_tiles": true}
+    ],
+    "header_features": ["announcement bar (free shipping threshold)", "logo center/left", "search", "login", "cart"]
+  },
+  "collection_listing_page": {
+    "hero": {
+      "breadcrumb": "Home / Hair Accessories",
+      "title": "Hair Accessories",
+      "seo_description": "Discover luxury hair accessories thoughtfully designed to elevate every hairstyle... (truncated, 'Read more' expander)"
+    },
+    "filters_sidebar": {
+      "facets": ["Brand (France Luxe, France Luxe Gift Card, L. Erickson)",
+                 "Product type (Hair Tie, Hair Clip, Barrette, Headband, Hair Pin, Comb, Jewelry, Bath & Body, Hair Scarf, Hair Spinner, Hair Vine, Slide, Claw Clip, Gift Card)",
+                 "Color (100+ swatch options incl. named shades e.g. Tortoise, Tokyo, Onyx, South Sea, Mojave)",
+                 "Price (min/max range input)",
+                 "Size (numeric)",
+                 "Material (Cellulose Acetate, Cotton, Crystal, Elastic, Enamel, Faux Pearl, Glass, Leather, Lycra, Metal, Nylon, Plastic, Polyester, Stone, Straw, Velvet)"],
+      "each_facet_shows_count": true
+    },
+    "sort_options": ["Featured", "Most relevant", "Best selling", "Alphabetically A-Z/Z-A", "Price low-high/high-low", "Date old-new/new-old"],
+    "product_card": {
+      "elements": ["primary + hover-swap image", "'Toggle swatches' color-variant selector on card", "vendor/brand name link", "product title (link)", "original price (strikethrough if on sale) + current price, shown as a range when variants differ", "'Sale' badge when discounted", "truncated description snippet", "'View full details' CTA"],
+      "sample_products": [
+        {"name": "Grab & Go Ponytail Holders, 8 Pack Hair Ties", "vendor": "L. Erickson", "price": 12.00, "url": "/collections/hair-accessories/products/l-erickson-hair-ties-8-pack-grab-and-go-ponytail-holders"},
+        {"name": "Grab & Go Pony Tube - SALE", "vendor": "L. Erickson", "original_price": 24.00, "sale_price": 7.00, "on_sale": true, "url": "/collections/hair-accessories/products/l-erickson-grab-go-pony-tube-blowout-sale"},
+        {"name": "Grab & Go Ponytail Holders - Set of Eight - SALE", "vendor": "L. Erickson", "original_price": 12.00, "sale_price": 4.90, "on_sale": true, "url": "/collections/hair-accessories/products/l-erickson-grab-and-go-ponytail-holder-set-of-8-blowout-sale"},
+        {"name": "Narrow Grab & Go Pony, 12 Hair Ties", "vendor": "L. Erickson", "price": 12.00, "url": "/collections/hair-accessories/products/l-erickson-hair-ties-12-pack-narrow-grab-and-go-ponytail-holders"}
+      ]
+    }
+  }
+}
