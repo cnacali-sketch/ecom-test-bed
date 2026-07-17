@@ -22,6 +22,9 @@ export interface ProductImage {
   alt: string;
 }
 
+export type BadgeAnimation = "shine" | "pulse" | "wiggle" | "none";
+export type StockMode = "hidden" | "exact" | "lowOnly";
+
 export interface Product {
   id: string;
   slug: string;
@@ -43,6 +46,12 @@ export interface Product {
   isSale: boolean;
   inStock: boolean;
   tags: string[];
+  /** Units on hand, only meaningful when stockMode is "exact" or "lowOnly". */
+  stock?: number;
+  /** What shoppers see about inventory level. Defaults to "hidden". */
+  stockMode?: StockMode;
+  /** Discount-badge attention style. Defaults to "shine" when on sale. */
+  badgeAnimation?: BadgeAnimation;
 }
 
 export interface Collection {

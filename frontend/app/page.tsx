@@ -22,10 +22,9 @@ export default async function HomePage() {
           <p className="eyebrow">{siteConfig.home.newInSub}</p>
           <h2 className="font-display mt-1 text-3xl italic text-ink">{siteConfig.home.newInHeading}</h2>
         </Reveal>
-        {/* Staggered "shelf" grid: alternating tiles are offset downward on desktop */}
         <div className="mt-8 grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-10 lg:grid-cols-4 lg:gap-x-6">
           {newInProducts.map((product, index) => (
-            <Reveal key={product.id} delay={(index % 4) * 70} className={index % 2 === 1 ? "lg:mt-10" : ""}>
+            <Reveal key={product.id} delay={(index % 4) * 70} className="h-full">
               <ProductCard product={product} />
             </Reveal>
           ))}
