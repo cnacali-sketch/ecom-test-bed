@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db_session
-from app.dependencies.auth import require_api_key
+from app.dependencies.auth import require_admin
 from app.models.product import Product, ProductVariant
 from app.schemas.product import ProductCreate, ProductRead
 
@@ -77,7 +77,7 @@ async def get_product(product_id: uuid.UUID, db: AsyncSession = Depends(get_db_s
     return product
 
 
-@router.post("", response_model=ProductRead, status_code=201, dependencies=[Depends(require_api_key)])
+@router.post("", response_model=ProductRead, status_code=201, dependencies=[Depends(require_admin)])
 async def create_product(
     payload: ProductCreate, db: AsyncSession = Depends(get_db_session)
 ) -> Product:
@@ -96,7 +96,7 @@ async def create_product(
     return product
 
 
-@router.delete("/{product_id}", status_code=204, dependencies=[Depends(require_api_key)])
+@router.delete("/{product_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_product(
     product_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)
 ) -> None:

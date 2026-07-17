@@ -1,37 +1,60 @@
-"""API key authentication dependency.
+"""Authentication dependencies.
 
-Protects write endpoints (POST /api/products, POST /api/orders, etc.)
-from unauthenticated access. Gate:
+JWT in an httpOnly cookie is the gate (P1) — it replaced the single shared
+X-API-Key header, so write endpoints now know *which* user acted, not just
+that someone held the key.
 
-1. Set API_KEY=<secret> in .env (or environment).
-2. Clients send: `X-API-Key: <secret>` header.
-
-ponytail: one shared key is enough for Phase 1 — add per-client keys
-and a keys table when multi-tenant access is needed.
+  require_current_user -> any logged-in account
+  require_admin        -> role == "admin" (write endpoints, /admin)
 """
-from fastapi import HTTPException, Security
-from fastapi.security import APIKeyHeader
+import uuid
 
-from app.config import get_settings
+from fastapi import Cookie, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+from app.db import get_db_session
+from app.models.user import ROLE_ADMIN, User
+from app.services.security import TOKEN_ACCESS, TokenError, decode_token
+
+ACCESS_COOKIE = "access_token"
+REFRESH_COOKIE = "refresh_token"
+
+_UNAUTHENTICATED = HTTPException(status_code=401, detail="Not authenticated")
 
 
-async def require_api_key(api_key: str | None = Security(_header)) -> None:
-    """FastAPI dependency: raise 401 if X-API-Key header is missing or wrong.
+async def require_current_user(
+    access_token: str | None = Cookie(default=None, alias=ACCESS_COOKIE),
+    db: AsyncSession = Depends(get_db_session),
+) -> User:
+    """Resolve the signed-in user from the access-token cookie, or 401.
 
-    No-ops when API_KEY is not set in config (local dev without .env).
+    The user is re-read from the database on every request rather than trusted
+    from the token claims, so a deleted or demoted account loses access
+    immediately instead of at token expiry.
     """
-    settings = get_settings()
-    configured_key = getattr(settings, "api_key", None)
+    if not access_token:
+        raise _UNAUTHENTICATED
 
-    if not configured_key:
-        # No key configured → open access (local dev only)
-        return
+    try:
+        payload = decode_token(access_token, TOKEN_ACCESS)
+    except TokenError:
+        raise _UNAUTHENTICATED
 
-    if api_key != configured_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing X-API-Key header",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
+    try:
+        user_id = uuid.UUID(payload["sub"])
+    except (ValueError, KeyError):
+        raise _UNAUTHENTICATED
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise _UNAUTHENTICATED
+    return user
+
+
+async def require_admin(user: User = Depends(require_current_user)) -> User:
+    """Gate admin-only endpoints. 403 (not 401) — the caller is known, just not allowed."""
+    if user.role != ROLE_ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
