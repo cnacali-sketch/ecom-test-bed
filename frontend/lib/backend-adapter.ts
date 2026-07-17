@@ -1,4 +1,4 @@
-import type { Product, ProductVariant } from "./types";
+import type { BadgeAnimation, Product, ProductVariant, StockMode } from "./types";
 
 /**
  * Shape returned by GET /api/products (see backend/app/schemas/product.py).
@@ -10,20 +10,21 @@ import type { Product, ProductVariant } from "./types";
 export interface BackendProductVariant {
   id: string;
   sku: string;
-  name: string;
-  price: number;
-  mrp: number;
-  description: string | null;
-  images: string[];
-  attrs: Record<string, unknown>;
+  color: string;
+  color_hex: string;
+  image: string | null;
+  in_stock: boolean;
 }
 
 export interface BackendProduct {
   id: string;
   sku: string;
+  slug: string;
   name: string;
-  price: number;
-  mrp: number;
+  /** Pydantic serializes Decimal as a string to preserve precision. */
+  price: string;
+  mrp: string;
+  in_stock: boolean;
   description: string | null;
   images: string[];
   attrs: Record<string, unknown>;
@@ -35,15 +36,14 @@ function asStringArray(value: unknown): string[] {
 }
 
 function adaptVariant(variant: BackendProductVariant): ProductVariant {
-  const attrs = variant.attrs;
   return {
     id: variant.id,
-    color: typeof attrs.color === "string" ? attrs.color : variant.name,
-    colorHex: typeof attrs.colorHex === "string" ? attrs.colorHex : "#000000",
-    size: typeof attrs.size === "string" ? attrs.size : undefined,
+    color: variant.color,
+    colorHex: variant.color_hex,
+    size: undefined,
     sku: variant.sku,
-    image: variant.images[0] ?? "",
-    inStock: typeof attrs.inStock === "boolean" ? attrs.inStock : true,
+    image: variant.image ?? "",
+    inStock: variant.in_stock,
   };
 }
 
@@ -51,7 +51,7 @@ export function adaptProduct(product: BackendProduct): Product {
   const attrs = product.attrs;
   return {
     id: product.sku,
-    slug: typeof attrs.slug === "string" ? attrs.slug : product.sku,
+    slug: product.slug,
     name: product.name,
     brand: typeof attrs.brand === "string" ? attrs.brand : "",
     type: typeof attrs.type === "string" ? attrs.type : "",
@@ -60,8 +60,8 @@ export function adaptProduct(product: BackendProduct): Product {
     careInstructions: typeof attrs.careInstructions === "string" ? attrs.careInstructions : "",
     measurements: typeof attrs.measurements === "string" ? attrs.measurements : "",
     shippingInfo: typeof attrs.shippingInfo === "string" ? attrs.shippingInfo : "",
-    price: product.price,
-    mrp: product.mrp,
+    price: Number(product.price),
+    mrp: Number(product.mrp),
     currency: attrs.currency === "USD" ? "USD" : "INR",
     images: product.images.map((url, index) => ({
       url,
@@ -71,7 +71,11 @@ export function adaptProduct(product: BackendProduct): Product {
     collectionSlugs: asStringArray(attrs.collectionSlugs),
     isNew: attrs.isNew === true,
     isSale: attrs.isSale === true,
-    inStock: attrs.inStock !== false,
+    inStock: product.in_stock,
     tags: asStringArray(attrs.tags),
+    stock: typeof attrs.stock === "number" ? attrs.stock : undefined,
+    stockMode: typeof attrs.stockMode === "string" ? (attrs.stockMode as StockMode) : undefined,
+    badgeAnimation:
+      typeof attrs.badgeAnimation === "string" ? (attrs.badgeAnimation as BadgeAnimation) : undefined,
   };
 }

@@ -25,7 +25,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from app.db import async_session_factory
-from app.models.collection import Collection
+from app.models.collection import Collection, product_collections
 from app.models.product import Product, ProductVariant
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -81,6 +81,10 @@ async def seed(catalog: dict) -> None:
                 "isNew": p.get("isNew", False),
                 "isSale": p.get("isSale", False),
                 "tags": p.get("tags", []),
+                # Storefront ProductCard display fields (badge/stock messaging).
+                "stock": p.get("stock"),
+                "stockMode": p.get("stockMode"),
+                "badgeAnimation": p.get("badgeAnimation"),
             }
 
             product = Product(
@@ -129,19 +133,30 @@ async def seed(catalog: dict) -> None:
 
         await db.flush()
 
-        # Wire products to collections via product_ids in each collection
+        # Wire products to collections via product_ids in each collection.
+        # Insert into the association table directly rather than loading the
+        # `collections` relationship (avoids an async lazy-load).
         for c in catalog.get("collections", []):
             col_result = await db.execute(select(Collection).where(Collection.slug == c["slug"]))
             col = col_result.scalar_one_or_none()
             if not col:
                 continue
             for prod_id in c.get("productIds", []):
-                prod_result = await db.execute(
-                    select(Product).where(Product.attrs["id"].astext == prod_id)  # type: ignore[union-attr]
-                )
+                # sku is seeded from the catalog product id (see `sku=p["id"]` above).
+                prod_result = await db.execute(select(Product).where(Product.sku == prod_id))
                 prod = prod_result.scalar_one_or_none()
-                if prod and col not in prod.collections:
-                    prod.collections.append(col)
+                if not prod:
+                    continue
+                link_result = await db.execute(
+                    select(product_collections).where(
+                        product_collections.c.product_id == prod.id,
+                        product_collections.c.collection_id == col.id,
+                    )
+                )
+                if link_result.first() is None:
+                    await db.execute(
+                        product_collections.insert().values(product_id=prod.id, collection_id=col.id)
+                    )
 
         await db.commit()
         print("done.")

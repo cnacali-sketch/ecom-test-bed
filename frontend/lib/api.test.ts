@@ -8,12 +8,14 @@ function backendProduct(overrides: Partial<BackendProduct> = {}): BackendProduct
   return {
     id: "11111111-1111-1111-1111-111111111111",
     sku: "live-sku-01",
+    slug: "live-product",
     name: "Live Product",
-    price: 500,
-    mrp: 600,
+    price: "500.00",
+    mrp: "600.00",
+    in_stock: true,
     description: "Fetched from the live backend.",
     images: ["https://example.com/live.jpg"],
-    attrs: { slug: "live-product", collectionSlugs: ["hair-accessories"] },
+    attrs: { collectionSlugs: ["hair-accessories"] },
     variants: [],
     ...overrides,
   };
