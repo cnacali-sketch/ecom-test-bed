@@ -20,7 +20,7 @@ class ProductCreate(BaseModel):
     price: Decimal = Field(..., ge=0, decimal_places=2)
     mrp: Decimal = Field(..., ge=0, decimal_places=2)
     in_stock: bool = True
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=5000)
     images: list[str] = Field(default_factory=list)
     attrs: dict = Field(default_factory=dict)
     variants: list[VariantCreate] = Field(default_factory=list)
