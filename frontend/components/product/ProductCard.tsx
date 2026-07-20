@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { useCart } from "@/lib/cart-context";
 import { calculateDiscountPercent } from "@/lib/format";
 import type { Product } from "@/lib/types";
 import { useWishlist } from "@/lib/wishlist-context";
@@ -26,9 +27,32 @@ export function ProductCard({ product }: ProductCardProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [isCtaHovered, setIsCtaHovered] = useState(false);
   const { isWished, toggleWish } = useWishlist();
+  const { items, addItem, updateQuantity, removeItem } = useCart();
 
   const activeVariant = product.variants[activeVariantIndex];
   const primaryImage = activeVariant?.image ?? product.images[0]?.url;
+
+  // Quantity of the *currently selected swatch* already in the cart. Switching
+  // swatches re-reads this, so each colour tracks its own count.
+  const cartQty = activeVariant
+    ? (items.find((item) => item.variantId === activeVariant.id)?.quantity ?? 0)
+    : 0;
+
+  // First add for this swatch. Stays on the grid — no drawer — then the button
+  // swaps to the qty stepper below so the shopper can keep browsing.
+  const handleAddToCart = () => {
+    if (!activeVariant || !product.inStock) return;
+    addItem({
+      productId: product.id,
+      variantId: activeVariant.id,
+      name: product.name,
+      image: primaryImage ?? "",
+      color: activeVariant.color,
+      price: product.price,
+      currency: product.currency,
+      quantity: 1,
+    });
+  };
   const secondaryImage = product.images[1]?.url ?? primaryImage;
   const displayImage = isHovered ? secondaryImage : primaryImage;
 
@@ -136,19 +160,60 @@ export function ProductCard({ product }: ProductCardProps) {
         </p>
       )}
 
-      <button
-        type="button"
-        disabled={!product.inStock}
-        onMouseEnter={() => setIsCtaHovered(true)}
-        onMouseLeave={() => setIsCtaHovered(false)}
-        className={`product-cta mt-auto w-full border py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
-          product.inStock
-            ? `border-teal bg-teal text-white hover:bg-teal-deep ${isCtaHovered ? "is-gold" : ""}`
-            : "cursor-not-allowed border-ink/20 bg-paper-tint text-ink-soft"
-        }`}
-      >
-        {product.inStock ? "Add to cart" : "Sold out"}
-      </button>
+      {activeVariant && cartQty > 0 ? (
+        <div className="mt-auto flex items-center border border-teal text-teal" aria-label={`${product.name} quantity in cart`}>
+          <button
+            type="button"
+            aria-label="Decrease quantity"
+            onClick={() => updateQuantity(activeVariant.id, cartQty - 1)}
+            className="grid h-9 w-9 shrink-0 place-items-center text-base transition-colors hover:bg-teal hover:text-white"
+          >
+            −
+          </button>
+          <span className="flex-1 text-center text-[13px] font-semibold tabular-nums" aria-live="polite">
+            {cartQty}
+          </span>
+          <button
+            type="button"
+            aria-label="Increase quantity"
+            onClick={() => updateQuantity(activeVariant.id, cartQty + 1)}
+            className="grid h-9 w-9 shrink-0 place-items-center text-base transition-colors hover:bg-teal hover:text-white"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            aria-label={`Remove ${product.name} from cart`}
+            onClick={() => removeItem(activeVariant.id)}
+            className="grid h-9 w-9 shrink-0 place-items-center border-l border-teal text-ink-soft transition-colors hover:bg-sale hover:border-sale hover:text-white"
+          >
+            <TrashIcon />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={!product.inStock}
+          onClick={handleAddToCart}
+          onMouseEnter={() => setIsCtaHovered(true)}
+          onMouseLeave={() => setIsCtaHovered(false)}
+          className={`product-cta mt-auto w-full border py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors ${
+            product.inStock
+              ? `border-teal bg-teal text-white hover:bg-teal-deep ${isCtaHovered ? "is-gold" : ""}`
+              : "cursor-not-allowed border-ink/20 bg-paper-tint text-ink-soft"
+          }`}
+        >
+          {product.inStock ? "Add to cart" : "Sold out"}
+        </button>
+      )}
     </div>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

@@ -3,7 +3,7 @@
 In-memory SQLite async session overrides the Postgres dependency — full
 test suite runs without live infrastructure.
 """
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 import pytest_asyncio
@@ -11,11 +11,26 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+from app.config import get_settings
 from app.db import Base, get_db_session
 from app.dependencies.auth import ACCESS_COOKIE
 from app.main import app
 from app.models.user import ROLE_ADMIN, ROLE_CUSTOMER, User
 from app.services.security import create_access_token, hash_password
+
+
+@pytest.fixture(autouse=True)
+def _http_test_cookies() -> "Generator[None, None, None]":
+    """The ASGI test client talks http://; force auth cookies to non-Secure/lax
+    so it stores and resends them. A deploy/preview .env may set Secure +
+    SameSite=None for cross-site HTTPS, which would otherwise make the http
+    test client silently drop the cookie and break every login round-trip."""
+    settings = get_settings()
+    saved = (settings.cookie_secure, settings.cookie_samesite)
+    settings.cookie_secure = False
+    settings.cookie_samesite = "lax"
+    yield
+    settings.cookie_secure, settings.cookie_samesite = saved
 
 
 @pytest_asyncio.fixture

@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { siteConfig } from "@/content/site.config";
+import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNav } from "./MobileNav";
@@ -19,7 +20,12 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { itemCount, openCart } = useCart();
+  const { user } = useAuth();
   const { brand, announcement, nav } = siteConfig;
+
+  // Send signed-out shoppers straight to the sign-in page; signed-in ones to
+  // their account. Avoids the /account "Loading…" → redirect bounce.
+  const accountHref = user ? "/account" : "/login";
 
   return (
     <header className="relative z-50 border-b border-ink/10 bg-paper">
@@ -85,9 +91,9 @@ export function Header() {
             <SearchIcon />
           </button>
           <Link
-            href="/account"
-            aria-label="Account"
-            className="hidden text-ink transition-colors hover:text-teal sm:block"
+            href={accountHref}
+            aria-label={user ? "Account" : "Sign in"}
+            className="text-ink transition-colors hover:text-teal"
           >
             <AccountIcon />
           </Link>
