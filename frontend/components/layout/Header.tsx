@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { siteConfig } from "@/content/site.config";
+import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNav } from "./MobileNav";
@@ -19,7 +20,25 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { itemCount, openCart } = useCart();
+  const { user } = useAuth();
   const { brand, announcement, nav } = siteConfig;
+
+  // Send signed-out shoppers straight to the sign-in page; signed-in ones to
+  // their account. Avoids the /account "Loading…" → redirect bounce.
+  const accountHref = user ? "/account" : "/login";
+
+  // Mega-menu hover: keep it open while the cursor crosses the gap between the
+  // nav link and the flyout. A short close delay (cancelled on re-enter) bridges
+  // that dead zone instead of the menu vanishing mid-move.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openMenu = (label: string) => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setActiveMenu(label);
+  };
+  const scheduleClose = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setActiveMenu(null), 150);
+  };
 
   return (
     <header className="relative z-50 border-b border-ink/10 bg-paper">
@@ -58,10 +77,10 @@ export function Header() {
 
         <nav
           className="hidden items-center gap-7 lg:flex"
-          onMouseLeave={() => setActiveMenu(null)}
+          onMouseLeave={scheduleClose}
         >
           {nav.map((item) => (
-            <div key={item.label} onMouseEnter={() => setActiveMenu(item.label)}>
+            <div key={item.label} onMouseEnter={() => openMenu(item.label)}>
               <Link
                 href={item.href}
                 className={`text-[13px] uppercase tracking-[0.14em] transition-colors ${
@@ -70,7 +89,11 @@ export function Header() {
               >
                 {item.label}
               </Link>
-              {item.megaMenu && activeMenu === item.label && <MegaMenu {...item.megaMenu} />}
+              {item.megaMenu && activeMenu === item.label && (
+                <div onMouseEnter={() => openMenu(item.label)}>
+                  <MegaMenu {...item.megaMenu} />
+                </div>
+              )}
             </div>
           ))}
         </nav>
@@ -85,9 +108,9 @@ export function Header() {
             <SearchIcon />
           </button>
           <Link
-            href="/account"
-            aria-label="Account"
-            className="hidden text-ink transition-colors hover:text-teal sm:block"
+            href={accountHref}
+            aria-label={user ? "Account" : "Sign in"}
+            className="text-ink transition-colors hover:text-teal"
           >
             <AccountIcon />
           </Link>

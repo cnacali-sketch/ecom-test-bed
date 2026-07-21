@@ -262,19 +262,17 @@ export const siteConfig = {
       {
         heading: "Help",
         links: [
-          { label: "Track Order", href: "#" },
-          { label: "Returns & Exchanges", href: "#" },
-          { label: "Contact", href: "#" },
-          { label: "FAQ", href: "#" },
+          { label: "Track Order", href: "/coming-soon" },
+          { label: "Returns & Exchanges", href: "/coming-soon" },
+          { label: "Contact", href: "/coming-soon" },
+          { label: "FAQ", href: "/coming-soon" },
         ],
       },
       {
         heading: "Company",
         links: [
-          { label: "About the Studio", href: "#" },
-          { label: "Stockists", href: "#" },
-          { label: "Privacy", href: "#" },
-          { label: "Terms", href: "#" },
+          { label: "Privacy", href: "/coming-soon" },
+          { label: "Terms", href: "/coming-soon" },
         ],
       },
     ],

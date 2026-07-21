@@ -116,3 +116,109 @@ async def test_delete_product_unauthenticated_returns_401(client: AsyncClient) -
 async def test_create_product_as_customer_returns_403(customer_client: AsyncClient) -> None:
     resp = await customer_client.post("/api/products", json=VALID_PRODUCT)
     assert resp.status_code == 403
+
+
+# ---- Update (PUT) — admin editor save ----
+
+async def _create(admin_client: AsyncClient) -> str:
+    resp = await admin_client.post("/api/products", json=VALID_PRODUCT)
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_update_product_changes_fields(admin_client: AsyncClient) -> None:
+    pid = await _create(admin_client)
+    resp = await admin_client.put(
+        f"/api/products/{pid}", json={**VALID_PRODUCT, "name": "Renamed", "price": "199.00"}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "Renamed"
+    assert body["price"] == "199.00"
+
+
+@pytest.mark.asyncio
+async def test_update_preserves_existing_variants(admin_client: AsyncClient) -> None:
+    """The admin UI sends no variants; the PUT must not wipe them."""
+    pid = await _create(admin_client)
+    resp = await admin_client.put(
+        f"/api/products/{pid}", json={**VALID_PRODUCT, "name": "Kept", "variants": []}
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["variants"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_update_missing_product_returns_404(admin_client: AsyncClient) -> None:
+    resp = await admin_client.put(
+        "/api/products/6f1b8b1e-0000-4000-8000-000000000000", json=VALID_PRODUCT
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_unauthenticated_returns_401(client: AsyncClient) -> None:
+    resp = await client.put(
+        "/api/products/6f1b8b1e-0000-4000-8000-000000000000", json=VALID_PRODUCT
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_update_as_customer_returns_403(customer_client: AsyncClient) -> None:
+    resp = await customer_client.put(
+        "/api/products/6f1b8b1e-0000-4000-8000-000000000000", json=VALID_PRODUCT
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_update_to_duplicate_slug_returns_409(admin_client: AsyncClient) -> None:
+    # No variants: VALID_PRODUCT's variant sku is fixed and would collide across two creates.
+    await admin_client.post("/api/products", json={**VALID_PRODUCT, "sku": "A", "slug": "prod-a", "variants": []})
+    pid_b = (
+        await admin_client.post(
+            "/api/products", json={**VALID_PRODUCT, "sku": "B", "slug": "prod-b", "variants": []}
+        )
+    ).json()["id"]
+    resp = await admin_client.put(
+        f"/api/products/{pid_b}", json={**VALID_PRODUCT, "sku": "B", "slug": "prod-a"}
+    )
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_merges_attrs_instead_of_replacing(admin_client: AsyncClient) -> None:
+    """A caller that only edits price/stock must not wipe attrs it doesn't model."""
+    create = await admin_client.post(
+        "/api/products",
+        json={**VALID_PRODUCT, "attrs": {"brand": "Savvy", "cost": 90}, "variants": []},
+    )
+    pid = create.json()["id"]
+
+    # Simulates the admin editor sending only the keys it manages.
+    resp = await admin_client.put(
+        f"/api/products/{pid}",
+        json={**VALID_PRODUCT, "attrs": {"cost": 120}, "variants": []},
+    )
+    assert resp.status_code == 200
+    attrs = resp.json()["attrs"]
+    assert attrs["cost"] == 120  # updated
+    assert attrs["brand"] == "Savvy"  # preserved, not dropped
+
+
+@pytest.mark.asyncio
+async def test_update_ignores_sku_in_payload(admin_client: AsyncClient) -> None:
+    """sku is an identity key (used as the storefront product id) — immutable via PUT."""
+    create = await admin_client.post(
+        "/api/products", json={**VALID_PRODUCT, "sku": "ORIGINAL-SKU", "variants": []}
+    )
+    pid = create.json()["id"]
+
+    resp = await admin_client.put(
+        f"/api/products/{pid}",
+        json={**VALID_PRODUCT, "sku": "ATTACKER-CHOSEN-SKU", "variants": []},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["sku"] == "ORIGINAL-SKU"

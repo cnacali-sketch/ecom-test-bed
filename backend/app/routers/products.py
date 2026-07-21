@@ -96,6 +96,40 @@ async def create_product(
     return product
 
 
+@router.put("/{product_id}", response_model=ProductRead, dependencies=[Depends(require_admin)])
+async def update_product(
+    product_id: uuid.UUID,
+    payload: ProductCreate,
+    db: AsyncSession = Depends(get_db_session),
+) -> Product:
+    """Update an existing product's own fields (admin editor save).
+
+    Variants are left untouched — the admin console doesn't manage them, so
+    they're not in scope for a save from that UI. `sku` is immutable here too:
+    it's an identity key used elsewhere (e.g. the storefront's product id), so
+    a caller editing price/stock must not be able to reassign it by accident.
+    `attrs` is merged rather than replaced — the admin editor only models a
+    subset of keys (cost, stock, badge, ...), and a caller that only sends
+    those must not wipe out the rest (brand, material, care instructions, ...).
+    """
+    result = await db.execute(_q(db).where(Product.id == product_id))
+    product = result.scalar_one_or_none()
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    update_data = payload.model_dump(exclude={"variants", "sku", "attrs"})
+    for field, value in update_data.items():
+        setattr(product, field, value)
+    product.attrs = {**product.attrs, **payload.attrs}
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="SKU or slug already exists")
+    await db.refresh(product, attribute_names=["variants"])
+    return product
+
+
 @router.delete("/{product_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_product(
     product_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)

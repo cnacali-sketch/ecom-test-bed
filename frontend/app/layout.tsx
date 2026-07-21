@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/fraunces";
 import "@fontsource-variable/archivo";
 import { CartDrawer } from "@/components/layout/CartDrawer";
@@ -19,6 +19,14 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: `${siteConfig.brand.name} — ${siteConfig.brand.tagline}`,
   description: siteConfig.brand.description,
+};
+
+// viewport-fit=cover lets the layout extend under the notch / gesture bar so
+// env(safe-area-inset-*) padding on sticky bars actually resolves to > 0.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
