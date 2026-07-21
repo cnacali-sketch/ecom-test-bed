@@ -27,3 +27,7 @@ Thumbs.db
 
 # Docker/Podman volumes
 pgdata/
+
+# graphify: derived knowledge-graph output. Rebuildable with `/graphify --update`,
+# and embeds absolute paths from whoever generated it.
+graphify-out/

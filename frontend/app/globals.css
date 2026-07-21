@@ -111,8 +111,51 @@ body {
   transform: none;
 }
 
+/* ============================================================
+   PRODUCT CARD — discount badge attention styles + gold frames.
+   Ported from the ProductCard demo per the hero/product-card split
+   decision (keep HeroBanner, take the commerce-polish card).
+   ============================================================ */
+@keyframes badge-shine-sweep { 0% { transform: translateX(-130%) skewX(-20deg); } 55%, 100% { transform: translateX(360%) skewX(-20deg); } }
+@keyframes badge-pulse-scale { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+@keyframes badge-wiggle-rotate { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+@keyframes cta-gold-sweep { 0% { left: -55%; } 60%, 100% { left: 130%; } }
+
+.badge-anim-shine { position: relative; overflow: hidden; }
+.badge-anim-shine::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; height: 100%; width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.7), transparent);
+  animation: badge-shine-sweep 2.2s ease-in-out infinite;
+}
+.badge-anim-pulse { animation: badge-pulse-scale 1.1s ease-in-out infinite; }
+.badge-anim-wiggle { animation: badge-wiggle-rotate 0.7s ease-in-out infinite; }
+
+.product-cta {
+  position: relative; overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+}
+.product-cta::before {
+  content: ""; position: absolute; top: 0; left: -55%; width: 32%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(176,141,63,0.9), transparent);
+  transform: skewX(-20deg); opacity: 0;
+}
+.product-cta.is-gold::before { opacity: 1; animation: cta-gold-sweep 1.5s ease-in-out infinite; }
+.product-cta.is-gold { border-color: var(--gold); box-shadow: 0 6px 18px rgba(176,141,63,0.45); }
+
+/* Uniform gold card frame — one treatment for every product across the whole
+   storefront. Layout-neutral inset ring (::after overlay, no box-size change,
+   so the grid stays aligned) that reacts on hover: fades in gold. */
+.product-frame::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 5;
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow 0.3s ease;
+}
+.group:hover .product-frame::after { box-shadow: inset 0 0 0 2px var(--gold); }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-rise, .animate-fade, .animate-marquee { animation: none; }
   .reveal { opacity: 1; transform: none; transition: none; }
   * { scroll-behavior: auto !important; }
+  .badge-anim-shine::after, .badge-anim-pulse, .badge-anim-wiggle,
+  .product-cta.is-gold::before { animation: none; }
 }

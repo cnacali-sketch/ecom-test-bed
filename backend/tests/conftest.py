@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db_session
+from app.dependencies.auth import ACCESS_COOKIE
 from app.main import app
+from app.models.user import ROLE_ADMIN, ROLE_CUSTOMER, User
+from app.services.security import create_access_token, hash_password
 
 
 @pytest_asyncio.fixture
@@ -34,12 +37,72 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """AsyncClient so async test functions can await HTTP calls properly."""
+    """Anonymous AsyncClient — no auth cookies. Use for public endpoints."""
     async def _override() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
     app.dependency_overrides[get_db_session] = _override
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def admin_user(db_session: AsyncSession) -> User:
+    """A persisted admin account."""
+    user = User(
+        email="admin@example.com",
+        password_hash=hash_password("admin-password"),
+        role=ROLE_ADMIN,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def admin_client(
+    db_session: AsyncSession, admin_user: User
+) -> AsyncGenerator[AsyncClient, None]:
+    """AsyncClient carrying a valid admin access cookie — for write endpoints."""
+    async def _override() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = _override
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set(ACCESS_COOKIE, create_access_token(admin_user.id, admin_user.role))
+        yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def customer_user(db_session: AsyncSession) -> User:
+    """A persisted non-admin account."""
+    user = User(
+        email="customer@example.com",
+        password_hash=hash_password("customer-password"),
+        role=ROLE_CUSTOMER,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def customer_client(
+    db_session: AsyncSession, customer_user: User
+) -> AsyncGenerator[AsyncClient, None]:
+    """AsyncClient signed in as a customer — proves admin gates reject non-admins."""
+    async def _override() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = _override
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set(ACCESS_COOKIE, create_access_token(customer_user.id, customer_user.role))
         yield ac
     app.dependency_overrides.clear()
 

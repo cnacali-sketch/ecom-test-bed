@@ -80,6 +80,10 @@ export const products: Product[] = [
     isSale: true,
     inStock: true,
     tags: ["claw", "thick-hair", "bestseller"],
+    // Demo: wiggling sale badge, urgency "Only N left".
+    stock: 3,
+    stockMode: "lowOnly",
+    badgeAnimation: "wiggle",
   },
   {
     id: "prod-barrette-french",
@@ -110,6 +114,9 @@ export const products: Product[] = [
     isSale: true,
     inStock: true,
     tags: ["barrette", "half-up"],
+    // Demo: exact stock count shown for trust.
+    stock: 24,
+    stockMode: "exact",
   },
   {
     id: "prod-scrunchie-silk",
@@ -140,6 +147,9 @@ export const products: Product[] = [
     isSale: false,
     inStock: true,
     tags: ["scrunchie", "silk", "gift"],
+    // Demo: exact stock. No sale = no badge.
+    stock: 40,
+    stockMode: "exact",
   },
   {
     id: "prod-ties-everyday",
@@ -199,6 +209,9 @@ export const products: Product[] = [
     isSale: false,
     inStock: true,
     tags: ["pins", "occasion", "bridal"],
+    // Demo: low-stock urgency ("sells out every October").
+    stock: 2,
+    stockMode: "lowOnly",
   },
   {
     id: "prod-clipset-pastel",
@@ -228,6 +241,8 @@ export const products: Product[] = [
     isSale: true,
     inStock: true,
     tags: ["clips", "kids", "multipack"],
+    // Demo: pulsing sale badge, hidden stock.
+    badgeAnimation: "pulse",
   },
   {
     id: "prod-combkit-salon",

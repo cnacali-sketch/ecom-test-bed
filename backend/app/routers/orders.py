@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db_session
-from app.dependencies.auth import require_api_key
+from app.dependencies.auth import require_admin
 from app.models.order import Order, OrderItem
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -58,9 +58,13 @@ class OrderRead(BaseModel):
 
 # ---- Endpoints ----
 
-@router.post("", response_model=OrderRead, status_code=201, dependencies=[Depends(require_api_key)])
+@router.post("", response_model=OrderRead, status_code=201)
 async def create_order(payload: OrderCreate, db: AsyncSession = Depends(get_db_session)) -> Order:
-    """Create an order from a cart payload. Calculates total server-side."""
+    """Create an order from a cart payload. Calculates total server-side.
+
+    Intentionally unauthenticated: guest checkout stays open. Only order
+    *status* transitions are admin-gated.
+    """
     total = sum(item.unit_price * item.quantity for item in payload.items)
     order = Order(user_id=payload.user_id, status="pending", total_amount=total)
     for item in payload.items:
@@ -104,7 +108,7 @@ async def get_order(order_id: uuid.UUID, db: AsyncSession = Depends(get_db_sessi
     return order
 
 
-@router.patch("/{order_id}/status", response_model=OrderRead, dependencies=[Depends(require_api_key)])
+@router.patch("/{order_id}/status", response_model=OrderRead, dependencies=[Depends(require_admin)])
 async def update_order_status(
     order_id: uuid.UUID,
     status: str,

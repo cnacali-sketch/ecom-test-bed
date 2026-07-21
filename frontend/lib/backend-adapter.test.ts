@@ -6,13 +6,14 @@ function makeBackendProduct(overrides: Partial<BackendProduct> = {}): BackendPro
   return {
     id: "11111111-1111-1111-1111-111111111111",
     sku: "prod-test-01",
+    slug: "test-product",
     name: "Test Product",
-    price: 100,
-    mrp: 150,
+    price: "100.00",
+    mrp: "150.00",
+    in_stock: true,
     description: "A test product.",
     images: ["https://example.com/a.jpg", "https://example.com/b.jpg"],
     attrs: {
-      slug: "test-product",
       brand: "Savvy",
       type: "Tote",
       material: "Canvas",
@@ -23,7 +24,6 @@ function makeBackendProduct(overrides: Partial<BackendProduct> = {}): BackendPro
       collectionSlugs: ["bags"],
       isNew: true,
       isSale: false,
-      inStock: true,
       tags: ["new-in"],
     },
     variants: [],
@@ -62,9 +62,9 @@ describe("adaptProduct", () => {
   });
 
   test("falls back to safe defaults when attrs is missing expected fields", () => {
-    const result = adaptProduct(makeBackendProduct({ attrs: {}, description: null }));
+    const result = adaptProduct(makeBackendProduct({ attrs: {}, description: null, in_stock: false }));
 
-    expect(result.slug).toBe("prod-test-01");
+    expect(result.slug).toBe("test-product");
     expect(result.brand).toBe("");
     expect(result.description).toBe("");
     expect(result.currency).toBe("INR");
@@ -72,32 +72,28 @@ describe("adaptProduct", () => {
     expect(result.tags).toEqual([]);
     expect(result.isNew).toBe(false);
     expect(result.isSale).toBe(false);
-    expect(result.inStock).toBe(true);
+    expect(result.inStock).toBe(false);
   });
 
-  test("maps variants, defaulting colorHex and inStock when attrs omit them", () => {
+  test("maps variants from their top-level backend fields", () => {
     const result = adaptProduct(
       makeBackendProduct({
         variants: [
           {
             id: "22222222-2222-2222-2222-222222222222",
             sku: "VAR-01",
-            name: "Test Product - Red",
-            price: 100,
-            mrp: 150,
-            description: null,
-            images: ["https://example.com/red.jpg"],
-            attrs: { color: "Red", colorHex: "#ff0000", inStock: false },
+            color: "Red",
+            color_hex: "#ff0000",
+            image: "https://example.com/red.jpg",
+            in_stock: false,
           },
           {
             id: "33333333-3333-3333-3333-333333333333",
             sku: "VAR-02",
-            name: "Test Product - Blue",
-            price: 100,
-            mrp: 150,
-            description: null,
-            images: [],
-            attrs: {},
+            color: "Blue",
+            color_hex: "#0000ff",
+            image: null,
+            in_stock: true,
           },
         ],
       }),
@@ -115,8 +111,8 @@ describe("adaptProduct", () => {
       },
       {
         id: "33333333-3333-3333-3333-333333333333",
-        color: "Test Product - Blue",
-        colorHex: "#000000",
+        color: "Blue",
+        colorHex: "#0000ff",
         size: undefined,
         sku: "VAR-02",
         image: "",

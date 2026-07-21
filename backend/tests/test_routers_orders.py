@@ -55,19 +55,19 @@ async def test_get_order_404(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_status(client: AsyncClient) -> None:
-    create = await client.post("/api/orders", json=ORDER_PAYLOAD)
+async def test_update_status(admin_client: AsyncClient) -> None:
+    create = await admin_client.post("/api/orders", json=ORDER_PAYLOAD)
     order_id = create.json()["id"]
-    resp = await client.patch(f"/api/orders/{order_id}/status?status=confirmed")
+    resp = await admin_client.patch(f"/api/orders/{order_id}/status?status=confirmed")
     assert resp.status_code == 200
     assert resp.json()["status"] == "confirmed"
 
 
 @pytest.mark.asyncio
-async def test_invalid_status(client: AsyncClient) -> None:
-    create = await client.post("/api/orders", json=ORDER_PAYLOAD)
+async def test_invalid_status(admin_client: AsyncClient) -> None:
+    create = await admin_client.post("/api/orders", json=ORDER_PAYLOAD)
     order_id = create.json()["id"]
-    resp = await client.patch(f"/api/orders/{order_id}/status?status=exploded")
+    resp = await admin_client.patch(f"/api/orders/{order_id}/status?status=exploded")
     assert resp.status_code == 422
 
 
@@ -75,3 +75,28 @@ async def test_invalid_status(client: AsyncClient) -> None:
 async def test_empty_order_rejected(client: AsyncClient) -> None:
     resp = await client.post("/api/orders", json={"user_id": "u", "items": []})
     assert resp.status_code == 422
+
+
+# ---- Write gate: guest checkout stays open, status transitions are admin-only ----
+
+@pytest.mark.asyncio
+async def test_guest_can_create_order(client: AsyncClient) -> None:
+    """Checkout must not require an account (decision: guest checkout stays open)."""
+    resp = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    assert resp.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_update_status_unauthenticated_returns_401(client: AsyncClient) -> None:
+    create = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = create.json()["id"]
+    resp = await client.patch(f"/api/orders/{order_id}/status?status=confirmed")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_update_status_as_customer_returns_403(customer_client: AsyncClient) -> None:
+    create = await customer_client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = create.json()["id"]
+    resp = await customer_client.patch(f"/api/orders/{order_id}/status?status=confirmed")
+    assert resp.status_code == 403
