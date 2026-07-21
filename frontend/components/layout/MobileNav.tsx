@@ -18,7 +18,7 @@ export function MobileNav({ onClose }: MobileNavProps) {
   return (
     <div className="fixed inset-0 z-[90] lg:hidden">
       <button type="button" aria-label="Close menu" onClick={onClose} className="absolute inset-0 bg-ink/40" />
-      <div className="animate-rise absolute inset-y-0 left-0 flex w-full max-w-sm flex-col overflow-y-auto bg-paper shadow-xl">
+      <div className="animate-rise absolute inset-y-0 left-0 flex w-full max-w-sm flex-col overflow-y-auto overscroll-contain bg-paper shadow-xl">
         <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
           <span className="eyebrow">Menu</span>
           <button type="button" aria-label="Close menu" onClick={onClose} className="text-ink">
@@ -28,7 +28,7 @@ export function MobileNav({ onClose }: MobileNavProps) {
           </button>
         </div>
 
-        <nav className="flex-1 px-5 py-2">
+        <nav className="flex-1 px-5 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
           {siteConfig.nav.map((item) => (
             <div key={item.label} className="border-b border-ink/10">
               <div className="flex items-center justify-between">

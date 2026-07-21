@@ -77,7 +77,7 @@ export function ProductCard({ product }: ProductCardProps) {
           }}
           aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
           aria-pressed={wished}
-          className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-card/90 shadow-sm transition hover:bg-card"
+          className="absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full bg-card/90 shadow-sm transition hover:bg-card"
         >
           <span className={wished ? "text-sale" : "text-ink-soft"} aria-hidden>
             {wished ? "♥" : "♡"}
