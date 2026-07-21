@@ -5,33 +5,27 @@ role). No write endpoints: the admin console only *views* customers here;
 accounts are created through the storefront register flow. Never exposes the
 password hash or any auth state beyond `is_verified`.
 """
-import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.user import User
+from app.schemas.auth import UserRead
 
 router = APIRouter(prefix="/api/customers", tags=["customers"])
 
 
-class CustomerRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: uuid.UUID
-    email: str
-    role: str
-    is_verified: bool
+class CustomerRead(UserRead):
+    """The admin directory view of an account — everything UserRead exposes,
+    plus when the account was created. Extending rather than redeclaring the
+    field list keeps the two in sync: a new profile field added to UserRead
+    shows up here automatically instead of needing the same edit twice."""
+
     created_at: datetime
-    full_name: str | None = None
-    phone: str | None = None
-    postal_address: dict = {}
-    billing_address: dict = {}
-    billing_same: bool = True
 
 
 @router.get("", response_model=list[CustomerRead], dependencies=[Depends(require_admin)])
