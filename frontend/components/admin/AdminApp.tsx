@@ -22,6 +22,7 @@ import {
   Settings,
   Sparkles,
   ShoppingBag,
+  TrendingUp,
   Users,
   X,
 } from "lucide-react";
@@ -53,6 +54,7 @@ import { CategoryManager } from "./screens/CategoryManager";
 import { MediaLibrary } from "./screens/MediaLibrary";
 import { Orders } from "./screens/Orders";
 import { Customers } from "./screens/Customers";
+import { Analytics } from "./screens/Analytics";
 
 const SEED_CATEGORIES: AdminCategory[] = [
   { id: "c1", name: "Scrunchies", parent: "Hair Accessories", slug: "scrunchies", image: "" },
@@ -225,6 +227,7 @@ export function AdminApp() {
       <NavBtn id="customers" icon={Users} label="Customers" />
       <NavBtn id="categories" icon={FolderTree} label="Categories" />
       <NavBtn id="media" icon={Images} label="Media library" />
+      <NavBtn id="analytics" icon={TrendingUp} label="Analytics" />
     </nav>
   );
 
@@ -238,6 +241,7 @@ export function AdminApp() {
     media: "Media library",
     orders: "Orders",
     customers: "Customers",
+    analytics: "Analytics",
   };
 
   return (
@@ -342,6 +346,7 @@ export function AdminApp() {
           {view === "media" && <MediaLibrary media={media} setMedia={setMedia} />}
           {view === "orders" && <Orders />}
           {view === "customers" && <Customers />}
+          {view === "analytics" && <Analytics />}
         </main>
       </div>
 

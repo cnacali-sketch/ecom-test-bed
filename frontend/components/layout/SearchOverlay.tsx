@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { products } from "@/content/catalog";
+import { trackEvent } from "@/lib/analytics";
 import { formatPrice } from "@/lib/format";
 
 interface SearchOverlayProps {
@@ -39,6 +40,15 @@ export function SearchOverlay({ onClose }: SearchOverlayProps) {
           .includes(q)
       )
       .slice(0, 6);
+  }, [query]);
+
+  // Debounced: track the settled query (including zero-result ones — those
+  // are the most useful signal for catalog/copy gaps), not every keystroke.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const id = setTimeout(() => trackEvent("search", { query: q }), 600);
+    return () => clearTimeout(id);
   }, [query]);
 
   return (

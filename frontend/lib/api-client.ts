@@ -13,23 +13,34 @@ export function apiBaseUrl(): string | null {
 // an expired access token — so never try to refresh-and-retry them.
 const NO_REFRESH = ["/api/auth/login", "/api/auth/register", "/api/auth/refresh"];
 
-// Single-flight refresh. If several authed calls 401 at once (e.g. the admin
-// console loading Orders + Customers together), they must share ONE refresh —
-// firing several rotates the refresh token repeatedly and the later ones look
-// like token reuse, which purges the whole family and logs the user out.
+// Coordinated refresh. If several authed calls 401 at once, they must share ONE
+// refresh — firing several rotates the refresh token repeatedly and the later
+// ones look like token reuse, which RTR punishes by purging the whole family
+// (403) and logging the user out.
+//
+// Two layers of coordination:
+//  1. refreshInFlight — dedupes concurrent refreshes *within* this tab.
+//  2. navigator.locks("auth-refresh") — serializes refreshes *across* tabs, so
+//     two open tabs never replay the same token concurrently. Once a tab holds
+//     the lock and rotates the cookie, the next tab reads the fresh cookie and
+//     rotates from there — a valid chain, never a reuse.
 let refreshInFlight: Promise<boolean> | null = null;
+
+function postRefresh(baseUrl: string): Promise<boolean> {
+  return fetch(`${baseUrl}/api/auth/refresh`, { method: "POST", credentials: "include" })
+    .then((r) => r.ok)
+    .catch(() => false);
+}
 
 function refreshOnce(baseUrl: string): Promise<boolean> {
   if (!refreshInFlight) {
-    refreshInFlight = fetch(`${baseUrl}/api/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    })
-      .then((r) => r.ok)
-      .catch(() => false)
-      .finally(() => {
-        refreshInFlight = null;
-      });
+    const run =
+      typeof navigator !== "undefined" && navigator.locks
+        ? navigator.locks.request("auth-refresh", () => postRefresh(baseUrl))
+        : postRefresh(baseUrl); // older browsers: per-tab single-flight only
+    refreshInFlight = Promise.resolve(run).finally(() => {
+      refreshInFlight = null;
+    });
   }
   return refreshInFlight;
 }

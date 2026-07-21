@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AccordionSection } from "@/components/product/AccordionSection";
 import { CrossSellRail } from "@/components/product/CrossSellRail";
 import { ImageGallery } from "@/components/product/ImageGallery";
 import { PriceBlock } from "@/components/product/PriceBlock";
 import { TrustBadges } from "@/components/product/TrustBadges";
 import { VariantSelector } from "@/components/product/VariantSelector";
+import { trackEvent } from "@/lib/analytics";
 import { useCart } from "@/lib/cart-context";
 import { formatPrice } from "@/lib/format";
 import type { Product } from "@/lib/types";
@@ -19,6 +20,10 @@ interface ProductDetailProps {
 export function ProductDetail({ product, relatedProducts }: ProductDetailProps) {
   const [activeVariantId, setActiveVariantId] = useState(product.variants[0]?.id ?? "");
   const { addItem, openCart } = useCart();
+
+  useEffect(() => {
+    trackEvent("product_view", { product_id: product.id });
+  }, [product.id]);
 
   const activeVariant =
     product.variants.find((variant) => variant.id === activeVariantId) ?? product.variants[0];
@@ -36,6 +41,7 @@ export function ProductDetail({ product, relatedProducts }: ProductDetailProps) 
       currency: product.currency,
       quantity: 1,
     });
+    trackEvent("add_to_cart", { product_id: product.id });
     openCart();
   };
 

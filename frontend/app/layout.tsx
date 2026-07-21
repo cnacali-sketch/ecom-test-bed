@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/fraunces";
 import "@fontsource-variable/archivo";
+import { ConsentBanner } from "@/components/analytics/ConsentBanner";
+import { PageViewTracker } from "@/components/analytics/PageViewTracker";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
@@ -41,10 +43,12 @@ export default function RootLayout({
         <AuthProvider>
           <WishlistProvider>
             <CartProvider>
+              <PageViewTracker />
               <Header />
               <main className="flex-1">{children}</main>
               <Footer />
               <CartDrawer />
+              <ConsentBanner />
             </CartProvider>
           </WishlistProvider>
         </AuthProvider>

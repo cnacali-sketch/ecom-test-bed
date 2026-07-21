@@ -262,7 +262,7 @@ export const siteConfig = {
       {
         heading: "Help",
         links: [
-          { label: "Track Order", href: "/coming-soon" },
+          { label: "Track Order", href: "/track-order" },
           { label: "Returns & Exchanges", href: "/coming-soon" },
           { label: "Contact", href: "/coming-soon" },
           { label: "FAQ", href: "/coming-soon" },

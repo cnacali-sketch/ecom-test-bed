@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 import { useCart } from "@/lib/cart-context";
 import { calculateDiscountPercent } from "@/lib/format";
 import type { Product } from "@/lib/types";
@@ -52,6 +53,7 @@ export function ProductCard({ product }: ProductCardProps) {
       currency: product.currency,
       quantity: 1,
     });
+    trackEvent("add_to_cart", { product_id: product.id });
   };
   const secondaryImage = product.images[1]?.url ?? primaryImage;
   const displayImage = isHovered ? secondaryImage : primaryImage;

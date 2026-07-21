@@ -6,13 +6,8 @@
 
 import { useState } from "react";
 
+import { AddressFields, Field, seedAddress } from "@/components/ui/AddressFields";
 import { useAuth, type Address, type AuthUser } from "@/lib/auth-context";
-
-const EMPTY: Address = { line1: "", line2: "", city: "", state: "", postcode: "", country: "" };
-
-function seedAddress(a: Address | undefined): Address {
-  return { ...EMPTY, ...(a ?? {}) };
-}
 
 export function ProfileForm({ user }: { user: AuthUser }) {
   const { updateProfile } = useAuth();
@@ -93,61 +88,5 @@ export function ProfileForm({ user }: { user: AuthUser }) {
         {saving ? "Saving…" : "Save profile"}
       </button>
     </form>
-  );
-}
-
-function AddressFields({
-  heading,
-  value,
-  onChange,
-  prefix,
-}: {
-  heading: string;
-  value: Address;
-  onChange: (a: Address) => void;
-  prefix: string;
-}) {
-  const set = (key: keyof Address, v: string) => onChange({ ...value, [key]: v });
-  return (
-    <section className="space-y-4">
-      <h2 className="font-display text-xl italic text-ink">{heading}</h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Address line 1" value={value.line1 ?? ""} onChange={(v) => set("line1", v)} autoComplete={`${prefix} address-line1`} className="sm:col-span-2" />
-        <Field label="Address line 2" value={value.line2 ?? ""} onChange={(v) => set("line2", v)} autoComplete={`${prefix} address-line2`} className="sm:col-span-2" />
-        <Field label="City" value={value.city ?? ""} onChange={(v) => set("city", v)} />
-        <Field label="State" value={value.state ?? ""} onChange={(v) => set("state", v)} />
-        <Field label="Postcode" value={value.postcode ?? ""} onChange={(v) => set("postcode", v)} />
-        <Field label="Country" value={value.country ?? ""} onChange={(v) => set("country", v)} />
-      </div>
-    </section>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-  autoComplete,
-  className = "",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  autoComplete?: string;
-  className?: string;
-}) {
-  return (
-    <label className={`block ${className}`}>
-      <span className="block text-xs uppercase tracking-wide text-ink-soft">{label}</span>
-      <input
-        type={type}
-        value={value}
-        autoComplete={autoComplete}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full border border-ink/15 bg-card px-3 py-2 text-ink outline-none focus:border-teal"
-      />
-    </label>
   );
 }

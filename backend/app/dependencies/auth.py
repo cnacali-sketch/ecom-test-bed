@@ -58,3 +58,21 @@ async def require_admin(user: User = Depends(require_current_user)) -> User:
     if user.role != ROLE_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+async def optional_current_user(
+    access_token: str | None = Cookie(default=None, alias=ACCESS_COOKIE),
+    db: AsyncSession = Depends(get_db_session),
+) -> User | None:
+    """Same resolution as require_current_user, but returns None instead of 401.
+
+    For endpoints that must work for both guests and signed-in accounts (guest
+    checkout) while still using the real identity when one is present, rather
+    than trusting whatever the client claims.
+    """
+    if not access_token:
+        return None
+    try:
+        return await require_current_user(access_token, db)
+    except HTTPException:
+        return None

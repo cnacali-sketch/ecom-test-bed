@@ -6,10 +6,15 @@ from datetime import datetime
 
 from decimal import Decimal
 from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy.types import JSON
 
 from app.db import Base
+
+# JSONB on Postgres, plain JSON on SQLite (tests) — same idiom as product.attrs.
+JSONType = JSONB().with_variant(JSON(), "sqlite")
 
 
 class Order(Base):
@@ -26,6 +31,13 @@ class Order(Base):
     # refunded. Set manually by an admin until the payment gateway is wired,
     # at which point the gateway webhook becomes the source of truth.
     payment_status: Mapped[str] = mapped_column(String(16), default="unpaid", server_default="unpaid")
+    # cod (cash on delivery, live today) or prepaid (online, pending the gateway).
+    payment_method: Mapped[str] = mapped_column(String(16), default="cod", server_default="cod")
+    # Snapshot of the delivery address AT CHECKOUT TIME — a later profile edit
+    # must never rewrite where an already-placed order ships.
+    shipping_address: Mapped[dict] = mapped_column(JSONType, default=dict, server_default="{}")
+    courier: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tracking_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
