@@ -19,7 +19,13 @@ class Order(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
+    # Fulfilment lifecycle: pending → confirmed → shipped → delivered, plus the
+    # off-ramps cancelled / returned.
     status: Mapped[str] = mapped_column(String(32), default="pending")
+    # Payment lifecycle, tracked separately from fulfilment: unpaid → paid →
+    # refunded. Set manually by an admin until the payment gateway is wired,
+    # at which point the gateway webhook becomes the source of truth.
+    payment_status: Mapped[str] = mapped_column(String(16), default="unpaid", server_default="unpaid")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

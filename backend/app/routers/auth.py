@@ -22,7 +22,13 @@ from app.config import get_settings
 from app.db import get_db_session
 from app.dependencies.auth import ACCESS_COOKIE, REFRESH_COOKIE, require_current_user
 from app.models.user import ROLE_CUSTOMER, User, normalize_email
-from app.schemas.auth import LoginRequest, MessageResponse, RegisterRequest, UserRead
+from app.schemas.auth import (
+    LoginRequest,
+    MessageResponse,
+    ProfileUpdate,
+    RegisterRequest,
+    UserRead,
+)
 from app.services import login_throttle, refresh_tokens
 from app.services.email import send_account_exists_email, send_verification_email
 from app.services.refresh_tokens import TokenReuseError
@@ -304,4 +310,32 @@ async def logout(
 @router.get("/me", response_model=UserRead)
 async def me(user: User = Depends(require_current_user)) -> User:
     """Return the signed-in account — drives frontend auth state."""
+    return user
+
+
+@router.patch("/me", response_model=UserRead)
+async def update_profile(
+    payload: ProfileUpdate,
+    user: User = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> User:
+    """Customer edits their own profile (name, phone, addresses). Only the
+    fields present in the request are applied, so the form can PATCH partials.
+    Persists immediately and returns the updated account."""
+    data = payload.model_dump(exclude_unset=True)
+    if "full_name" in data:
+        user.full_name = data["full_name"]
+    if "phone" in data:
+        user.phone = data["phone"]
+    if "postal_address" in data:
+        user.postal_address = data["postal_address"] or {}
+    if "billing_same" in data:
+        user.billing_same = bool(data["billing_same"])
+    # When billing mirrors postal, keep billing empty to avoid a stale copy.
+    if user.billing_same:
+        user.billing_address = {}
+    elif "billing_address" in data:
+        user.billing_address = data["billing_address"] or {}
+    await db.commit()
+    await db.refresh(user)
     return user

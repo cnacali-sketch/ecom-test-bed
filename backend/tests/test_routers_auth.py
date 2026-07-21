@@ -434,3 +434,68 @@ async def test_me_requires_authentication(client: AsyncClient) -> None:
 async def test_me_rejects_a_garbage_token(client: AsyncClient) -> None:
     client.cookies.set(ACCESS_COOKIE, "not.a.jwt")
     assert (await client.get("/api/auth/me")).status_code == 401
+
+
+# ---- profile (PATCH /me) ----
+
+@pytest.mark.asyncio
+async def test_update_profile_persists(customer_client: AsyncClient) -> None:
+    resp = await customer_client.patch(
+        "/api/auth/me",
+        json={
+            "full_name": "Aditi Rao",
+            "phone": "+91 98765 43210",
+            "postal_address": {"line1": "12 Rose Ln", "city": "Mumbai", "postcode": "400001"},
+            "billing_same": True,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["full_name"] == "Aditi Rao"
+    assert body["phone"] == "+91 98765 43210"
+    assert body["postal_address"]["city"] == "Mumbai"
+    # Reload proves it was written, not just echoed.
+    again = await customer_client.get("/api/auth/me")
+    assert again.json()["full_name"] == "Aditi Rao"
+
+
+@pytest.mark.asyncio
+async def test_billing_same_true_clears_billing(customer_client: AsyncClient) -> None:
+    resp = await customer_client.patch(
+        "/api/auth/me",
+        json={
+            "billing_same": True,
+            "billing_address": {"line1": "should be ignored"},
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["billing_address"] == {}
+
+
+@pytest.mark.asyncio
+async def test_separate_billing_is_kept(customer_client: AsyncClient) -> None:
+    resp = await customer_client.patch(
+        "/api/auth/me",
+        json={
+            "billing_same": False,
+            "billing_address": {"line1": "9 Billing Rd", "city": "Delhi"},
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["billing_address"]["city"] == "Delhi"
+
+
+@pytest.mark.asyncio
+async def test_partial_update_leaves_other_fields(customer_client: AsyncClient) -> None:
+    await customer_client.patch("/api/auth/me", json={"full_name": "First Name"})
+    resp = await customer_client.patch("/api/auth/me", json={"phone": "12345"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["phone"] == "12345"
+    assert body["full_name"] == "First Name"  # untouched by the phone-only PATCH
+
+
+@pytest.mark.asyncio
+async def test_update_profile_requires_auth(client: AsyncClient) -> None:
+    resp = await client.patch("/api/auth/me", json={"full_name": "Nobody"})
+    assert resp.status_code == 401

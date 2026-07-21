@@ -4,11 +4,34 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import { apiFetch } from "./api-client";
 
+export interface Address {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postcode?: string;
+  country?: string;
+}
+
 export interface AuthUser {
   id: string;
   email: string;
   role: "customer" | "admin";
   is_verified: boolean;
+  full_name: string | null;
+  phone: string | null;
+  postal_address: Address;
+  billing_address: Address;
+  billing_same: boolean;
+}
+
+/** The subset of profile fields a customer can edit. */
+export interface ProfileUpdate {
+  full_name?: string;
+  phone?: string;
+  postal_address?: Address;
+  billing_address?: Address;
+  billing_same?: boolean;
 }
 
 interface AuthContextValue {
@@ -26,6 +49,8 @@ interface AuthContextValue {
    */
   register: (email: string, password: string) => Promise<string>;
   logout: () => Promise<void>;
+  /** Persist profile edits to the backend and update local state immediately. */
+  updateProfile: (patch: ProfileUpdate) => Promise<AuthUser>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -118,9 +143,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateProfile = useCallback(async (patch: ProfileUpdate): Promise<AuthUser> => {
+    const response = await apiFetch("/api/auth/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!response) throw new AuthError("Cannot reach the server. Is the backend running?");
+    if (!response.ok) throw new AuthError(await readError(response, "Could not save your profile"));
+    const updated: AuthUser = await response.json();
+    setUser(updated);
+    return updated;
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, isAdmin: user?.role === "admin", login, register, logout }),
-    [user, isLoading, login, register, logout],
+    () => ({ user, isLoading, isAdmin: user?.role === "admin", login, register, logout, updateProfile }),
+    [user, isLoading, login, register, logout, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

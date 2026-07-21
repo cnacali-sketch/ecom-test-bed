@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.routers import (
     auth,
     collections,
+    customers,
     health,
     inventory,
     orders,
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(products.router)
     fastapi_app.include_router(collections.router)
     fastapi_app.include_router(orders.router)
+    fastapi_app.include_router(customers.router)
 
     return fastapi_app
 

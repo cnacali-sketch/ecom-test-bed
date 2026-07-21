@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
+import { ProfileForm } from "@/components/account/ProfileForm";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
 
@@ -29,6 +30,8 @@ function AccountView() {
           <dd className="text-ink">{user?.is_verified ? "Yes" : "Not yet"}</dd>
         </div>
       </dl>
+
+      {user && <ProfileForm user={user} />}
 
       {/* Order history and a persisted wishlist land in P4. */}
       <button

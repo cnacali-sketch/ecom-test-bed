@@ -51,6 +51,8 @@ import { ProductEditor } from "./screens/ProductEditor";
 import { Inventory } from "./screens/Inventory";
 import { CategoryManager } from "./screens/CategoryManager";
 import { MediaLibrary } from "./screens/MediaLibrary";
+import { Orders } from "./screens/Orders";
+import { Customers } from "./screens/Customers";
 
 const SEED_CATEGORIES: AdminCategory[] = [
   { id: "c1", name: "Scrunchies", parent: "Hair Accessories", slug: "scrunchies", image: "" },
@@ -219,13 +221,10 @@ export function AdminApp() {
       <NavBtn id="home" icon={Home} label="Homepage editor" />
       <NavBtn id="products" icon={Package} label="Products" />
       <NavBtn id="inventory" icon={Boxes} label="Inventory" badge={lowCount} />
-      <NavBtn id="categories" icon={FolderTree} label="Categories" />
-      <NavBtn id="media" icon={Images} label="Media library" />
-      <div className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-ink-soft/40">
-        Coming soon
-      </div>
       <NavBtn id="orders" icon={ShoppingBag} label="Orders" />
       <NavBtn id="customers" icon={Users} label="Customers" />
+      <NavBtn id="categories" icon={FolderTree} label="Categories" />
+      <NavBtn id="media" icon={Images} label="Media library" />
     </nav>
   );
 
@@ -341,11 +340,8 @@ export function AdminApp() {
             <CategoryManager categories={categories} setCategories={setCategories} products={products} />
           )}
           {view === "media" && <MediaLibrary media={media} setMedia={setMedia} />}
-          {(view === "orders" || view === "customers") && (
-            <div className="rounded-2xl border border-dashed border-ink/20 bg-card p-16 text-center text-ink-soft/60">
-              This section is a placeholder — coming next.
-            </div>
-          )}
+          {view === "orders" && <Orders />}
+          {view === "customers" && <Customers />}
         </main>
       </div>
 

@@ -10,13 +10,18 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
+from sqlalchemy.types import JSON
 
 from app.db import Base
 
 ROLE_CUSTOMER = "customer"
 ROLE_ADMIN = "admin"
+
+# JSONB on Postgres, plain JSON on SQLite (tests) — same idiom as product.attrs.
+JSONType = JSONB().with_variant(JSON(), "sqlite")
 
 
 class User(Base):
@@ -33,6 +38,16 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    # ---- Customer profile (self-editable via PATCH /api/profile) ----
+    full_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Address blobs: {line1, line2, city, state, postcode, country}. Free-form
+    # JSON keeps the shape flexible without a migration per field.
+    postal_address: Mapped[dict] = mapped_column(JSONType, default=dict, server_default="{}")
+    billing_address: Mapped[dict] = mapped_column(JSONType, default=dict, server_default="{}")
+    # When true, billing == postal and billing_address is ignored by consumers.
+    billing_same: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     @property
     def is_admin(self) -> bool:

@@ -52,6 +52,7 @@ class OrderRead(BaseModel):
     id: uuid.UUID
     user_id: str
     status: str
+    payment_status: str
     total_amount: Decimal
     items: list[OrderItemRead] = []
 
@@ -96,6 +97,17 @@ async def list_orders(
     return list(result.scalars().all())
 
 
+# Registered before GET /{order_id} so "/all" matches this literal route
+# rather than being parsed as an order id.
+@router.get("/all", response_model=list[OrderRead], dependencies=[Depends(require_admin)])
+async def list_all_orders(db: AsyncSession = Depends(get_db_session)) -> list[Order]:
+    """Every order, newest first — the admin console Orders screen. Admin-gated."""
+    result = await db.execute(
+        select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 @router.get("/{order_id}", response_model=OrderRead)
 async def get_order(order_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)) -> Order:
     """Fetch a single order by ID."""
@@ -114,8 +126,9 @@ async def update_order_status(
     status: str,
     db: AsyncSession = Depends(get_db_session),
 ) -> Order:
-    """Update order status (pending → confirmed → shipped → delivered)."""
-    valid = {"pending", "confirmed", "shipped", "delivered", "cancelled"}
+    """Update fulfilment status: pending → confirmed → shipped → delivered,
+    plus the off-ramps cancelled / returned."""
+    valid = {"pending", "confirmed", "shipped", "delivered", "cancelled", "returned"}
     if status not in valid:
         raise HTTPException(status_code=422, detail=f"status must be one of {valid}")
     result = await db.execute(select(Order).where(Order.id == order_id))
@@ -123,6 +136,30 @@ async def update_order_status(
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
     order.status = status
+    await db.commit()
+    await db.refresh(order, attribute_names=["items"])
+    return order
+
+
+@router.patch("/{order_id}/payment", response_model=OrderRead, dependencies=[Depends(require_admin)])
+async def update_payment_status(
+    order_id: uuid.UUID,
+    payment_status: str,
+    db: AsyncSession = Depends(get_db_session),
+) -> Order:
+    """Update payment status: unpaid → paid → refunded. Admin-gated.
+
+    Manual until the payment gateway is wired; a real gateway would drive these
+    transitions from its webhook (payment.captured / refund.processed) instead.
+    """
+    valid = {"unpaid", "paid", "refunded"}
+    if payment_status not in valid:
+        raise HTTPException(status_code=422, detail=f"payment_status must be one of {valid}")
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.payment_status = payment_status
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order

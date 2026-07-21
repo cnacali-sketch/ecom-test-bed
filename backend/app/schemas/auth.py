@@ -37,6 +37,18 @@ class LoginRequest(BaseModel):
     _validate_password = field_validator("password")(_check_password_bytes)
 
 
+class Address(BaseModel):
+    """A postal or billing address. Every field optional so a half-filled form
+    still saves; widths guard against oversized input."""
+
+    line1: str = Field(default="", max_length=200)
+    line2: str = Field(default="", max_length=200)
+    city: str = Field(default="", max_length=100)
+    state: str = Field(default="", max_length=100)
+    postcode: str = Field(default="", max_length=20)
+    country: str = Field(default="", max_length=100)
+
+
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -44,6 +56,21 @@ class UserRead(BaseModel):
     email: str
     role: str
     is_verified: bool
+    full_name: str | None = None
+    phone: str | None = None
+    postal_address: dict = Field(default_factory=dict)
+    billing_address: dict = Field(default_factory=dict)
+    billing_same: bool = True
+
+
+class ProfileUpdate(BaseModel):
+    """Customer self-edit. All optional — only the sent fields are applied."""
+
+    full_name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=32)
+    postal_address: Address | None = None
+    billing_address: Address | None = None
+    billing_same: bool | None = None
 
 
 class MessageResponse(BaseModel):
