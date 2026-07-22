@@ -17,14 +17,6 @@ LOGIN = {"email": "new@example.com", "password": "correct-horse-battery"}
 
 
 @pytest.fixture(autouse=True)
-def _clear_throttle():
-    """Login throttle is process-global — reset it between tests."""
-    login_throttle._attempts.clear()
-    yield
-    login_throttle._attempts.clear()
-
-
-@pytest.fixture(autouse=True)
 def _no_real_email(monkeypatch):
     """Capture background emails instead of logging/sending them."""
     sent: list[tuple[str, str]] = []
@@ -499,3 +491,31 @@ async def test_partial_update_leaves_other_fields(customer_client: AsyncClient) 
 async def test_update_profile_requires_auth(client: AsyncClient) -> None:
     resp = await client.patch("/api/auth/me", json={"full_name": "Nobody"})
     assert resp.status_code == 401
+
+
+# ---- CSRF (double-submit cookie/header) ----
+
+@pytest.mark.asyncio
+async def test_mutating_request_without_csrf_header_is_rejected(customer_client: AsyncClient) -> None:
+    # Same valid access-token cookie as every other customer_client test, but
+    # with the CSRF header stripped — simulates a forged cross-site request
+    # that rides the auth cookie automatically but can't read document.cookie
+    # to echo the token back.
+    del customer_client.headers["x-csrf-token"]
+    resp = await customer_client.patch("/api/auth/me", json={"full_name": "Forged"})
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_mutating_request_with_wrong_csrf_header_is_rejected(customer_client: AsyncClient) -> None:
+    customer_client.headers["x-csrf-token"] = "not-the-real-token"
+    resp = await customer_client.patch("/api/auth/me", json={"full_name": "Forged"})
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_get_request_does_not_require_csrf_header(customer_client: AsyncClient) -> None:
+    # Safe methods carry no CSRF requirement — only state-changing ones do.
+    del customer_client.headers["x-csrf-token"]
+    resp = await customer_client.get("/api/auth/me")
+    assert resp.status_code == 200

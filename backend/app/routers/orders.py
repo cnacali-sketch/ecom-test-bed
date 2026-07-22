@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,10 +28,20 @@ from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import ROLE_ADMIN, User
 from app.schemas.auth import Address
+from app.services import login_throttle
 from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
+
+# Guest checkout is unauthenticated and COD needs no payment confirmation, so
+# without a cap a scripted loop can order every unit of stock for free — a
+# direct DoS against real inventory right as paid ad traffic starts arriving.
+# Same 5-minute window as every other login_throttle caller; per-IP so it
+# doesn't collectively punish shoppers behind a shared IP for one bad actor's
+# window, just cap how fast any single one can fire.
+ORDER_MAX_PER_IP = 20
+_TOO_MANY_ORDERS = HTTPException(status_code=429, detail="Too many orders from this address. Try again shortly.")
 
 
 # ---- Schemas (inline — order schemas are small and only used here) ----
@@ -196,6 +206,7 @@ async def _resolve_order_email(db: AsyncSession, order: Order) -> str | None:
 @router.post("", response_model=OrderRead, status_code=201)
 async def create_order(
     payload: OrderCreate,
+    request: Request,
     background_tasks: BackgroundTasks,
     user: User | None = Depends(optional_current_user),
     db: AsyncSession = Depends(get_db_session),
@@ -215,12 +226,21 @@ async def create_order(
     orders skip this the same way they skip the user_id override — there's no
     checkbox behind a phone order placed on a customer's behalf.
     """
+    is_admin_caller = bool(user and user.role == ROLE_ADMIN)
+
+    if not is_admin_caller:
+        # Admin phone/manual orders skip the throttle same as they skip T&C —
+        # an admin isn't the abuse case this guards against.
+        throttle_key = login_throttle.client_key(request, "order")
+        if login_throttle.is_locked(throttle_key, ORDER_MAX_PER_IP):
+            raise _TOO_MANY_ORDERS
+        login_throttle.record_failure(throttle_key)
+
     if payload.payment_method not in PAYMENT_METHODS:
         raise HTTPException(
             status_code=422, detail=f"payment_method must be one of {PAYMENT_METHODS}"
         )
 
-    is_admin_caller = bool(user and user.role == ROLE_ADMIN)
     if not is_admin_caller and (not payload.terms_accepted or not payload.terms_version):
         # Require BOTH the acceptance flag and the version it was accepted at —
         # a consent record with a null version defeats the audit trail this

@@ -3,6 +3,8 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from app.routers.orders import ORDER_MAX_PER_IP
+
 
 @pytest.fixture
 def product_id():
@@ -30,6 +32,25 @@ async def test_create_order(client: AsyncClient) -> None:
     # total = (649 * 2) + (999 * 1) = 2297
     assert float(data["total_amount"]) == pytest.approx(2297.0)
     assert len(data["items"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_order_creation_throttled_per_ip_after_threshold(client: AsyncClient) -> None:
+    # Unauthenticated guest checkout + COD needs no payment confirmation, so
+    # without this throttle a scripted loop could drain real stock for free —
+    # this proves the cap actually engages rather than just existing in code.
+    for _ in range(ORDER_MAX_PER_IP):
+        resp = await client.post("/api/orders", json=ORDER_PAYLOAD)
+        assert resp.status_code == 201
+    resp = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    assert resp.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_admin_order_creation_bypasses_throttle(admin_client: AsyncClient) -> None:
+    for _ in range(ORDER_MAX_PER_IP + 1):
+        resp = await admin_client.post("/api/orders", json=ORDER_PAYLOAD)
+        assert resp.status_code == 201
 
 
 @pytest.mark.asyncio

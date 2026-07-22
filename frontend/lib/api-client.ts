@@ -13,6 +13,20 @@ export function apiBaseUrl(): string | null {
 // an expired access token — so never try to refresh-and-retry them.
 const NO_REFRESH = ["/api/auth/login", "/api/auth/register", "/api/auth/refresh"];
 
+// Double-submit CSRF pair (see backend/app/dependencies/auth.py): the backend
+// sets a non-httpOnly csrf_token cookie precisely so this JS can read it and
+// echo it back as a header — something a third-party page riding the auth
+// cookie cross-site can't do, since it can't read this origin's document.cookie.
+const CSRF_COOKIE = "csrf_token";
+const CSRF_HEADER = "X-CSRF-Token";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 // Coordinated refresh. If several authed calls 401 at once, they must share ONE
 // refresh — firing several rotates the refresh token repeatedly and the later
 // ones look like token reuse, which RTR punishes by purging the whole family
@@ -58,7 +72,13 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 
   // credentials: "include" is required for the httpOnly auth cookies to travel
   // cross-origin (localhost:3000 -> :8000, or across the two preview tunnels).
-  const request = () => fetch(`${baseUrl}${path}`, { ...init, credentials: "include" });
+  const method = (init.method ?? "GET").toUpperCase();
+  const headers = new Headers(init.headers);
+  if (!SAFE_METHODS.has(method)) {
+    const csrfToken = readCookie(CSRF_COOKIE);
+    if (csrfToken) headers.set(CSRF_HEADER, csrfToken);
+  }
+  const request = () => fetch(`${baseUrl}${path}`, { ...init, headers, credentials: "include" });
 
   try {
     const res = await request();

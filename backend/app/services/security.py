@@ -18,6 +18,7 @@ identifiable so it can be purged. See services/refresh_tokens.rotate.
 """
 from __future__ import annotations
 
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -144,6 +145,16 @@ def create_verify_token(subject: uuid.UUID, email: str) -> str:
         ttl=timedelta(hours=settings.email_verify_ttl_hours),
         extra={"email": email},
     )
+
+
+def generate_csrf_token() -> str:
+    """Opaque random value for the double-submit CSRF cookie/header pair.
+
+    Not a JWT — it carries no claims and is never decoded, only compared
+    byte-for-byte against the same value echoed back as a header. See
+    dependencies/auth.py for where that comparison happens.
+    """
+    return secrets.token_urlsafe(32)
 
 
 def decode_token(token: str, expected_type: str) -> dict:

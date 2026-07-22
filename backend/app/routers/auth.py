@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_db_session
-from app.dependencies.auth import ACCESS_COOKIE, REFRESH_COOKIE, require_current_user
+from app.dependencies.auth import ACCESS_COOKIE, CSRF_COOKIE, REFRESH_COOKIE, require_current_user
 from app.models.user import ROLE_CUSTOMER, User, normalize_email
 from app.schemas.auth import (
     LoginRequest,
@@ -41,6 +41,7 @@ from app.services.security import (
     create_verify_token,
     decode_token,
     dummy_verify,
+    generate_csrf_token,
     hash_password,
     verify_password,
 )
@@ -82,10 +83,23 @@ def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToke
         max_age=settings.jwt_refresh_ttl_days * 24 * 60 * 60,
         **common,
     )
+    # NOT httpOnly: the frontend must read this value with JS (document.cookie)
+    # to echo it back as a header on every state-changing request — that's the
+    # double-submit CSRF defense in dependencies/auth.py. Same lifetime as the
+    # refresh cookie so it doesn't expire mid-session while the login itself
+    # is still valid.
+    response.set_cookie(
+        CSRF_COOKIE,
+        generate_csrf_token(),
+        max_age=settings.jwt_refresh_ttl_days * 24 * 60 * 60,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+        path="/",
+    )
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    for name in (ACCESS_COOKIE, REFRESH_COOKIE):
+    for name in (ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE):
         response.delete_cookie(name, path="/")
 
 
