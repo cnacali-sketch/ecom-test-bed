@@ -314,6 +314,34 @@ async def test_order_against_unknown_product_still_succeeds(client: AsyncClient)
         },
     )
     assert resp.status_code == 201
+    assert resp.json()["flagged"] is False
+
+
+@pytest.mark.asyncio
+async def test_order_price_mismatch_flags_but_charges_server_price(admin_client: AsyncClient) -> None:
+    product_id = await _make_tracked_product(admin_client, stock=10)
+    resp = await admin_client.post(
+        "/api/orders",
+        json={"user_id": "u", "items": [{"product_id": product_id, "quantity": 1, "unit_price": "1.00"}]},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["total_amount"] == "100.00"
+    assert body["flagged"] is True
+    assert "Stock Test Product" in body["flag_reason"]
+
+
+@pytest.mark.asyncio
+async def test_order_matching_price_is_not_flagged(admin_client: AsyncClient) -> None:
+    product_id = await _make_tracked_product(admin_client, stock=10)
+    resp = await admin_client.post(
+        "/api/orders",
+        json={"user_id": "u", "items": [{"product_id": product_id, "quantity": 1, "unit_price": "100.00"}]},
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["flagged"] is False
+    assert body["flag_reason"] is None
 
 
 # ---- Shipping address snapshot + payment method ----

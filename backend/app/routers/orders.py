@@ -83,6 +83,8 @@ class OrderRead(BaseModel):
     coupon_code: str | None
     discount_amount: Decimal
     total_amount: Decimal
+    flagged: bool
+    flag_reason: str | None
     items: list[OrderItemRead] = []
 
 
@@ -126,6 +128,32 @@ async def _reserve_stock(db: AsyncSession, items: list[OrderItemCreate]) -> None
         product.attrs = {**product.attrs, "stock": remaining}
         if remaining <= 0:
             product.in_stock = False
+
+
+async def _authoritative_pricing(
+    db: AsyncSession, items: list[OrderItemCreate]
+) -> tuple[dict[uuid.UUID, Decimal], str | None]:
+    """Server-side price authority. Client unit_price is NEVER trusted for the
+    total: for every item whose product EXISTS, real Product.price is used. A
+    mismatch is a tampering attempt — the order is still accepted at the
+    correct price (no money lost) but flagged for admin review, COD included.
+    Unknown product ids fall back to client price (phantom ids in tests, no
+    FK in SQLite, real carts only hold real products).
+    """
+    product_ids = {i.product_id for i in items}
+    result = await db.execute(select(Product).where(Product.id.in_(product_ids)))
+    products = {p.id: p for p in result.scalars().all()}
+    prices: dict[uuid.UUID, Decimal] = {}
+    mismatches: list[str] = []
+    for item in items:
+        product = products.get(item.product_id)
+        if product is None:
+            continue  # unknown → client price stands
+        prices[item.product_id] = product.price
+        if item.unit_price != product.price:
+            mismatches.append(f"{product.name}: sent {item.unit_price}, actual {product.price}")
+    flag_reason = ("Price tampering — " + "; ".join(mismatches))[:500] if mismatches else None
+    return prices, flag_reason
 
 
 async def _redeem_coupon(db: AsyncSession, code: str, subtotal: Decimal) -> tuple[str, Decimal]:
@@ -206,7 +234,12 @@ async def create_order(
 
     effective_user_id = str(user.id) if user and user.role != ROLE_ADMIN else payload.user_id
 
-    subtotal = sum(item.unit_price * item.quantity for item in payload.items)
+    prices, flag_reason = await _authoritative_pricing(db, payload.items)
+
+    def unit_price_for(item: OrderItemCreate) -> Decimal:
+        return prices.get(item.product_id, item.unit_price)
+
+    subtotal = sum(unit_price_for(item) * item.quantity for item in payload.items)
     coupon_code, discount_amount = (
         await _redeem_coupon(db, payload.coupon_code, subtotal)
         if payload.coupon_code
@@ -223,13 +256,15 @@ async def create_order(
         coupon_code=coupon_code,
         discount_amount=discount_amount,
         total_amount=subtotal - discount_amount,
+        flagged=flag_reason is not None,
+        flag_reason=flag_reason,
     )
     for item in payload.items:
         order.items.append(
             OrderItem(
                 product_id=item.product_id,
                 quantity=item.quantity,
-                unit_price=item.unit_price,
+                unit_price=unit_price_for(item),
             )
         )
     db.add(order)

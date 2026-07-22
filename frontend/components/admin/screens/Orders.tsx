@@ -6,7 +6,7 @@
 // admin-gated server-side.
 
 import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, ShoppingBag } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, ShoppingBag } from "lucide-react";
 
 import { rupee } from "@/lib/admin/helpers";
 import { apiFetch } from "@/lib/api-client";
@@ -27,6 +27,8 @@ interface Order {
   tracking_number: string | null;
   shipping_address: { line1?: string; line2?: string; city?: string; state?: string; postcode?: string; country?: string };
   total_amount: string;
+  flagged: boolean;
+  flag_reason: string | null;
   items: OrderItem[];
 }
 interface ReturnRequest {
@@ -130,6 +132,11 @@ export function Orders() {
       <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
         <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
           <ShoppingBag className="h-4 w-4 text-teal" /> Orders ({orders.length})
+          {orders.some((o) => o.flagged) && (
+            <span className="flex items-center gap-1 rounded-full bg-sale/10 px-2 py-0.5 text-xs font-semibold text-sale">
+              <AlertTriangle className="h-3 w-3" /> {orders.filter((o) => o.flagged).length} flagged
+            </span>
+          )}
         </h3>
       </div>
       <div className="overflow-x-auto">
@@ -152,7 +159,7 @@ export function Orders() {
               const returnRequest = returnRequests.find((r) => r.order_id === o.id) ?? null;
               return (
                 <Fragment key={o.id}>
-                  <tr className="border-b border-ink/5 last:border-0">
+                  <tr className={`border-b border-ink/5 last:border-0 ${o.flagged ? "bg-sale/5" : ""}`}>
                     <td className="px-3 py-3">
                       <button
                         type="button"
@@ -163,7 +170,19 @@ export function Orders() {
                         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </button>
                     </td>
-                    <td className="px-2 py-3 font-mono text-xs text-ink-soft">#{o.id.slice(0, 8)}</td>
+                    <td className="px-2 py-3 font-mono text-xs text-ink-soft">
+                      <span className="flex items-center gap-1.5">
+                        #{o.id.slice(0, 8)}
+                        {o.flagged && (
+                          <span
+                            title={o.flag_reason ?? "Flagged for review"}
+                            className="flex items-center gap-0.5 rounded-full bg-sale/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sale"
+                          >
+                            <AlertTriangle className="h-3 w-3" /> Flagged
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-3 py-3 text-ink">{o.user_id}</td>
                     <td className="px-3 py-3 text-ink-soft">{qty}</td>
                     <td className="px-3 py-3 font-semibold text-ink">{rupee(Number(o.total_amount))}</td>
@@ -187,6 +206,12 @@ export function Orders() {
                   {expanded && (
                     <tr className="border-b border-ink/5 bg-paper-tint/50">
                       <td colSpan={7} className="px-5 py-4">
+                        {o.flagged && (
+                          <div className="mb-4 flex items-start gap-2 border border-sale/30 bg-sale/5 px-3 py-2 text-xs text-sale">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span>{o.flag_reason ?? "Flagged for review."}</span>
+                          </div>
+                        )}
                         <ShippingDetail order={o} onSave={(courier, tracking) => setShipping(o.id, courier, tracking)} />
                         <ReturnRequestDetail
                           request={returnRequest}

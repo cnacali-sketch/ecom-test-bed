@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 
 from decimal import Decimal
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -48,6 +48,13 @@ class Order(Base):
     coupon_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     discount_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"), server_default="0")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    # Server-side price-tampering signal: set when a client-sent unit_price
+    # didn't match Product.price at order time. The order still gets charged
+    # the CORRECT (server) price either way — this is a human-review alert,
+    # not a payment gate — and fires regardless of payment_method so COD
+    # tampering attempts surface too, not just gateway-mediated ones.
+    flagged: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    flag_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     items: Mapped[list[OrderItem]] = relationship(
