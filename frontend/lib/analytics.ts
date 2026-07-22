@@ -56,12 +56,20 @@ export function trackEvent(eventType: EventType, extra: TrackExtra = {}): void {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) return;
 
+  // Ad click identifiers ride in on the landing URL (Google/Meta append
+  // gclid/fbclid to the ad's destination link) — read straight off the
+  // current URL rather than threading them through every trackEvent call
+  // site, so a future page_view caller can't forget to pass them.
+  const params = new URLSearchParams(window.location.search);
+
   const body = JSON.stringify({
     user_id: getSessionId(),
     event_type: eventType,
     path: extra.path ?? window.location.pathname,
     product_id: extra.product_id,
     query: extra.query,
+    gclid: params.get("gclid") ?? undefined,
+    fbclid: params.get("fbclid") ?? undefined,
   });
 
   const url = `${baseUrl}/api/events`;

@@ -263,7 +263,8 @@ export const siteConfig = {
         heading: "Help",
         links: [
           { label: "Track Order", href: "/track-order" },
-          { label: "Returns & Exchanges", href: "/coming-soon" },
+          { label: "Returns & Exchanges", href: "/policies/returns" },
+          { label: "Refund Policy", href: "/policies/refund" },
           { label: "Contact", href: "/coming-soon" },
           { label: "FAQ", href: "/coming-soon" },
         ],
@@ -272,11 +273,80 @@ export const siteConfig = {
         heading: "Company",
         links: [
           { label: "Privacy", href: "/coming-soon" },
-          { label: "Terms", href: "/coming-soon" },
+          { label: "Terms", href: "/policies/terms" },
         ],
       },
     ],
     fineprint: "Photography via Pexels (free license). Demo storefront — not a live shop.",
+  },
+
+  // ---------- Legal / policy pages ----------
+  // PLACEHOLDER COPY. Every section below is a starting draft, not reviewed
+  // legal text — read through and edit before this store takes real orders.
+  // `termsVersion` is the string stamped onto every order's consent record
+  // (see checkout's T&C checkbox); bump it whenever the terms wording changes
+  // so old orders keep an accurate record of which version they agreed to.
+  policies: {
+    termsVersion: "2026-07-22",
+    terms: {
+      updated: "22 July 2026",
+      sections: [
+        {
+          heading: "Using this site",
+          body: "By placing an order with Savvy In Teal you agree to these terms. [Placeholder — add your governing law, dispute process, and any age/eligibility requirements.]",
+        },
+        {
+          heading: "Orders & pricing",
+          body: "Prices are shown in INR and include applicable taxes unless stated otherwise. We reserve the right to cancel an order if a listed price or stock level was wrong. [Placeholder — confirm cancellation wording with your business.]",
+        },
+        {
+          heading: "Payment",
+          body: "Cash on Delivery is available today; online payment will be added at launch. [Placeholder — update this section once the payment gateway goes live.]",
+        },
+        {
+          heading: "Contact",
+          body: "Questions about these terms? Write to us — see the Contact link in the footer. [Placeholder — add a real support email or phone number.]",
+        },
+      ],
+    },
+    refund: {
+      updated: "22 July 2026",
+      sections: [
+        {
+          heading: "Refund window",
+          body: "Approved returns are refunded within 15 days of us receiving the item back. [Placeholder — confirm this matches your actual processing time.]",
+        },
+        {
+          heading: "Refund method",
+          body: "[Placeholder — decide how Cash on Delivery orders get refunded: bank transfer, UPI, or store credit, and name it here. Prepaid orders would refund to the original payment method.]",
+        },
+        {
+          heading: "Non-refundable items",
+          body: "[Placeholder — list any final-sale or hygiene-sensitive items that can't be refunded, if any.]",
+        },
+      ],
+    },
+    returns: {
+      updated: "22 July 2026",
+      sections: [
+        {
+          heading: "Return window",
+          body: "We accept return requests within 15 days of delivery, matching the returns policy already shown across the site.",
+        },
+        {
+          heading: "Condition",
+          body: "Items must be unused, unworn, and in original packaging. [Placeholder — confirm this matches what you actually want to enforce.]",
+        },
+        {
+          heading: "How to start a return",
+          body: "Sign in and open Your Orders to request a return on an eligible order.",
+        },
+        {
+          heading: "Pickup",
+          body: "[Placeholder — do you offer reverse pickup, or does the customer ship it back themselves? Specify courier and who pays.]",
+        },
+      ],
+    },
   },
 } as const;
 

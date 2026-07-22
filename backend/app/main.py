@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.routers import (
     auth,
     collections,
+    coupons,
     customers,
     events,
     health,
@@ -16,6 +17,7 @@ from app.routers import (
     pricing,
     products,
     recommendation,
+    returns,
 )
 
 
@@ -53,6 +55,8 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(orders.router)
     fastapi_app.include_router(customers.router)
     fastapi_app.include_router(events.router)
+    fastapi_app.include_router(coupons.router)
+    fastapi_app.include_router(returns.router)
 
     return fastapi_app
 

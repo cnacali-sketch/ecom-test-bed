@@ -15,6 +15,8 @@ ORDER_PAYLOAD = {
         {"product_id": str(uuid.uuid4()), "quantity": 2, "unit_price": "649.00"},
         {"product_id": str(uuid.uuid4()), "quantity": 1, "unit_price": "999.00"},
     ],
+    "terms_accepted": True,
+    "terms_version": "2026-07-22",
 }
 
 
@@ -304,7 +306,12 @@ async def test_order_against_unknown_product_still_succeeds(client: AsyncClient)
     # the pre-existing contract (order creation never validated existence).
     resp = await client.post(
         "/api/orders",
-        json={"user_id": "u", "items": [{"product_id": str(uuid.uuid4()), "quantity": 999, "unit_price": "1.00"}]},
+        json={
+            "user_id": "u",
+            "items": [{"product_id": str(uuid.uuid4()), "quantity": 999, "unit_price": "1.00"}],
+            "terms_accepted": True,
+            "terms_version": "2026-07-22",
+        },
     )
     assert resp.status_code == 201
 
@@ -357,3 +364,88 @@ async def test_set_shipping_unauthenticated_401(client: AsyncClient) -> None:
     order_id = create.json()["id"]
     resp = await client.patch(f"/api/orders/{order_id}/shipping?courier=X")
     assert resp.status_code == 401
+
+
+# ---- T&C consent audit trail ----
+
+@pytest.mark.asyncio
+async def test_guest_order_requires_terms_accepted(client: AsyncClient) -> None:
+    resp = await client.post("/api/orders", json={**ORDER_PAYLOAD, "terms_accepted": False})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_customer_order_requires_terms_accepted(customer_client: AsyncClient) -> None:
+    resp = await customer_client.post("/api/orders", json={**ORDER_PAYLOAD, "terms_accepted": False})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_order_bypasses_terms_requirement(admin_client: AsyncClient) -> None:
+    # No checkbox exists behind an admin-entered phone order — same exception
+    # as the user_id anti-spoofing override.
+    resp = await admin_client.post("/api/orders", json={**ORDER_PAYLOAD, "terms_accepted": False})
+    assert resp.status_code == 201
+    assert resp.json()["terms_version"] is None
+    assert resp.json()["terms_accepted_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_guest_order_requires_terms_version_not_just_flag(client: AsyncClient) -> None:
+    # terms_accepted=True but no version is an incomplete audit record — reject
+    # it rather than persist a consent row with a null version.
+    payload = {**ORDER_PAYLOAD, "terms_accepted": True}
+    payload.pop("terms_version")
+    resp = await client.post("/api/orders", json=payload)
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_order_persists_terms_version_and_timestamp(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/orders", json={**ORDER_PAYLOAD, "terms_accepted": True, "terms_version": "2026-07-22"}
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["terms_version"] == "2026-07-22"
+    assert body["terms_accepted_at"] is not None
+
+
+# ---- Coupon redemption at checkout ----
+
+async def _make_coupon(admin_client: AsyncClient, **overrides) -> str:
+    payload = {
+        "code": f"ORD{uuid.uuid4().hex[:6]}",
+        "discount_type": "percent",
+        "value": "10.00",
+    }
+    payload.update(overrides)
+    resp = await admin_client.post("/api/coupons", json=payload)
+    assert resp.status_code == 201
+    return resp.json()["code"]
+
+
+@pytest.mark.asyncio
+async def test_order_applies_valid_coupon(admin_client: AsyncClient) -> None:
+    code = await _make_coupon(admin_client, discount_type="flat", value="200.00")
+    resp = await admin_client.post("/api/orders", json={**ORDER_PAYLOAD, "coupon_code": code})
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["coupon_code"] == code
+    assert body["discount_amount"] == "200.00"
+    assert float(body["total_amount"]) == pytest.approx(2297.0 - 200.0)
+
+
+@pytest.mark.asyncio
+async def test_order_rejects_invalid_coupon_code(client: AsyncClient) -> None:
+    resp = await client.post("/api/orders", json={**ORDER_PAYLOAD, "coupon_code": "DOES-NOT-EXIST"})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_order_coupon_usage_limit_enforced(admin_client: AsyncClient) -> None:
+    code = await _make_coupon(admin_client, usage_limit=1)
+    first = await admin_client.post("/api/orders", json={**ORDER_PAYLOAD, "coupon_code": code})
+    assert first.status_code == 201
+    second = await admin_client.post("/api/orders", json={**ORDER_PAYLOAD, "coupon_code": code})
+    assert second.status_code == 422

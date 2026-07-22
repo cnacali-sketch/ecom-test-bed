@@ -38,6 +38,15 @@ class Order(Base):
     shipping_address: Mapped[dict] = mapped_column(JSONType, default=dict, server_default="{}")
     courier: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tracking_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # T&C consent audit trail: which policy version was agreed to, and when.
+    # Null for admin-created orders — there's no checkbox behind those (see
+    # create_order's admin exception).
+    terms_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Snapshot of the coupon applied at checkout (not a FK) — a later coupon
+    # edit/deactivation must never rewrite what a past order actually paid.
+    coupon_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"), server_default="0")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

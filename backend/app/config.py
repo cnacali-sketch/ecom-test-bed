@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # Dev default keeps tests runnable without a .env; production MUST override.
     # `is_production` below hard-fails startup if this default survives to prod.
     jwt_secret: str = "dev_only_insecure_secret_do_not_use_in_production"
+    # Independent secret for hashing client IPs in the fraud/abuse layer
+    # (events.py _hash_ip). Kept separate from jwt_secret so rotating the auth
+    # secret for an incident doesn't silently break IP-grouping continuity, and
+    # vice versa — key separation across two unrelated trust boundaries.
+    fraud_hash_secret: str = "dev_only_fraud_hash_secret_change_in_production"
     jwt_algorithm: str = "HS256"
     jwt_access_ttl_min: int = 15
     jwt_refresh_ttl_days: int = 30

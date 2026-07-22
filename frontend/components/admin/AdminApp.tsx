@@ -20,8 +20,10 @@ import {
   LogOut,
   Package,
   Settings,
+  ShieldAlert,
   Sparkles,
   ShoppingBag,
+  Ticket,
   TrendingUp,
   Users,
   X,
@@ -55,6 +57,8 @@ import { MediaLibrary } from "./screens/MediaLibrary";
 import { Orders } from "./screens/Orders";
 import { Customers } from "./screens/Customers";
 import { Analytics } from "./screens/Analytics";
+import { Coupons } from "./screens/Coupons";
+import { Fraud } from "./screens/Fraud";
 
 const SEED_CATEGORIES: AdminCategory[] = [
   { id: "c1", name: "Scrunchies", parent: "Hair Accessories", slug: "scrunchies", image: "" },
@@ -225,9 +229,11 @@ export function AdminApp() {
       <NavBtn id="inventory" icon={Boxes} label="Inventory" badge={lowCount} />
       <NavBtn id="orders" icon={ShoppingBag} label="Orders" />
       <NavBtn id="customers" icon={Users} label="Customers" />
+      <NavBtn id="coupons" icon={Ticket} label="Coupons" />
       <NavBtn id="categories" icon={FolderTree} label="Categories" />
       <NavBtn id="media" icon={Images} label="Media library" />
       <NavBtn id="analytics" icon={TrendingUp} label="Analytics" />
+      <NavBtn id="fraud" icon={ShieldAlert} label="Fraud & abuse" />
     </nav>
   );
 
@@ -242,6 +248,8 @@ export function AdminApp() {
     orders: "Orders",
     customers: "Customers",
     analytics: "Analytics",
+    coupons: "Coupons",
+    fraud: "Fraud & abuse",
   };
 
   return (
@@ -347,6 +355,8 @@ export function AdminApp() {
           {view === "orders" && <Orders />}
           {view === "customers" && <Customers />}
           {view === "analytics" && <Analytics />}
+          {view === "coupons" && <Coupons />}
+          {view === "fraud" && <Fraud />}
         </main>
       </div>
 

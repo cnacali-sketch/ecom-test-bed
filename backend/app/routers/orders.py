@@ -12,6 +12,7 @@
   PATCH /api/orders/{id}/shipping — courier + tracking number (admin)
 """
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -22,10 +23,12 @@ from sqlalchemy.orm import selectinload
 
 from app.db import get_db_session
 from app.dependencies.auth import optional_current_user, require_admin, require_current_user
+from app.models.coupon import Coupon
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import ROLE_ADMIN, User
 from app.schemas.auth import Address
+from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -49,6 +52,12 @@ class OrderCreate(BaseModel):
     # don't have to send it; a real storefront checkout always will.
     shipping_address: Address | None = None
     payment_method: str = "cod"
+    # T&C consent. Defaults to False/None rather than required so admin phone
+    # orders (no checkbox exists for those) aren't forced to fake a value —
+    # create_order enforces this only for the non-admin checkout path.
+    terms_accepted: bool = False
+    terms_version: str | None = Field(default=None, max_length=32)
+    coupon_code: str | None = Field(default=None, max_length=32)
 
 
 class OrderItemRead(BaseModel):
@@ -69,6 +78,10 @@ class OrderRead(BaseModel):
     shipping_address: dict
     courier: str | None
     tracking_number: str | None
+    terms_version: str | None
+    terms_accepted_at: datetime | None
+    coupon_code: str | None
+    discount_amount: Decimal
     total_amount: Decimal
     items: list[OrderItemRead] = []
 
@@ -115,6 +128,23 @@ async def _reserve_stock(db: AsyncSession, items: list[OrderItemCreate]) -> None
             product.in_stock = False
 
 
+async def _redeem_coupon(db: AsyncSession, code: str, subtotal: Decimal) -> tuple[str, Decimal]:
+    """Validate and redeem a coupon against `subtotal`, row-locked so two
+    concurrent orders can't both squeak in under a usage_limit's last slot.
+
+    Re-validates server-side even though the frontend already called
+    /api/coupons/validate — that call never increments times_used and a
+    client can't be trusted to echo back an honest discount amount.
+    """
+    result = await db.execute(select(Coupon).where(Coupon.code == code.strip().upper()).with_for_update())
+    coupon = result.scalar_one_or_none()
+    if coupon is None:
+        raise HTTPException(status_code=422, detail="Invalid coupon code")
+    discount = compute_discount(coupon, subtotal)
+    coupon.times_used += 1
+    return coupon.code, discount
+
+
 async def _resolve_order_email(db: AsyncSession, order: Order) -> str | None:
     """Where to send an order notification.
 
@@ -152,23 +182,47 @@ async def create_order(
     payload. An admin's own payload `user_id` is honored as-is: admins place
     orders on behalf of customers (phone orders, manual entry), so forcing
     their id onto every order they create would be wrong, not safer.
+
+    Guest/customer checkout must accept the T&C (422 otherwise); admin-created
+    orders skip this the same way they skip the user_id override — there's no
+    checkbox behind a phone order placed on a customer's behalf.
     """
     if payload.payment_method not in PAYMENT_METHODS:
         raise HTTPException(
             status_code=422, detail=f"payment_method must be one of {PAYMENT_METHODS}"
         )
 
+    is_admin_caller = bool(user and user.role == ROLE_ADMIN)
+    if not is_admin_caller and (not payload.terms_accepted or not payload.terms_version):
+        # Require BOTH the acceptance flag and the version it was accepted at —
+        # a consent record with a null version defeats the audit trail this
+        # gate exists to create.
+        raise HTTPException(
+            status_code=422,
+            detail="You must accept the Terms & Conditions to place an order.",
+        )
+
     await _reserve_stock(db, payload.items)
 
     effective_user_id = str(user.id) if user and user.role != ROLE_ADMIN else payload.user_id
 
-    total = sum(item.unit_price * item.quantity for item in payload.items)
+    subtotal = sum(item.unit_price * item.quantity for item in payload.items)
+    coupon_code, discount_amount = (
+        await _redeem_coupon(db, payload.coupon_code, subtotal)
+        if payload.coupon_code
+        else (None, Decimal("0"))
+    )
+
     order = Order(
         user_id=effective_user_id,
         status="pending",
         payment_method=payload.payment_method,
         shipping_address=payload.shipping_address.model_dump() if payload.shipping_address else {},
-        total_amount=total,
+        terms_version=payload.terms_version if payload.terms_accepted else None,
+        terms_accepted_at=datetime.now(timezone.utc) if payload.terms_accepted else None,
+        coupon_code=coupon_code,
+        discount_amount=discount_amount,
+        total_amount=subtotal - discount_amount,
     )
     for item in payload.items:
         order.items.append(

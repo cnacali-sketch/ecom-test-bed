@@ -29,6 +29,13 @@ interface Order {
   total_amount: string;
   items: OrderItem[];
 }
+interface ReturnRequest {
+  id: string;
+  order_id: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  pickup_requested: boolean;
+}
 
 const STATUS = ["pending", "confirmed", "shipped", "delivered", "cancelled", "returned"];
 const PAYMENT = ["unpaid", "paid", "refunded"];
@@ -53,6 +60,7 @@ function addressLine(a: Order["shipping_address"]): string {
 
 export function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -67,6 +75,11 @@ export function Orders() {
       })
       .catch(() => !cancelled && setError(true))
       .finally(() => !cancelled && setLoading(false));
+    apiFetch("/api/returns")
+      .then(async (res) => {
+        if (!cancelled && res?.ok) setReturnRequests((await res.json()) as ReturnRequest[]);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -86,6 +99,16 @@ export function Orders() {
   const setPayment = (id: string, payment_status: string) => patchOrder(id, "payment", { payment_status });
   const setShipping = (id: string, courier: string, tracking_number: string) =>
     patchOrder(id, "shipping", { courier, tracking_number });
+
+  // Approving/rejecting also mutates the order (refund + restock on approve),
+  // so re-fetch both lists rather than trying to hand-patch order state here.
+  async function resolveReturn(requestId: string, status: "approved" | "rejected") {
+    const res = await apiFetch(`/api/returns/${requestId}?status=${status}`, { method: "PATCH" });
+    if (!res?.ok) return;
+    const [ordersRes, returnsRes] = await Promise.all([apiFetch("/api/orders/all"), apiFetch("/api/returns")]);
+    if (ordersRes?.ok) setOrders((await ordersRes.json()) as Order[]);
+    if (returnsRes?.ok) setReturnRequests((await returnsRes.json()) as ReturnRequest[]);
+  }
 
   if (loading) return <p className="p-8 text-sm text-ink-soft">Loading orders…</p>;
   if (error)
@@ -126,6 +149,7 @@ export function Orders() {
             {orders.map((o) => {
               const qty = o.items.reduce((s, i) => s + i.quantity, 0);
               const expanded = expandedId === o.id;
+              const returnRequest = returnRequests.find((r) => r.order_id === o.id) ?? null;
               return (
                 <Fragment key={o.id}>
                   <tr className="border-b border-ink/5 last:border-0">
@@ -164,6 +188,10 @@ export function Orders() {
                     <tr className="border-b border-ink/5 bg-paper-tint/50">
                       <td colSpan={7} className="px-5 py-4">
                         <ShippingDetail order={o} onSave={(courier, tracking) => setShipping(o.id, courier, tracking)} />
+                        <ReturnRequestDetail
+                          request={returnRequest}
+                          onResolve={(status) => returnRequest && resolveReturn(returnRequest.id, status)}
+                        />
                       </td>
                     </tr>
                   )}
@@ -228,6 +256,45 @@ function ShippingDetail({
           {saved ? "Saved" : "Save"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function ReturnRequestDetail({
+  request,
+  onResolve,
+}: {
+  request: ReturnRequest | null;
+  onResolve: (status: "approved" | "rejected") => void;
+}) {
+  if (!request) return null;
+
+  return (
+    <div className="mt-4 border-t border-ink/10 pt-4">
+      <p className="text-xs uppercase tracking-wide text-ink-soft">
+        Return requested {request.pickup_requested ? "(pickup requested)" : ""}
+      </p>
+      <p className="mt-1 text-sm text-ink">{request.reason}</p>
+      {request.status === "pending" ? (
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            onClick={() => onResolve("approved")}
+            className="bg-teal px-4 py-1.5 text-xs uppercase tracking-wide text-white hover:bg-teal-deep"
+          >
+            Approve (refund + restock)
+          </button>
+          <button
+            type="button"
+            onClick={() => onResolve("rejected")}
+            className="border border-ink/15 px-4 py-1.5 text-xs uppercase tracking-wide text-ink-soft hover:bg-ink/5"
+          >
+            Reject
+          </button>
+        </div>
+      ) : (
+        <p className="mt-1 text-xs font-semibold capitalize text-ink-soft">{request.status}</p>
+      )}
     </div>
   );
 }
