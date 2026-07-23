@@ -48,8 +48,13 @@ async function fetchJson<T>(path: string): Promise<T | null> {
 // Fetches the live catalog; returns null (not []) when the backend is
 // unreachable OR responds with an unexpected (non-array) shape, so callers
 // can distinguish "backend down/broken" from "no matches".
+//
+// limit=200 (the backend's max) is passed explicitly: GET /api/products
+// defaults to 48, so without this the storefront would silently show only
+// the newest 48 of a larger catalog. 200 covers the current catalog with
+// room to spare; move to real pagination if it ever grows past that.
 async function fetchLiveProducts(): Promise<Product[] | null> {
-  const data = await fetchJson<BackendProduct[]>("/api/products");
+  const data = await fetchJson<BackendProduct[]>("/api/products?limit=200");
   return Array.isArray(data) ? data.map(adaptProduct) : null;
 }
 

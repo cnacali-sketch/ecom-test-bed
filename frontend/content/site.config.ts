@@ -147,6 +147,31 @@ export const siteConfig = {
         promoHref: "/collections/jewellery",
       },
     },
+    {
+      label: "Charms",
+      href: "/collections/charms",
+      megaMenu: {
+        columns: [
+          {
+            heading: "Shop by Type",
+            links: [
+              { label: "Bag Charms", href: "/collections/charms" },
+              { label: "Zip Charms", href: "/collections/charms" },
+            ],
+          },
+          {
+            heading: "Shop by Style",
+            links: [
+              { label: "Tassels", href: "/collections/charms" },
+              { label: "Enamel & Pearl", href: "/collections/charms" },
+            ],
+          },
+        ],
+        promoImage: px(7723760, 480, 480),
+        promoLabel: "New: Bag & Zip Charms",
+        promoHref: "/collections/charms",
+      },
+    },
     { label: "Sale", href: "/collections/hair-accessories" },
   ] satisfies NavItem[],
 
@@ -257,6 +282,7 @@ export const siteConfig = {
         links: [
           { label: "Hair Accessories", href: "/collections/hair-accessories" },
           { label: "Jewellery", href: "/collections/jewellery" },
+          { label: "Charms", href: "/collections/charms" },
         ],
       },
       {
