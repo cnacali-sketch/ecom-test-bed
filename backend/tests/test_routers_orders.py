@@ -1,8 +1,13 @@
 """Tests for /api/orders endpoints."""
 import uuid
-import pytest
-from httpx import AsyncClient
+from decimal import Decimal
 
+import pytest
+import pytest_asyncio
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.product import Product
 from app.routers.orders import ORDER_MAX_PER_IP
 
 
@@ -11,15 +16,49 @@ def product_id():
     return uuid.uuid4()
 
 
+# Fixed ids so ORDER_PAYLOAD can be a plain module-level constant reused by
+# nearly every test below -- order_items.product_id is a real FK, so these
+# two need an actual products row (see _seed_order_payload_products), not
+# just a syntactically-valid UUID.
+_PAYLOAD_PRODUCT_1 = uuid.uuid4()
+_PAYLOAD_PRODUCT_2 = uuid.uuid4()
+
 ORDER_PAYLOAD = {
     "user_id": "test-user-001",
     "items": [
-        {"product_id": str(uuid.uuid4()), "quantity": 2, "unit_price": "649.00"},
-        {"product_id": str(uuid.uuid4()), "quantity": 1, "unit_price": "999.00"},
+        {"product_id": str(_PAYLOAD_PRODUCT_1), "quantity": 2, "unit_price": "649.00"},
+        {"product_id": str(_PAYLOAD_PRODUCT_2), "quantity": 1, "unit_price": "999.00"},
     ],
     "terms_accepted": True,
     "terms_version": "2026-07-22",
 }
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _seed_order_payload_products(db_session: AsyncSession) -> None:
+    """Prices match ORDER_PAYLOAD's unit_price exactly so the price-authority
+    check in create_order never flags these as a mismatch."""
+    db_session.add_all(
+        [
+            Product(
+                id=_PAYLOAD_PRODUCT_1,
+                sku="ORDER-PAYLOAD-1",
+                slug="order-payload-item-1",
+                name="Order Payload Item 1",
+                price=Decimal("649.00"),
+                mrp=Decimal("649.00"),
+            ),
+            Product(
+                id=_PAYLOAD_PRODUCT_2,
+                sku="ORDER-PAYLOAD-2",
+                slug="order-payload-item-2",
+                name="Order Payload Item 2",
+                price=Decimal("999.00"),
+                mrp=Decimal("999.00"),
+            ),
+        ]
+    )
+    await db_session.commit()
 
 
 @pytest.mark.asyncio
@@ -322,9 +361,11 @@ async def test_order_marks_product_out_of_stock_at_zero(admin_client: AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_order_against_unknown_product_still_succeeds(client: AsyncClient) -> None:
-    # No product row behind this id at all — untracked, not an error. Matches
-    # the pre-existing contract (order creation never validated existence).
+async def test_order_against_unknown_product_is_rejected(client: AsyncClient) -> None:
+    # order_items.product_id is a real FK on Postgres (not enforced by
+    # SQLite, which is what let this slip through as "still succeeds" for a
+    # long time — a load test against the real DB surfaced the unhandled
+    # 500 this used to produce). Reject it cleanly instead.
     resp = await client.post(
         "/api/orders",
         json={
@@ -334,8 +375,7 @@ async def test_order_against_unknown_product_still_succeeds(client: AsyncClient)
             "terms_version": "2026-07-22",
         },
     )
-    assert resp.status_code == 201
-    assert resp.json()["flagged"] is False
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

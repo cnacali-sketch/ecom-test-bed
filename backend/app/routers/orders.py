@@ -147,18 +147,29 @@ async def _authoritative_pricing(
     total: for every item whose product EXISTS, real Product.price is used. A
     mismatch is a tampering attempt — the order is still accepted at the
     correct price (no money lost) but flagged for admin review, COD included.
-    Unknown product ids fall back to client price (phantom ids in tests, no
-    FK in SQLite, real carts only hold real products).
+
+    Also the existence check: order_items.product_id is a real FK to
+    products.id, so a client-supplied id that doesn't exist can't actually be
+    inserted — Postgres enforces this even though SQLite (the test DB) does
+    not, which is exactly the gap a load test surfaced (unhandled 500 instead
+    of this clean 422). Rejecting it here also closes off using fake ids to
+    plant arbitrary-priced phantom line items in order history.
     """
     product_ids = {i.product_id for i in items}
     result = await db.execute(select(Product).where(Product.id.in_(product_ids)))
     products = {p.id: p for p in result.scalars().all()}
+
+    missing = product_ids - products.keys()
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown product id(s): {', '.join(str(m) for m in missing)}",
+        )
+
     prices: dict[uuid.UUID, Decimal] = {}
     mismatches: list[str] = []
     for item in items:
-        product = products.get(item.product_id)
-        if product is None:
-            continue  # unknown → client price stands
+        product = products[item.product_id]
         prices[item.product_id] = product.price
         if item.unit_price != product.price:
             mismatches.append(f"{product.name}: sent {item.unit_price}, actual {product.price}")
@@ -250,16 +261,15 @@ async def create_order(
             detail="You must accept the Terms & Conditions to place an order.",
         )
 
+    # Validate + price BEFORE touching stock — an order referencing an unknown
+    # product is rejected outright, so there's nothing to roll back.
+    prices, flag_reason = await _authoritative_pricing(db, payload.items)
+
     await _reserve_stock(db, payload.items)
 
     effective_user_id = str(user.id) if user and user.role != ROLE_ADMIN else payload.user_id
 
-    prices, flag_reason = await _authoritative_pricing(db, payload.items)
-
-    def unit_price_for(item: OrderItemCreate) -> Decimal:
-        return prices.get(item.product_id, item.unit_price)
-
-    subtotal = sum(unit_price_for(item) * item.quantity for item in payload.items)
+    subtotal = sum(prices[item.product_id] * item.quantity for item in payload.items)
     coupon_code, discount_amount = (
         await _redeem_coupon(db, payload.coupon_code, subtotal)
         if payload.coupon_code
@@ -284,7 +294,7 @@ async def create_order(
             OrderItem(
                 product_id=item.product_id,
                 quantity=item.quantity,
-                unit_price=unit_price_for(item),
+                unit_price=prices[item.product_id],
             )
         )
     db.add(order)

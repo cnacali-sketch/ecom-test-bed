@@ -4,12 +4,31 @@ import pytest
 from httpx import AsyncClient
 
 
-async def _make_delivered_order(admin_client: AsyncClient, product_id: str | None = None, qty: int = 1) -> str:
-    items = (
-        [{"product_id": product_id, "quantity": qty, "unit_price": "100.00"}]
-        if product_id
-        else [{"product_id": str(uuid.uuid4()), "quantity": qty, "unit_price": "100.00"}]
+async def _make_untracked_product(admin_client: AsyncClient) -> str:
+    """A real product with no stock tracking (attrs.stock unset) — order_items
+    now has a real FK to products, so tests need an actual row, not a random
+    UUID that happens to look like one."""
+    resp = await admin_client.post(
+        "/api/products",
+        json={
+            "sku": f"RET-{uuid.uuid4().hex[:8]}",
+            "slug": f"return-test-{uuid.uuid4().hex[:8]}",
+            "name": "Return Test Product",
+            "price": "100.00",
+            "mrp": "100.00",
+            "in_stock": True,
+            "attrs": {},
+            "variants": [],
+        },
     )
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+async def _make_delivered_order(admin_client: AsyncClient, product_id: str | None = None, qty: int = 1) -> str:
+    if product_id is None:
+        product_id = await _make_untracked_product(admin_client)
+    items = [{"product_id": product_id, "quantity": qty, "unit_price": "100.00"}]
     create = await admin_client.post("/api/orders", json={"user_id": "u", "items": items})
     order_id = create.json()["id"]
     await admin_client.patch(f"/api/orders/{order_id}/status?status=delivered")
@@ -44,8 +63,9 @@ async def test_create_return_request_on_delivered_order(admin_client: AsyncClien
 
 @pytest.mark.asyncio
 async def test_create_return_request_requires_delivered(admin_client: AsyncClient) -> None:
+    product_id = await _make_untracked_product(admin_client)
     create = await admin_client.post(
-        "/api/orders", json={"user_id": "u", "items": [{"product_id": str(uuid.uuid4()), "quantity": 1, "unit_price": "100.00"}]}
+        "/api/orders", json={"user_id": "u", "items": [{"product_id": product_id, "quantity": 1, "unit_price": "100.00"}]}
     )
     order_id = create.json()["id"]  # still "pending", never marked delivered
     resp = await admin_client.post("/api/returns", json={"order_id": order_id, "reason": "Changed mind"})
