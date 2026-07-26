@@ -73,12 +73,18 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   // credentials: "include" is required for the httpOnly auth cookies to travel
   // cross-origin (localhost:3000 -> :8000, or across the two preview tunnels).
   const method = (init.method ?? "GET").toUpperCase();
-  const headers = new Headers(init.headers);
-  if (!SAFE_METHODS.has(method)) {
-    const csrfToken = readCookie(CSRF_COOKIE);
-    if (csrfToken) headers.set(CSRF_HEADER, csrfToken);
-  }
-  const request = () => fetch(`${baseUrl}${path}`, { ...init, headers, credentials: "include" });
+  // Re-read the CSRF cookie on every call (not just once, hoisted above the
+  // retry) — /api/auth/refresh rotates it same as login does, so the retried
+  // request below must pick up the NEW value or it 401s again with a stale
+  // token, masking a successful refresh as a dead session.
+  const request = () => {
+    const headers = new Headers(init.headers);
+    if (!SAFE_METHODS.has(method)) {
+      const csrfToken = readCookie(CSRF_COOKIE);
+      if (csrfToken) headers.set(CSRF_HEADER, csrfToken);
+    }
+    return fetch(`${baseUrl}${path}`, { ...init, headers, credentials: "include" });
+  };
 
   try {
     const res = await request();
