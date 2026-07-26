@@ -14,6 +14,7 @@ import traceback
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.responses import Response
 
 from app.db import async_session_factory
 from app.models.error_log import ErrorLog
@@ -48,13 +49,25 @@ class ErrorLoggingMiddleware(BaseHTTPMiddleware):
             raise
 
         if response.status_code in _LOGGED_STATUSES:
+            # BaseHTTPMiddleware's call_next returns a streaming wrapper —
+            # response.body is NOT populated the way a plain Response's is.
+            # Must drain body_iterator to read it, then rebuild the response
+            # with that same body so the client still receives it.
+            body_chunks = [chunk async for chunk in response.body_iterator]
+            body = b"".join(
+                chunk if isinstance(chunk, bytes) else chunk.encode() for chunk in body_chunks
+            )
             message = f"HTTP {response.status_code}"
-            body = getattr(response, "body", None)
-            if body:
-                try:
-                    message = json.loads(body).get("detail", message)
-                except Exception:
-                    pass
+            try:
+                message = json.loads(body).get("detail", message)
+            except Exception:
+                pass
             await _write_log(response.status_code, request.method, request.url.path, message, None)
+            return Response(
+                content=body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type,
+            )
 
         return response
