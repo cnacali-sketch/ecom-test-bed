@@ -216,8 +216,8 @@ export const siteConfig = {
         title: "Worn, not stored",
         copy: "Pieces made for actual days — school runs, standing fans, monsoon commutes.",
         href: "/collections/hair-accessories",
-        image: px(29346469, 900, 1125),
-        imageAlt: "Monochrome portrait of a young woman wearing hair clips",
+        image: px(7450827, 900, 1125),
+        imageAlt: "Barrettes worn in curly hair, portrait",
       },
       {
         eyebrow: "Materials",
