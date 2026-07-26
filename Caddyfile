@@ -1,0 +1,7 @@
+savvyinteal.com, www.savvyinteal.com {
+	reverse_proxy frontend:3000
+}
+
+api.savvyinteal.com {
+	reverse_proxy backend:8000
+}
