@@ -15,7 +15,14 @@ interface CartContextValue {
   updateQuantity: (variantId: string, quantity: number) => void;
   /** Empty the cart — called after a successful checkout. */
   clearCart: () => void;
+  /** Most recently added item, for the mobile "Added!" toast. Null once dismissed. */
+  justAdded: CartItem | null;
+  dismissJustAdded: () => void;
 }
+
+// Tailwind's `sm` breakpoint — kept in sync with the sm: classes in
+// CartDrawer/AddedToast that switch between the two add-to-cart treatments.
+const DESKTOP_QUERY = "(min-width: 640px)";
 
 const CartContext = createContext<CartContextValue | undefined>(undefined);
 
@@ -36,16 +43,23 @@ function mergeCartItem(items: CartItem[], newItem: CartItem): CartItem[] {
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [justAdded, setJustAdded] = useState<CartItem | null>(null);
 
   const openCart = useCallback(() => setIsOpen(true), []);
   const closeCart = useCallback(() => setIsOpen(false), []);
+  const dismissJustAdded = useCallback(() => setJustAdded(null), []);
 
-  // Opens the cart on every add so the customer sees what just happened and
-  // can check out immediately, whether they added from the PDP or an
-  // inline product-grid stepper.
+  // Desktop gets the full cart popover on every add (customer sees the
+  // updated cart and can check out immediately). Mobile stays on the page —
+  // a brief "Added!" toast (AddedToast.tsx) instead, since a full-screen
+  // sheet after every tap would interrupt browsing on a small screen.
   const addItem = useCallback((item: CartItem) => {
     setItems((current) => mergeCartItem(current, item));
-    setIsOpen(true);
+    if (window.matchMedia(DESKTOP_QUERY).matches) {
+      setIsOpen(true);
+    } else {
+      setJustAdded(item);
+    }
   }, []);
 
   const removeItem = useCallback((variantId: string) => {
@@ -87,8 +101,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       removeItem,
       updateQuantity,
       clearCart,
+      justAdded,
+      dismissJustAdded,
     }),
-    [items, isOpen, itemCount, subtotal, openCart, closeCart, addItem, removeItem, updateQuantity, clearCart],
+    [
+      items,
+      isOpen,
+      itemCount,
+      subtotal,
+      openCart,
+      closeCart,
+      addItem,
+      removeItem,
+      updateQuantity,
+      clearCart,
+      justAdded,
+      dismissJustAdded,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

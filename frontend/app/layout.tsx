@@ -4,6 +4,7 @@ import "@fontsource-variable/fraunces";
 import "@fontsource-variable/archivo";
 import { ConsentBanner } from "@/components/analytics/ConsentBanner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";
+import { AddedToast } from "@/components/layout/AddedToast";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
@@ -49,6 +50,7 @@ export default function RootLayout({
               <main className="flex-1">{children}</main>
               <Footer />
               <CartDrawer />
+              <AddedToast />
               <ConsentBanner />
             </CartProvider>
           </WishlistProvider>
