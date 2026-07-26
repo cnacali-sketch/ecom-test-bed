@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useCart } from "@/lib/cart-context";
 
-const AUTO_DISMISS_MS = 2500;
+const AUTO_DISMISS_MS = 15000;
 
 /**
  * Mobile-only "Added!" toast — a brief cart-silhouette confirmation instead
