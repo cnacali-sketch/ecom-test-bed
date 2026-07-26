@@ -70,6 +70,7 @@ def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToke
         "secure": settings.cookie_secure,
         "samesite": settings.cookie_samesite,
         "path": "/",
+        "domain": settings.cookie_domain or None,
     }
     response.set_cookie(
         ACCESS_COOKIE,
@@ -87,7 +88,9 @@ def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToke
     # to echo it back as a header on every state-changing request — that's the
     # double-submit CSRF defense in dependencies/auth.py. Same lifetime as the
     # refresh cookie so it doesn't expire mid-session while the login itself
-    # is still valid.
+    # is still valid. domain=cookie_domain is what actually makes this
+    # readable from the frontend's subdomain — see the Settings.cookie_domain
+    # docstring for why a host-only cookie silently broke this.
     response.set_cookie(
         CSRF_COOKIE,
         generate_csrf_token(),
@@ -95,12 +98,14 @@ def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToke
         secure=settings.cookie_secure,
         samesite=settings.cookie_samesite,
         path="/",
+        domain=settings.cookie_domain or None,
     )
 
 
 def _clear_auth_cookies(response: Response) -> None:
+    settings = get_settings()
     for name in (ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE):
-        response.delete_cookie(name, path="/")
+        response.delete_cookie(name, path="/", domain=settings.cookie_domain or None)
 
 
 @router.post("/register", response_model=MessageResponse, status_code=202)
