@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "@fontsource-variable/fraunces";
 import "@fontsource-variable/archivo";
 import { ConsentBanner } from "@/components/analytics/ConsentBanner";
@@ -52,6 +53,11 @@ export default function RootLayout({
             </CartProvider>
           </WishlistProvider>
         </AuthProvider>
+        <Script
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon='{"token": "4ca450c993164d0aab91be3ef4491f83"}'
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
