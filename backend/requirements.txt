@@ -27,3 +27,7 @@ setuptools<81
 pytest==8.3.4
 pytest-asyncio==0.25.0
 httpx==0.28.1
+# Starlette's UploadFile/Form parsing requires this at runtime, not import
+# time, so its absence goes unnoticed until an actual multipart request
+# arrives — needed for the media-library upload endpoint.
+python-multipart==0.0.20

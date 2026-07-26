@@ -77,3 +77,22 @@ export async function fetchProductsByCollectionSlug(slug: string): Promise<Produ
   if (live) return live.filter((product) => product.collectionSlugs.includes(slug));
   return getMockProductsByCollectionSlug(slug);
 }
+
+/** Admin-editable overrides for the hero banner + announcement ribbon. Every
+ * field is null when the admin hasn't set an override — callers fall back
+ * to their content/site.config.ts default per-field, not all-or-nothing. */
+export interface HomepageContentOverride {
+  announcement_enabled: boolean | null;
+  announcement_messages: string[] | null;
+  hero_accent_word: string | null;
+  hero_headline: string | null;
+  hero_subline: string | null;
+  hero_cta_label: string | null;
+  hero_cta_href: string | null;
+  hero_image: string | null;
+  hero_image_alt: string | null;
+}
+
+export async function fetchHomepageContent(): Promise<HomepageContentOverride | null> {
+  return fetchJson<HomepageContentOverride>("/api/sections");
+}

@@ -72,26 +72,6 @@ export interface AdminCategory {
   image: string;
 }
 
-export type SectionType =
-  | "announcement"
-  | "hero"
-  | "trust"
-  | "categories"
-  | "featured"
-  | "storyBanner"
-  | "grid";
-
-export interface AdminSection {
-  id: string;
-  type: SectionType;
-  on: boolean;
-  text?: string;
-  heading?: string;
-  sub?: string;
-  ctaLabel?: string;
-  image?: string;
-}
-
 export interface MediaItem {
   id: string;
   name: string;

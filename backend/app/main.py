@@ -3,21 +3,25 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.routers import (
     auth,
+    categories,
     collections,
     coupons,
     customers,
     events,
     health,
     inventory,
+    media,
     orders,
     pricing,
     products,
     recommendation,
     returns,
+    sections,
 )
 
 
@@ -57,6 +61,11 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(events.router)
     fastapi_app.include_router(coupons.router)
     fastapi_app.include_router(returns.router)
+    fastapi_app.include_router(categories.router)
+    fastapi_app.include_router(media.router)
+    fastapi_app.include_router(sections.router)
+
+    fastapi_app.mount("/media", StaticFiles(directory=media.UPLOAD_DIR), name="media")
 
     return fastapi_app
 

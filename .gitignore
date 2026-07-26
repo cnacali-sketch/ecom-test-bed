@@ -11,6 +11,7 @@ backend/.venv/
 backend/*.egg-info/
 backend/.pytest_cache/
 backend/.coverage
+backend/media_uploads/
 
 # Env
 .env

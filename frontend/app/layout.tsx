@@ -9,6 +9,7 @@ import { CartDrawer } from "@/components/layout/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { siteConfig } from "@/content/site.config";
+import { fetchHomepageContent } from "@/lib/api";
 import { AuthProvider } from "@/lib/auth-context";
 import { CartProvider } from "@/lib/cart-context";
 import { WishlistProvider } from "@/lib/wishlist-context";
@@ -33,9 +34,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const homepageContent = await fetchHomepageContent();
   return (
     <html
       lang={siteConfig.brand.locale.split("-")[0]}
@@ -46,7 +48,12 @@ export default function RootLayout({
           <WishlistProvider>
             <CartProvider>
               <PageViewTracker />
-              <Header />
+              <Header
+                announcementOverride={{
+                  enabled: homepageContent?.announcement_enabled ?? null,
+                  messages: homepageContent?.announcement_messages ?? null,
+                }}
+              />
               <main className="flex-1">{children}</main>
               <Footer />
               <CartDrawer />

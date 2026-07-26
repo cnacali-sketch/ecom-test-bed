@@ -2,10 +2,8 @@
 
 // Admin console shell: top bar, sidebar nav, view switch, toast.
 //
-// Products are SEEDED from the live backend (GET /api/products) on mount, so
-// the console reflects real catalogue data. Create (POST) and delete (DELETE)
-// hit real endpoints; edits to an existing product are held locally for now
-// because the backend has no product-update route yet (see handoff).
+// Products/categories are SEEDED from the live backend on mount, so the
+// console reflects real data. Create/update/delete all hit real endpoints.
 
 import {
   BarChart3,
@@ -38,9 +36,7 @@ import {
   LOW_STOCK,
   type AdminCategory,
   type AdminProduct,
-  type AdminSection,
   type AdminView,
-  type MediaItem,
 } from "@/lib/admin/types";
 import { uid } from "@/lib/admin/helpers";
 import { apiFetch } from "@/lib/api-client";
@@ -59,24 +55,6 @@ import { Customers } from "./screens/Customers";
 import { Analytics } from "./screens/Analytics";
 import { Coupons } from "./screens/Coupons";
 import { Fraud } from "./screens/Fraud";
-
-const SEED_CATEGORIES: AdminCategory[] = [
-  { id: "c1", name: "Scrunchies", parent: "Hair Accessories", slug: "scrunchies", image: "" },
-  { id: "c2", name: "Claw Clips", parent: "Hair Accessories", slug: "claw-clips", image: "" },
-  { id: "c3", name: "Earrings", parent: "Jewellery", slug: "earrings", image: "" },
-  { id: "c4", name: "Necklaces", parent: "Jewellery", slug: "necklaces", image: "" },
-  { id: "c5", name: "Bracelets", parent: "Jewellery", slug: "bracelets", image: "" },
-  { id: "c6", name: "Chokers", parent: "Bridal", slug: "chokers", image: "" },
-];
-
-const SEED_SECTIONS: AdminSection[] = [
-  { id: "s1", type: "announcement", on: true, text: "Free shipping on orders over ₹999 · COD available" },
-  { id: "s2", type: "hero", on: true, heading: "Teal, gold, everything gorgeous", sub: "Handpicked accessories from ₹179.", ctaLabel: "Shop the collection", image: "" },
-  { id: "s3", type: "trust", on: true },
-  { id: "s4", type: "categories", on: true, heading: "Shop by category" },
-  { id: "s5", type: "featured", on: true, heading: "Featured this week" },
-  { id: "s6", type: "grid", on: true, heading: "All jewellery & accessories" },
-];
 
 function newDraft(): AdminProduct {
   return {
@@ -106,9 +84,7 @@ export function AdminApp() {
   const { user, logout } = useAuth();
 
   const [products, setProducts] = useState<AdminProduct[]>([]);
-  const [categories, setCategories] = useState<AdminCategory[]>(SEED_CATEGORIES);
-  const [sections, setSections] = useState<AdminSection[]>(SEED_SECTIONS);
-  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [view, setView] = useState<AdminView>("dashboard");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AdminProduct | null>(null);
@@ -126,6 +102,20 @@ export function AdminApp() {
         if (cancelled || !res?.ok) return;
         const data = (await res.json()) as BackendProduct[];
         if (Array.isArray(data)) setProducts(data.map(toAdmin));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/categories")
+      .then(async (res) => {
+        if (cancelled || !res?.ok) return;
+        const data = (await res.json()) as AdminCategory[];
+        if (Array.isArray(data)) setCategories(data);
       })
       .catch(() => {});
     return () => {
@@ -418,7 +408,7 @@ export function AdminApp() {
           </header>
 
           {view === "dashboard" && <Dashboard products={products} />}
-          {view === "home" && <SectionEditor sections={sections} setSections={setSections} />}
+          {view === "home" && <SectionEditor />}
           {view === "products" && <ProductList products={products} onOpen={openProduct} onNew={newProduct} />}
           {view === "editor" && draft && (
             <ProductEditor
@@ -443,7 +433,7 @@ export function AdminApp() {
           {view === "categories" && (
             <CategoryManager categories={categories} setCategories={setCategories} products={products} />
           )}
-          {view === "media" && <MediaLibrary media={media} setMedia={setMedia} />}
+          {view === "media" && <MediaLibrary />}
           {view === "orders" && <Orders />}
           {view === "customers" && <Customers />}
           {view === "analytics" && <Analytics />}

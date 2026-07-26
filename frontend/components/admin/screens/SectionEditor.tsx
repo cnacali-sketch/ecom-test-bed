@@ -1,175 +1,167 @@
 "use client";
 
-// Homepage sections editor: drag to reorder, toggle to hide, edit content
-// inline. LOCAL-ONLY for now — there is no homepage-sections backend, so
-// changes live in browser state and do not persist or reach the storefront yet.
+// Homepage editor: the announcement ribbon and hero banner — the two real,
+// independently-rendered pieces of the homepage that can be safely
+// overridden per-field. Backed by GET/PUT /api/sections (see
+// backend/app/routers/sections.py); a null field means "use
+// content/site.config.ts's default," so leaving a field blank here doesn't
+// erase the site's copy, it just stops overriding it.
+//
+// Earlier version of this screen modeled toggleable "trust strip / featured
+// products / story banner / grid" sections that don't correspond to any
+// real conditionally-rendered homepage component — editing them changed
+// nothing on the actual site. Removed rather than wired up fake, since
+// persisting data that still doesn't affect the page is worse than an
+// honest "not built yet."
 
-import {
-  Images,
-  Layers,
-  LayoutGrid,
-  Megaphone,
-  ShieldCheck,
-  Sparkles,
-  Star,
-  Trash2,
-  GripVertical,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Trash2 } from "lucide-react";
 
-import { uid } from "@/lib/admin/helpers";
-import type { AdminSection, SectionType } from "@/lib/admin/types";
-import { inputCls, Toggle, useDnd } from "../atoms";
+import { apiFetch } from "@/lib/api-client";
+import { inputCls, Toggle } from "../atoms";
 import { ImageDrop } from "../ImageDrop";
 
-const ADD_MENU: [SectionType, string][] = [
-  ["announcement", "Announcement bar"],
-  ["hero", "Hero banner"],
-  ["trust", "Trust strip"],
-  ["categories", "Categories row"],
-  ["featured", "Featured products"],
-  ["storyBanner", "Story banner"],
-  ["grid", "Full product grid"],
-];
+interface HomepageContent {
+  announcement_enabled: boolean | null;
+  announcement_messages: string[] | null;
+  hero_accent_word: string | null;
+  hero_headline: string | null;
+  hero_subline: string | null;
+  hero_cta_label: string | null;
+  hero_cta_href: string | null;
+  hero_image: string | null;
+  hero_image_alt: string | null;
+}
 
-const iconFor = (t: SectionType) =>
-  ({
-    announcement: <Megaphone className="h-4 w-4" />,
-    hero: <Images className="h-4 w-4" />,
-    trust: <ShieldCheck className="h-4 w-4" />,
-    categories: <Layers className="h-4 w-4" />,
-    featured: <Star className="h-4 w-4" />,
-    storyBanner: <Sparkles className="h-4 w-4" />,
-    grid: <LayoutGrid className="h-4 w-4" />,
-  })[t];
+const EMPTY: HomepageContent = {
+  announcement_enabled: null,
+  announcement_messages: null,
+  hero_accent_word: null,
+  hero_headline: null,
+  hero_subline: null,
+  hero_cta_label: null,
+  hero_cta_href: null,
+  hero_image: null,
+  hero_image_alt: null,
+};
 
-const labelFor = (t: SectionType) => ADD_MENU.find(([id]) => id === t)?.[1] ?? t;
+export function SectionEditor() {
+  const [content, setContent] = useState<HomepageContent>(EMPTY);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-export function SectionEditor({
-  sections,
-  setSections,
-}: {
-  sections: AdminSection[];
-  setSections: (next: AdminSection[]) => void;
-}) {
-  const dnd = useDnd(sections, setSections);
-  const update = (id: string, k: keyof AdminSection, v: unknown) =>
-    setSections(sections.map((s) => (s.id === id ? { ...s, [k]: v } : s)));
-  const remove = (id: string) => setSections(sections.filter((s) => s.id !== id));
-  const move = (id: string, dir: number) => {
-    const i = sections.findIndex((s) => s.id === id);
-    const j = i + dir;
-    if (j < 0 || j >= sections.length) return;
-    const next = [...sections];
-    [next[i], next[j]] = [next[j], next[i]];
-    setSections(next);
-  };
-  const add = (type: SectionType) => {
-    const defaults: Record<SectionType, Partial<AdminSection>> = {
-      announcement: { text: "New announcement" },
-      hero: { heading: "New heading", sub: "New subtitle", ctaLabel: "Shop now", image: "" },
-      trust: {},
-      categories: { heading: "Shop by category" },
-      featured: { heading: "Featured" },
-      storyBanner: { heading: "New story", sub: "Description", ctaLabel: "Explore" },
-      grid: { heading: "All products" },
-    };
-    setSections([...sections, { id: `sec-${uid()}`, type, on: true, ...defaults[type] }]);
-  };
+  useEffect(() => {
+    apiFetch("/api/sections")
+      .then(async (res) => {
+        if (!res?.ok) return setError("Couldn't load homepage content.");
+        setContent((await res.json()) as HomepageContent);
+      })
+      .catch(() => setError("Couldn't load homepage content."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const set = <K extends keyof HomepageContent>(key: K, value: HomepageContent[K]) =>
+    setContent((c) => ({ ...c, [key]: value }));
+
+  const messages = content.announcement_messages ?? [];
+  const setMessages = (next: string[]) => set("announcement_messages", next);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    const res = await apiFetch("/api/sections", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(content),
+    });
+    setSaving(false);
+    if (res?.ok) {
+      setContent((await res.json()) as HomepageContent);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      return;
+    }
+    setError(
+      res && (res.status === 401 || res.status === 403)
+        ? "Your admin session has expired. Please log out and log back in."
+        : "Couldn't save. Please try again.",
+    );
+  }
+
+  if (loading) return <p className="p-8 text-sm text-ink-soft">Loading homepage content…</p>;
 
   return (
-    <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-bold text-ink">Homepage sections</h2>
-          <p className="text-sm text-ink-soft">
-            Drag to reorder · toggle to hide · edit content inline.{" "}
-            <span className="font-semibold text-gold">Local preview only — not yet saved to the storefront.</span>
-          </p>
-        </div>
-        <div className="group relative">
-          <button className="rounded-xl bg-teal px-4 py-2 text-sm font-semibold text-white">
-            + Add section
+    <div className="space-y-6">
+      {error && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-sale/30 bg-sale/5 px-4 py-3 text-xs text-sale">
+          <span>{error}</span>
+          <button type="button" onClick={() => setError(null)} className="font-semibold uppercase tracking-wide hover:underline">
+            Dismiss
           </button>
-          <div className="pointer-events-none absolute right-0 top-full z-20 mt-1 w-52 rounded-lg border border-ink/10 bg-card p-1 opacity-0 shadow-xl transition group-hover:pointer-events-auto group-hover:opacity-100">
-            {ADD_MENU.map(([t, l]) => (
-              <button
-                key={t}
-                onClick={() => add(t)}
-                className="block w-full rounded-md px-3 py-1.5 text-left text-sm text-ink hover:bg-teal/10"
-              >
-                {l}
-              </button>
-            ))}
-          </div>
         </div>
-      </div>
+      )}
 
-      <div className="space-y-3">
-        {sections.map((s) => (
-          <div
-            key={s.id}
-            draggable
-            onDragStart={dnd.onDragStart(s.id)}
-            onDragOver={dnd.onDragOver(s.id)}
-            onDrop={dnd.onDrop}
-            onDragEnd={dnd.onDragEnd}
-            className={`rounded-xl border bg-card p-3 transition ${dnd.overId === s.id ? "border-teal ring-2 ring-teal/15" : "border-ink/10"} ${dnd.dragId === s.id ? "opacity-50" : ""}`}
-          >
-            <div className="flex items-center gap-3">
-              <span className="cursor-grab text-ink-soft/40 hover:text-ink-soft">
-                <GripVertical className="h-5 w-5" />
-              </span>
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-teal/10 text-teal">
-                {iconFor(s.type)}
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-semibold text-ink">{labelFor(s.type)}</div>
-                <div className="line-clamp-1 text-xs text-ink-soft">{s.text || s.heading || "—"}</div>
-              </div>
-              <Toggle on={s.on} onChange={(v) => update(s.id, "on", v)} />
-              <button onClick={() => move(s.id, -1)} className="rounded-md p-1 text-ink-soft/60 hover:bg-ink/5">↑</button>
-              <button onClick={() => move(s.id, 1)} className="rounded-md p-1 text-ink-soft/60 hover:bg-ink/5">↓</button>
-              <button onClick={() => remove(s.id)} className="rounded-md p-1 text-sale hover:bg-sale/5">
+      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold text-ink">Announcement bar</h2>
+          <Toggle on={content.announcement_enabled ?? true} onChange={(v) => set("announcement_enabled", v)} />
+        </div>
+        <div className="space-y-2">
+          {messages.map((msg, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                className={inputCls}
+                value={msg}
+                onChange={(e) => setMessages(messages.map((m, j) => (j === i ? e.target.value : m)))}
+                placeholder="Announcement message"
+              />
+              <button
+                type="button"
+                onClick={() => setMessages(messages.filter((_, j) => j !== i))}
+                className="rounded-md p-2 text-sale hover:bg-sale/5"
+                aria-label="Remove message"
+              >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
-
-            {s.type === "announcement" && (
-              <input
-                className={inputCls + " mt-3"}
-                value={s.text ?? ""}
-                onChange={(e) => update(s.id, "text", e.target.value)}
-                placeholder="Announcement text"
-              />
-            )}
-            {s.type === "hero" && (
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input className={inputCls} value={s.heading ?? ""} onChange={(e) => update(s.id, "heading", e.target.value)} placeholder="Heading" />
-                <input className={inputCls} value={s.sub ?? ""} onChange={(e) => update(s.id, "sub", e.target.value)} placeholder="Subtitle" />
-                <input className={inputCls} value={s.ctaLabel ?? ""} onChange={(e) => update(s.id, "ctaLabel", e.target.value)} placeholder="Button label" />
-                <div className="sm:col-span-2">
-                  <ImageDrop value={s.image ?? ""} onChange={(v) => update(s.id, "image", v)} compact />
-                </div>
-              </div>
-            )}
-            {(s.type === "categories" || s.type === "featured" || s.type === "grid") && (
-              <input
-                className={inputCls + " mt-3"}
-                value={s.heading ?? ""}
-                onChange={(e) => update(s.id, "heading", e.target.value)}
-                placeholder="Section heading"
-              />
-            )}
-            {s.type === "storyBanner" && (
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <input className={inputCls} value={s.heading ?? ""} onChange={(e) => update(s.id, "heading", e.target.value)} placeholder="Heading" />
-                <input className={inputCls} value={s.sub ?? ""} onChange={(e) => update(s.id, "sub", e.target.value)} placeholder="Subtitle" />
-                <input className={inputCls} value={s.ctaLabel ?? ""} onChange={(e) => update(s.id, "ctaLabel", e.target.value)} placeholder="Button label" />
-              </div>
-            )}
-          </div>
-        ))}
+          ))}
+          <button
+            type="button"
+            onClick={() => setMessages([...messages, ""])}
+            className="flex items-center gap-1.5 text-xs font-semibold text-teal hover:underline"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add message
+          </button>
+        </div>
+        <p className="mt-3 text-xs text-ink-soft">Leave empty to use the site's default messages.</p>
       </div>
+
+      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-bold text-ink">Hero banner</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <input className={inputCls} value={content.hero_accent_word ?? ""} onChange={(e) => set("hero_accent_word", e.target.value)} placeholder="Accent word (e.g. New drop)" />
+          <input className={inputCls} value={content.hero_headline ?? ""} onChange={(e) => set("hero_headline", e.target.value)} placeholder="Headline" />
+          <input className={inputCls} value={content.hero_subline ?? ""} onChange={(e) => set("hero_subline", e.target.value)} placeholder="Subline" />
+          <input className={inputCls} value={content.hero_cta_label ?? ""} onChange={(e) => set("hero_cta_label", e.target.value)} placeholder="Button label" />
+          <input className={inputCls + " sm:col-span-2"} value={content.hero_cta_href ?? ""} onChange={(e) => set("hero_cta_href", e.target.value)} placeholder="Button link (e.g. /collections/hair-accessories)" />
+          <div className="sm:col-span-2">
+            <ImageDrop value={content.hero_image ?? ""} onChange={(v) => set("hero_image", v)} compact />
+          </div>
+          <input className={inputCls + " sm:col-span-2"} value={content.hero_image_alt ?? ""} onChange={(e) => set("hero_image_alt", e.target.value)} placeholder="Image alt text (for screen readers)" />
+        </div>
+        <p className="mt-3 text-xs text-ink-soft">Leave any field empty to keep the site's default for that field.</p>
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={saving}
+        className="bg-teal px-6 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-teal-deep disabled:opacity-60"
+      >
+        {saving ? "Saving…" : saved ? "Saved" : "Save changes"}
+      </button>
     </div>
   );
 }
