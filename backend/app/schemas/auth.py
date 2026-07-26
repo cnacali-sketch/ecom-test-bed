@@ -47,6 +47,10 @@ class Address(BaseModel):
     state: str = Field(default="", max_length=100)
     postcode: str = Field(default="", max_length=20)
     country: str = Field(default="", max_length=100)
+    # Couriers call the recipient before a delivery attempt, so this rides with
+    # the address rather than the account — a gift order ships to someone whose
+    # number isn't the buyer's.
+    phone: str = Field(default="", max_length=20)
 
 
 class UserRead(BaseModel):

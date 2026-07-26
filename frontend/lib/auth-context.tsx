@@ -11,6 +11,7 @@ export interface Address {
   state?: string;
   postcode?: string;
   country?: string;
+  phone?: string;
 }
 
 export interface AuthUser {

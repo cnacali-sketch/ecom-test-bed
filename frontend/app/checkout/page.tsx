@@ -89,6 +89,11 @@ export default function CheckoutPage() {
       setError("Fill in at least address line 1, city, and postcode.");
       return;
     }
+    // Couriers call before attempting delivery, so this is not optional.
+    if ((address.phone ?? "").replace(/\D/g, "").length < 10) {
+      setError("Enter a phone number the courier can reach you on.");
+      return;
+    }
     if (!termsAccepted) {
       setError("Please accept the Terms & Conditions to place your order.");
       return;

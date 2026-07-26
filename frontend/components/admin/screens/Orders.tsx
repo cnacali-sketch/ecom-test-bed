@@ -25,7 +25,7 @@ interface Order {
   payment_method: string;
   courier: string | null;
   tracking_number: string | null;
-  shipping_address: { line1?: string; line2?: string; city?: string; state?: string; postcode?: string; country?: string };
+  shipping_address: { line1?: string; line2?: string; city?: string; state?: string; postcode?: string; country?: string; phone?: string };
   total_amount: string;
   flagged: boolean;
   flag_reason: string | null;
@@ -254,6 +254,13 @@ function ShippingDetail({
           Deliver to ({order.payment_method === "cod" ? "Cash on Delivery" : "Prepaid"})
         </p>
         <p className="mt-1 text-sm text-ink">{addressLine(order.shipping_address)}</p>
+        {order.shipping_address.phone && (
+          <p className="mt-1 text-sm text-ink">
+            <a href={`tel:${order.shipping_address.phone}`} className="text-teal underline underline-offset-2">
+              {order.shipping_address.phone}
+            </a>
+          </p>
+        )}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <label className="flex-1 text-xs">

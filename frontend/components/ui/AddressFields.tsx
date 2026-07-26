@@ -12,6 +12,7 @@ export const EMPTY_ADDRESS: Address = {
   state: "",
   postcode: "",
   country: "",
+  phone: "",
 };
 
 export function seedAddress(a: Address | undefined): Address {
@@ -40,6 +41,14 @@ export function AddressFields({
         <Field label="State" value={value.state ?? ""} onChange={(v) => set("state", v)} />
         <Field label="Postcode" value={value.postcode ?? ""} onChange={(v) => set("postcode", v)} />
         <Field label="Country" value={value.country ?? ""} onChange={(v) => set("country", v)} />
+        <Field
+          label="Phone (for delivery)"
+          value={value.phone ?? ""}
+          onChange={(v) => set("phone", v)}
+          type="tel"
+          autoComplete={`${prefix} tel`}
+          className="sm:col-span-2"
+        />
       </div>
     </section>
   );
