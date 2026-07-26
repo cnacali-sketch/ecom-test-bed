@@ -61,7 +61,15 @@ function addressLine(a: Order["shipping_address"]): string {
   return [a.line1, a.line2, a.city, a.state, a.postcode, a.country].filter(Boolean).join(", ") || "—";
 }
 
-export function Orders() {
+export function Orders({
+  deepLinkOrderId,
+  onDeepLinkConsumed,
+}: {
+  /** Set when a notification click asked for a specific order — expand and
+   * scroll to it once loaded, instead of landing on the unfiltered list. */
+  deepLinkOrderId?: string | null;
+  onDeepLinkConsumed?: () => void;
+} = {}) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +99,19 @@ export function Orders() {
       cancelled = true;
     };
   }, []);
+
+  // Expand + scroll to a notification's specific order once the list has
+  // loaded. Runs once per deep-link (consumed via the callback) rather than
+  // on every render, so manually collapsing the row afterward sticks.
+  useEffect(() => {
+    if (!deepLinkOrderId || orders.length === 0) return;
+    const target = orders.find((o) => o.id === deepLinkOrderId);
+    if (!target) return;
+    setExpandedId(target.id);
+    document.getElementById(`order-row-${target.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    onDeepLinkConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link is a one-shot action, not a value to keep syncing on
+  }, [deepLinkOrderId, orders]);
 
   // PATCH a single field and swap the returned order into local state.
   async function patchOrder(id: string, path: string, params: Record<string, string> = {}) {
@@ -193,7 +214,10 @@ export function Orders() {
               const returnRequest = returnRequests.find((r) => r.order_id === o.id) ?? null;
               return (
                 <Fragment key={o.id}>
-                  <tr className={`border-b border-ink/5 last:border-0 ${o.flagged ? "bg-sale/5" : ""}`}>
+                  <tr
+                    id={`order-row-${o.id}`}
+                    className={`border-b border-ink/5 last:border-0 ${o.flagged ? "bg-sale/5" : ""} ${expanded ? "ring-1 ring-inset ring-teal/30" : ""}`}
+                  >
                     <td className="px-3 py-3">
                       <button
                         type="button"

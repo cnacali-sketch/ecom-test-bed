@@ -6,12 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
+from app.middleware.error_logging import ErrorLoggingMiddleware
 from app.routers import (
     auth,
     categories,
     collections,
     coupons,
     customers,
+    error_logs,
     events,
     health,
     inventory,
@@ -48,6 +50,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    fastapi_app.add_middleware(ErrorLoggingMiddleware)
 
     fastapi_app.include_router(health.router)
     fastapi_app.include_router(auth.router)
@@ -64,6 +67,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(categories.router)
     fastapi_app.include_router(media.router)
     fastapi_app.include_router(sections.router)
+    fastapi_app.include_router(error_logs.router)
 
     fastapi_app.mount("/media", StaticFiles(directory=media.UPLOAD_DIR), name="media")
 

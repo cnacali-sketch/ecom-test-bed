@@ -6,6 +6,7 @@
 // console reflects real data. Create/update/delete all hit real endpoints.
 
 import {
+  AlertTriangle,
   BarChart3,
   Bell,
   Boxes,
@@ -55,6 +56,12 @@ import { Customers } from "./screens/Customers";
 import { Analytics } from "./screens/Analytics";
 import { Coupons } from "./screens/Coupons";
 import { Fraud } from "./screens/Fraud";
+import { ErrorLogs } from "./screens/ErrorLogs";
+
+// An order still "pending" (no status change at all) past this age is
+// flagged as unattended — long enough to not fire on normal same-day
+// processing, short enough that a genuinely missed order gets caught.
+const STALE_ORDER_HOURS = 24;
 
 function newDraft(): AdminProduct {
   return {
@@ -93,6 +100,11 @@ export function AdminApp() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [flaggedOrders, setFlaggedOrders] = useState<{ id: string; user_id: string; flag_reason: string | null }[]>([]);
   const [pendingReturns, setPendingReturns] = useState<{ id: string; order_id: string; reason: string }[]>([]);
+  const [staleOrders, setStaleOrders] = useState<{ id: string; user_id: string; created_at: string }[]>([]);
+  // Set when a notification is clicked for a specific order, so the Orders
+  // screen (which owns its own order list + expand state) opens that exact
+  // order instead of just landing on the unfiltered list.
+  const [ordersDeepLinkId, setOrdersDeepLinkId] = useState<string | null>(null);
 
   // Seed from the live catalogue once.
   useEffect(() => {
@@ -131,8 +143,23 @@ export function AdminApp() {
     apiFetch("/api/orders/all")
       .then(async (res) => {
         if (cancelled || !res?.ok) return;
-        const data = (await res.json()) as { id: string; user_id: string; flagged: boolean; flag_reason: string | null }[];
-        if (Array.isArray(data)) setFlaggedOrders(data.filter((o) => o.flagged));
+        const data = (await res.json()) as {
+          id: string;
+          user_id: string;
+          status: string;
+          flagged: boolean;
+          flag_reason: string | null;
+          created_at: string;
+        }[];
+        if (!Array.isArray(data)) return;
+        setFlaggedOrders(data.filter((o) => o.flagged));
+        // "Unattended": still pending (no status change since it came in)
+        // and older than the threshold — an order sitting untouched this
+        // long usually means it was missed, not that it's just early.
+        const staleCutoff = Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000;
+        setStaleOrders(
+          data.filter((o) => o.status === "pending" && new Date(o.created_at).getTime() < staleCutoff),
+        );
       })
       .catch(() => {});
     apiFetch("/api/returns")
@@ -210,7 +237,7 @@ export function AdminApp() {
     [products],
   );
   const lowCount = lowStockProducts.length;
-  const notifCount = lowCount + flaggedOrders.length + pendingReturns.length;
+  const notifCount = lowCount + flaggedOrders.length + pendingReturns.length + staleOrders.length;
 
   const NavBtn = ({
     id,
@@ -253,6 +280,7 @@ export function AdminApp() {
       <NavBtn id="media" icon={Images} label="Media library" />
       <NavBtn id="analytics" icon={TrendingUp} label="Analytics" />
       <NavBtn id="fraud" icon={ShieldAlert} label="Fraud & abuse" />
+      <NavBtn id="errorLogs" icon={AlertTriangle} label="Error logs" />
     </nav>
   );
 
@@ -269,6 +297,7 @@ export function AdminApp() {
     analytics: "Analytics",
     coupons: "Coupons",
     fraud: "Fraud & abuse",
+    errorLogs: "Error logs",
   };
 
   return (
@@ -317,10 +346,30 @@ export function AdminApp() {
                       <p className="p-4 text-sm text-ink-soft">Nothing needs attention.</p>
                     ) : (
                       <div className="divide-y divide-ink/5">
+                        {staleOrders.map((o) => (
+                          <button
+                            key={o.id}
+                            onClick={() => {
+                              setOrdersDeepLinkId(o.id);
+                              setView("orders");
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-sale">Unattended order</span> — {o.user_id}
+                            <br />
+                            <span className="text-ink-soft">
+                              Still pending after{" "}
+                              {Math.round((Date.now() - new Date(o.created_at).getTime()) / (60 * 60 * 1000))}h — no
+                              status change yet
+                            </span>
+                          </button>
+                        ))}
                         {flaggedOrders.map((o) => (
                           <button
                             key={o.id}
                             onClick={() => {
+                              setOrdersDeepLinkId(o.id);
                               setView("orders");
                               setNotifOpen(false);
                             }}
@@ -335,6 +384,7 @@ export function AdminApp() {
                           <button
                             key={r.id}
                             onClick={() => {
+                              setOrdersDeepLinkId(r.order_id);
                               setView("orders");
                               setNotifOpen(false);
                             }}
@@ -349,7 +399,7 @@ export function AdminApp() {
                           <button
                             key={p.id}
                             onClick={() => {
-                              setView("inventory");
+                              openProduct(p.id);
                               setNotifOpen(false);
                             }}
                             className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
@@ -434,11 +484,14 @@ export function AdminApp() {
             <CategoryManager categories={categories} setCategories={setCategories} products={products} />
           )}
           {view === "media" && <MediaLibrary />}
-          {view === "orders" && <Orders />}
+          {view === "orders" && (
+            <Orders deepLinkOrderId={ordersDeepLinkId} onDeepLinkConsumed={() => setOrdersDeepLinkId(null)} />
+          )}
           {view === "customers" && <Customers />}
           {view === "analytics" && <Analytics />}
           {view === "coupons" && <Coupons />}
           {view === "fraud" && <Fraud />}
+          {view === "errorLogs" && <ErrorLogs />}
         </main>
       </div>
 

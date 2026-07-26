@@ -97,6 +97,7 @@ class OrderRead(BaseModel):
     flagged: bool
     flag_reason: str | None
     ip_address: str | None
+    created_at: datetime
     items: list[OrderItemRead] = []
 
 

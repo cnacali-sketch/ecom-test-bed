@@ -91,7 +91,8 @@ export type AdminView =
   | "customers"
   | "analytics"
   | "coupons"
-  | "fraud";
+  | "fraud"
+  | "errorLogs";
 
 export const LOW_STOCK = 5;
 export const REQ_IMG = { w: 1000, h: 1000, maxMB: 2 };
