@@ -114,6 +114,9 @@ export function AdminApp() {
   const [draft, setDraft] = useState<AdminProduct | null>(null);
   const [toast, setToast] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [flaggedOrders, setFlaggedOrders] = useState<{ id: string; user_id: string; flag_reason: string | null }[]>([]);
+  const [pendingReturns, setPendingReturns] = useState<{ id: string; order_id: string; reason: string }[]>([]);
 
   // Seed from the live catalogue once.
   useEffect(() => {
@@ -123,6 +126,30 @@ export function AdminApp() {
         if (cancelled || !res?.ok) return;
         const data = (await res.json()) as BackendProduct[];
         if (Array.isArray(data)) setProducts(data.map(toAdmin));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Powers the notification bell: real signals from data the console already
+  // needs elsewhere (Orders/Fraud screens re-fetch their own copies for
+  // per-screen interactivity — this is just a lightweight summary count).
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/orders/all")
+      .then(async (res) => {
+        if (cancelled || !res?.ok) return;
+        const data = (await res.json()) as { id: string; user_id: string; flagged: boolean; flag_reason: string | null }[];
+        if (Array.isArray(data)) setFlaggedOrders(data.filter((o) => o.flagged));
+      })
+      .catch(() => {});
+    apiFetch("/api/returns")
+      .then(async (res) => {
+        if (cancelled || !res?.ok) return;
+        const data = (await res.json()) as { id: string; order_id: string; reason: string; status: string }[];
+        if (Array.isArray(data)) setPendingReturns(data.filter((r) => r.status === "pending"));
       })
       .catch(() => {});
     return () => {
@@ -188,10 +215,12 @@ export function AdminApp() {
     flash(res?.ok ? "Saved" : "Could not save that change");
   };
 
-  const lowCount = useMemo(
-    () => products.filter((p) => p.stock <= LOW_STOCK && p.published).length,
+  const lowStockProducts = useMemo(
+    () => products.filter((p) => p.stock <= LOW_STOCK && p.published),
     [products],
   );
+  const lowCount = lowStockProducts.length;
+  const notifCount = lowCount + flaggedOrders.length + pendingReturns.length;
 
   const NavBtn = ({
     id,
@@ -275,14 +304,77 @@ export function AdminApp() {
             <Link href="/" target="_blank" className="hidden items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal/10 sm:flex">
               <Eye className="h-3.5 w-3.5" /> View storefront
             </Link>
-            <button className="relative grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5">
-              <Bell className="h-4 w-4" />
-              {lowCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid h-4 w-4 place-items-center rounded-full bg-gold text-[9px] font-bold text-white">
-                  {lowCount}
-                </span>
+            <div className="relative">
+              <button
+                onClick={() => setNotifOpen((v) => !v)}
+                className="relative grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5"
+              >
+                <Bell className="h-4 w-4" />
+                {notifCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 grid h-4 w-4 place-items-center rounded-full bg-gold text-[9px] font-bold text-white">
+                    {notifCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-2 max-h-96 w-80 overflow-y-auto rounded-xl border border-ink/10 bg-card shadow-lg">
+                    <div className="border-b border-ink/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-ink-soft">
+                      Notifications
+                    </div>
+                    {notifCount === 0 ? (
+                      <p className="p-4 text-sm text-ink-soft">Nothing needs attention.</p>
+                    ) : (
+                      <div className="divide-y divide-ink/5">
+                        {flaggedOrders.map((o) => (
+                          <button
+                            key={o.id}
+                            onClick={() => {
+                              setView("orders");
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-sale">Flagged order</span> — {o.user_id}
+                            <br />
+                            <span className="text-ink-soft">{o.flag_reason ?? "Review recommended"}</span>
+                          </button>
+                        ))}
+                        {pendingReturns.map((r) => (
+                          <button
+                            key={r.id}
+                            onClick={() => {
+                              setView("orders");
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-gold">Return requested</span>
+                            <br />
+                            <span className="text-ink-soft">{r.reason}</span>
+                          </button>
+                        ))}
+                        {lowStockProducts.map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => {
+                              setView("inventory");
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-teal">Low stock</span> — {p.name}
+                            <br />
+                            <span className="text-ink-soft">{p.stock} left</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
-            </button>
+            </div>
             <button className="grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5">
               <Settings className="h-4 w-4" />
             </button>
