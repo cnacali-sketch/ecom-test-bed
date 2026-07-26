@@ -28,6 +28,8 @@ interface EventSummary {
   device_counts: Record<string, number>;
   browser_counts: Record<string, number>;
   top_locations: LocationCount[];
+  state_counts: Record<string, number>;
+  country_counts: Record<string, number>;
 }
 
 /** Horizontal bar list — same visual language for device/browser/location
@@ -205,6 +207,24 @@ export function Analytics() {
             ))}
           </ul>
         )}
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
+            <MapPin className="h-4 w-4 text-teal" /> Orders by state
+          </h3>
+          <BreakdownList data={summary.state_counts} />
+        </div>
+        <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
+            <MapPin className="h-4 w-4 text-teal" /> Orders by country
+          </h3>
+          <BreakdownList data={summary.country_counts} />
+          <p className="mt-3 text-[11px] text-ink-soft/70">
+            Country is free text at checkout, so "IN" and "India" count separately — not merged.
+          </p>
+        </div>
       </div>
     </div>
   );

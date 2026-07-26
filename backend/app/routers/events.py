@@ -136,6 +136,8 @@ class EventSummary(BaseModel):
     device_counts: dict[str, int]
     browser_counts: dict[str, int]
     top_locations: list[LocationCount]
+    state_counts: dict[str, int]
+    country_counts: dict[str, int]
 
 
 @router.get("/summary", response_model=EventSummary, dependencies=[Depends(require_admin)])
@@ -158,15 +160,25 @@ async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSum
 
     # Real customer locations, from actual shipping addresses on real orders
     # — not derived from IP, which is coarse and often wrong at city level.
+    # .title() only smooths casing ("india" -> "India"); it can't merge an
+    # abbreviation with a full name ("IN" vs "India" still count separately)
+    # since the address form is free text, not a fixed country/state picker.
     location_rows = await db.execute(select(Order.shipping_address))
     location_tally: dict[tuple[str, str], int] = {}
+    state_tally: dict[str, int] = {}
+    country_tally: dict[str, int] = {}
     for (address,) in location_rows.all():
-        city = (address or {}).get("city", "").strip()
-        state = (address or {}).get("state", "").strip()
-        if not city and not state:
+        city = (address or {}).get("city", "").strip().title()
+        state = (address or {}).get("state", "").strip().title()
+        country = (address or {}).get("country", "").strip().upper()
+        if not city and not state and not country:
             continue
         key = (city or "Unknown", state or "Unknown")
         location_tally[key] = location_tally.get(key, 0) + 1
+        if state:
+            state_tally[state] = state_tally.get(state, 0) + 1
+        if country:
+            country_tally[country] = country_tally.get(country, 0) + 1
     top_locations = [
         LocationCount(city=city, state=state, order_count=count)
         for (city, state), count in sorted(location_tally.items(), key=lambda kv: kv[1], reverse=True)[:10]
@@ -206,6 +218,8 @@ async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSum
         device_counts=device_counts,
         browser_counts=browser_counts,
         top_locations=top_locations,
+        state_counts=state_tally,
+        country_counts=country_tally,
     )
 
 
