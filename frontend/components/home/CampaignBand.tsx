@@ -1,14 +1,27 @@
 import Image from "next/image";
 import Link from "next/link";
 import { siteConfig } from "@/content/site.config";
+import { fetchHomepageContent } from "@/lib/api";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
  * Full-bleed teal campaign band — the page's strong mid-scroll moment.
- * Content from siteConfig.home.campaign.
+ * Content from siteConfig.home.campaign, per-field overridden by the admin
+ * Homepage editor (GET /api/sections) when set.
  */
-export function CampaignBand() {
-  const { campaign } = siteConfig.home;
+export async function CampaignBand() {
+  const defaults = siteConfig.home.campaign;
+  const override = await fetchHomepageContent();
+  const campaign = {
+    eyebrow: override?.campaign_eyebrow || defaults.eyebrow,
+    titleItalic: override?.campaign_title_italic || defaults.titleItalic,
+    title: override?.campaign_title || defaults.title,
+    copy: override?.campaign_copy || defaults.copy,
+    ctaLabel: override?.campaign_cta_label || defaults.ctaLabel,
+    ctaHref: override?.campaign_cta_href || defaults.ctaHref,
+    image: override?.campaign_image || defaults.image,
+    imageAlt: override?.campaign_image_alt || defaults.imageAlt,
+  };
 
   return (
     <section className="bg-teal text-white">

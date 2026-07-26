@@ -33,6 +33,21 @@ class HomepageContentRead(BaseModel):
     hero_cta_href: str | None = None
     hero_image: str | None = None
     hero_image_alt: str | None = None
+    quick_ctas: list[dict] | None = None
+    new_in_heading: str | None = None
+    new_in_sub: str | None = None
+    campaign_eyebrow: str | None = None
+    campaign_title_italic: str | None = None
+    campaign_title: str | None = None
+    campaign_copy: str | None = None
+    campaign_cta_label: str | None = None
+    campaign_cta_href: str | None = None
+    campaign_image: str | None = None
+    campaign_image_alt: str | None = None
+    editorial_tiles: list[dict] | None = None
+    seo_brand_story: str | None = None
+    seo_categories: list[dict] | None = None
+    seo_faqs: list[dict] | None = None
 
 
 class HomepageContentWrite(HomepageContentRead):

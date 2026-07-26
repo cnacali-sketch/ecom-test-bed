@@ -91,6 +91,21 @@ export interface HomepageContentOverride {
   hero_cta_href: string | null;
   hero_image: string | null;
   hero_image_alt: string | null;
+  quick_ctas: { label: string; href: string; image: string }[] | null;
+  new_in_heading: string | null;
+  new_in_sub: string | null;
+  campaign_eyebrow: string | null;
+  campaign_title_italic: string | null;
+  campaign_title: string | null;
+  campaign_copy: string | null;
+  campaign_cta_label: string | null;
+  campaign_cta_href: string | null;
+  campaign_image: string | null;
+  campaign_image_alt: string | null;
+  editorial_tiles: { eyebrow: string; title: string; copy: string; href: string; image: string; imageAlt: string }[] | null;
+  seo_brand_story: string | null;
+  seo_categories: { title: string; copy: string; href: string }[] | null;
+  seo_faqs: { q: string; a: string }[] | null;
 }
 
 export async function fetchHomepageContent(): Promise<HomepageContentOverride | null> {

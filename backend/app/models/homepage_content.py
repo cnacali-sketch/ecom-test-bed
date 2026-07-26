@@ -33,6 +33,29 @@ class HomepageContent(Base):
     hero_image: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     hero_image_alt: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
+    # Quick CTA tiles below the hero. Whole-list override (like
+    # announcement_messages above) rather than per-tile columns, since the
+    # admin always edits the set as a unit.
+    quick_ctas: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    new_in_heading: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    new_in_sub: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    campaign_eyebrow: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    campaign_title_italic: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    campaign_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    campaign_copy: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    campaign_cta_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    campaign_cta_href: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    campaign_image: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    campaign_image_alt: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+    editorial_tiles: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    seo_brand_story: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    seo_categories: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    seo_faqs: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
