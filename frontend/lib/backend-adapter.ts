@@ -50,7 +50,10 @@ function adaptVariant(variant: BackendProductVariant): ProductVariant {
 export function adaptProduct(product: BackendProduct): Product {
   const attrs = product.attrs;
   return {
-    id: product.sku,
+    // Must be the real DB primary key, not the human-readable SKU — checkout
+    // sends this straight through as OrderItemCreate.product_id, which the
+    // backend requires to be a valid UUID (see routers/orders.py).
+    id: product.id,
     slug: product.slug,
     name: product.name,
     brand: typeof attrs.brand === "string" ? attrs.brand : "",
