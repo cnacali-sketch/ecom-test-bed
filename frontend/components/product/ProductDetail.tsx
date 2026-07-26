@@ -19,7 +19,7 @@ interface ProductDetailProps {
 
 export function ProductDetail({ product, relatedProducts }: ProductDetailProps) {
   const [activeVariantId, setActiveVariantId] = useState(product.variants[0]?.id ?? "");
-  const { addItem, openCart } = useCart();
+  const { addItem } = useCart();
 
   useEffect(() => {
     trackEvent("product_view", { product_id: product.id });
@@ -42,7 +42,6 @@ export function ProductDetail({ product, relatedProducts }: ProductDetailProps) 
       quantity: 1,
     });
     trackEvent("add_to_cart", { product_id: product.id });
-    openCart();
   };
 
   return (

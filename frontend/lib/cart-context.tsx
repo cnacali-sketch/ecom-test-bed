@@ -40,11 +40,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const openCart = useCallback(() => setIsOpen(true), []);
   const closeCart = useCallback(() => setIsOpen(false), []);
 
-  // Adds to cart WITHOUT opening the drawer. Callers that want the drawer
-  // (e.g. the PDP) call openCart() themselves; the product-grid inline stepper
-  // deliberately stays on the page instead of interrupting browsing.
+  // Opens the cart on every add so the customer sees what just happened and
+  // can check out immediately, whether they added from the PDP or an
+  // inline product-grid stepper.
   const addItem = useCallback((item: CartItem) => {
     setItems((current) => mergeCartItem(current, item));
+    setIsOpen(true);
   }, []);
 
   const removeItem = useCallback((variantId: string) => {

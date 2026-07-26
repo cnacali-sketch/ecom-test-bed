@@ -39,8 +39,8 @@ export function ProductCard({ product }: ProductCardProps) {
     ? (items.find((item) => item.variantId === activeVariant.id)?.quantity ?? 0)
     : 0;
 
-  // First add for this swatch. Stays on the grid — no drawer — then the button
-  // swaps to the qty stepper below so the shopper can keep browsing.
+  // First add for this swatch. addItem() opens the cart popover; the button
+  // also swaps to the qty stepper below so a re-add from the grid works too.
   const handleAddToCart = () => {
     if (!activeVariant || !product.inStock) return;
     addItem({
