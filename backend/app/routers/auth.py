@@ -23,21 +23,25 @@ from app.db import get_db_session
 from app.dependencies.auth import ACCESS_COOKIE, CSRF_COOKIE, REFRESH_COOKIE, require_current_user
 from app.models.user import ROLE_CUSTOMER, User, normalize_email
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
     ProfileUpdate,
     RegisterRequest,
+    ResetPasswordRequest,
     UserRead,
 )
 from app.services import login_throttle, refresh_tokens
-from app.services.email import send_account_exists_email, send_verification_email
+from app.services.email import send_account_exists_email, send_password_reset_email, send_verification_email
 from app.services.refresh_tokens import TokenReuseError
 from app.services.security import (
     TOKEN_REFRESH,
+    TOKEN_RESET,
     TOKEN_VERIFY,
     IssuedRefreshToken,
     TokenError,
     create_access_token,
+    create_reset_token,
     create_verify_token,
     decode_token,
     dummy_verify,
@@ -57,10 +61,14 @@ _TOO_MANY = HTTPException(status_code=429, detail="Too many attempts. Try again 
 # Refresh is cheap but shouldn't be a free token-minting loop either.
 REGISTER_MAX_PER_IP = 10
 REFRESH_MAX_PER_IP = 30
+FORGOT_PASSWORD_MAX_PER_IP = 10
 
 # The only thing /register ever says. Identical for a new address and an
 # existing one — that uniformity IS the fix, so don't branch this string.
 REGISTER_ACCEPTED = "If that email address is valid, a verification link has been sent."
+# Same idea for /forgot-password: identical whether or not the address has
+# an account, so the endpoint can't be used to enumerate registered emails.
+FORGOT_PASSWORD_ACCEPTED = "If that email address has an account, a password reset link has been sent."
 
 
 def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToken) -> None:
@@ -192,6 +200,63 @@ async def verify_email(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@router.post("/forgot-password", response_model=MessageResponse, status_code=202)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db_session),
+) -> MessageResponse:
+    """Begin a password reset. Always 202, identical response whether or not
+    the address has an account — same enumeration-safety shape as /register.
+    """
+    throttle_key = login_throttle.client_key(request, "forgot-password")
+    if login_throttle.is_locked(throttle_key, FORGOT_PASSWORD_MAX_PER_IP):
+        raise _TOO_MANY
+    login_throttle.record_failure(throttle_key)
+
+    email = normalize_email(payload.email)
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user is not None:
+        background.add_task(send_password_reset_email, email, create_reset_token(user.id, email))
+
+    return MessageResponse(detail=FORGOT_PASSWORD_ACCEPTED)
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db_session),
+) -> MessageResponse:
+    """Consume a reset token and set a new password.
+
+    Revokes every refresh-token family for the account afterward — a
+    password reset should end every other session (e.g. whoever's session
+    prompted the reset in the first place), not just prove inbox control.
+    """
+    try:
+        payload_claims = decode_token(payload.token, TOKEN_RESET)
+    except TokenError:
+        raise HTTPException(status_code=400, detail="This link is invalid or has expired")
+
+    try:
+        user_id = uuid.UUID(payload_claims["sub"])
+    except (ValueError, KeyError):
+        raise HTTPException(status_code=400, detail="This link is invalid or has expired")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or user.email != payload_claims.get("email"):
+        raise HTTPException(status_code=400, detail="This link is invalid or has expired")
+
+    user.password_hash = hash_password(payload.new_password)
+    await refresh_tokens.revoke_all_for_user(db, user.id)
+    await db.commit()
+    return MessageResponse(detail="Password updated. Please sign in with your new password.")
 
 
 @router.post("/login", response_model=UserRead)

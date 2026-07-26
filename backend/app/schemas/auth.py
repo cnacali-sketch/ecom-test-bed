@@ -37,6 +37,17 @@ class LoginRequest(BaseModel):
     _validate_password = field_validator("password")(_check_password_bytes)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., max_length=EMAIL_MAX)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=PASSWORD_MIN)
+
+    _validate_password = field_validator("new_password")(_check_password_bytes)
+
+
 class Address(BaseModel):
     """A postal or billing address. Every field optional so a half-filled form
     still saves; widths guard against oversized input."""

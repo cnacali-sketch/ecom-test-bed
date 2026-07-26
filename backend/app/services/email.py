@@ -67,6 +67,22 @@ def send_verification_email(to: str, token: str) -> None:
     )
 
 
+def send_password_reset_email(to: str, token: str) -> None:
+    """Forgot-password request: prove control of the inbox before letting a
+    new password through."""
+    link = f"{get_settings().frontend_url}/reset-password?token={quote(token)}"
+    _send(
+        to,
+        "Reset your Savvy In Teal password",
+        (
+            "Someone (hopefully you) asked to reset the password on this account.\n\n"
+            f"Choose a new password:\n{link}\n\n"
+            "This link expires in 1 hour and works once. If you didn't request "
+            "this, you can ignore this email — your password hasn't changed."
+        ),
+    )
+
+
 def send_order_confirmation_email(to: str, order_id: str) -> None:
     """Order placed — sent right after checkout (COD or, once wired, prepaid)."""
     settings = get_settings()

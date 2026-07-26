@@ -31,6 +31,7 @@ from app.config import get_settings
 TOKEN_ACCESS = "access"
 TOKEN_REFRESH = "refresh"
 TOKEN_VERIFY = "verify"
+TOKEN_RESET = "reset"
 
 # bcrypt truncates silently at 72 bytes; reject longer input instead of
 # letting two different passwords authenticate the same account.
@@ -143,6 +144,20 @@ def create_verify_token(subject: uuid.UUID, email: str) -> str:
         role="",
         token_type=TOKEN_VERIFY,
         ttl=timedelta(hours=settings.email_verify_ttl_hours),
+        extra={"email": email},
+    )
+
+
+def create_reset_token(subject: uuid.UUID, email: str) -> str:
+    """Single-purpose token proving the caller controls `email`'s inbox at
+    reset-request time. Short-lived (1h, not the multi-hour verify TTL) since
+    a leaked reset link is a full account takeover, not just an unconfirmed
+    signup."""
+    return _create_token(
+        subject=subject,
+        role="",
+        token_type=TOKEN_RESET,
+        ttl=timedelta(hours=1),
         extra={"email": email},
     )
 

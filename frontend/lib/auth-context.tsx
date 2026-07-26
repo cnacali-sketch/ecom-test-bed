@@ -49,6 +49,13 @@ interface AuthContextValue {
    * nothing to log in as. The real outcome arrives by email.
    */
   register: (email: string, password: string) => Promise<string>;
+  /** Same enumeration-safe shape as register: resolves with the server's
+   * generic message regardless of whether the address has an account. */
+  forgotPassword: (email: string) => Promise<string>;
+  /** Consumes a reset-email token and sets a new password. Does not sign
+   * the caller in — the reset revokes every existing session, so they sign
+   * in fresh with the new password. */
+  resetPassword: (token: string, newPassword: string) => Promise<string>;
   logout: () => Promise<void>;
   /** Persist profile edits to the backend and update local state immediately. */
   updateProfile: (patch: ProfileUpdate) => Promise<AuthUser>;
@@ -139,6 +146,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [postCredentials],
   );
 
+  const forgotPassword = useCallback(async (email: string): Promise<string> => {
+    const response = await apiFetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response) throw new AuthError("Cannot reach the server. Is the backend running?");
+    if (!response.ok) throw new AuthError(await readError(response, "Could not process that request"));
+    const body = await response.json();
+    return typeof body?.detail === "string" ? body.detail : "Check your email to continue.";
+  }, []);
+
+  const resetPassword = useCallback(async (token: string, newPassword: string): Promise<string> => {
+    const response = await apiFetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+    if (!response) throw new AuthError("Cannot reach the server. Is the backend running?");
+    if (!response.ok) throw new AuthError(await readError(response, "Could not reset your password"));
+    const body = await response.json();
+    return typeof body?.detail === "string" ? body.detail : "Password updated.";
+  }, []);
+
   const logout = useCallback(async () => {
     await apiFetch("/api/auth/logout", { method: "POST" });
     setUser(null);
@@ -158,8 +189,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isLoading, isAdmin: user?.role === "admin", login, register, logout, updateProfile }),
-    [user, isLoading, login, register, logout, updateProfile],
+    () => ({
+      user,
+      isLoading,
+      isAdmin: user?.role === "admin",
+      login,
+      register,
+      forgotPassword,
+      resetPassword,
+      logout,
+      updateProfile,
+    }),
+    [user, isLoading, login, register, forgotPassword, resetPassword, logout, updateProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
