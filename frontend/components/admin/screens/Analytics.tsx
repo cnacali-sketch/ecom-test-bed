@@ -7,7 +7,7 @@
 // through lib/analytics.ts.
 
 import { useEffect, useState } from "react";
-import { BarChart3, TrendingUp } from "lucide-react";
+import { BarChart3, Laptop, MapPin, TrendingUp } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
 
@@ -16,10 +16,41 @@ interface TopProduct {
   name: string;
   views: number;
 }
+interface LocationCount {
+  city: string;
+  state: string;
+  order_count: number;
+}
 interface EventSummary {
   counts: Record<string, number>;
   top_products: TopProduct[];
   total_events: number;
+  device_counts: Record<string, number>;
+  browser_counts: Record<string, number>;
+  top_locations: LocationCount[];
+}
+
+/** Horizontal bar list — same visual language for device/browser/location
+ * breakdowns, sorted largest-first. */
+function BreakdownList({ data }: { data: Record<string, number> }) {
+  const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(1, ...entries.map(([, v]) => v));
+  if (entries.length === 0) return <p className="text-sm text-ink-soft">No data yet.</p>;
+  return (
+    <div className="space-y-2.5">
+      {entries.map(([label, count]) => (
+        <div key={label}>
+          <div className="mb-1 flex justify-between text-xs">
+            <span className="text-ink-soft">{label}</span>
+            <span className="font-semibold text-ink">{count}</span>
+          </div>
+          <div className="h-1.5 w-full rounded-full bg-ink/5">
+            <div className="h-1.5 rounded-full bg-teal" style={{ width: `${Math.max(4, (count / max) * 100)}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const FUNNEL_STEPS: { key: string; label: string }[] = [
@@ -57,20 +88,24 @@ export function Analytics() {
   const conversionRate = pageViews > 0 ? ((orders / pageViews) * 100).toFixed(1) : null;
   const maxCount = Math.max(1, ...FUNNEL_STEPS.map((s) => summary.counts[s.key] ?? 0));
 
-  if (summary.total_events === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-ink/20 bg-card p-16 text-center">
-        <BarChart3 className="mx-auto h-8 w-8 text-ink-soft/40" />
-        <p className="mt-3 text-sm text-ink-soft">No behavior data yet.</p>
-        <p className="mt-1 text-xs text-ink-soft/60">
-          This fills in as shoppers browse the storefront (with their consent).
-        </p>
-      </div>
-    );
-  }
+  // Location comes from real orders, independent of behavior-event consent —
+  // don't hide it just because no one has opted into event tracking yet.
+  const hasEventData = summary.total_events > 0;
 
   return (
     <div className="space-y-6">
+      {!hasEventData && (
+        <div className="rounded-2xl border border-dashed border-ink/20 bg-card p-8 text-center">
+          <BarChart3 className="mx-auto h-8 w-8 text-ink-soft/40" />
+          <p className="mt-3 text-sm text-ink-soft">No behavior data yet.</p>
+          <p className="mt-1 text-xs text-ink-soft/60">
+            The funnel and device/browser breakdown fill in as shoppers browse the storefront (with
+            their consent). Order locations below don't depend on this.
+          </p>
+        </div>
+      )}
+      {hasEventData && (
+      <>
       <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
@@ -122,6 +157,50 @@ export function Analytics() {
                   {p.name}
                 </span>
                 <span className="font-semibold text-ink">{p.views} views</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
+            <Laptop className="h-4 w-4 text-teal" /> Device
+          </h3>
+          <BreakdownList data={summary.device_counts} />
+        </div>
+        <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
+            <Laptop className="h-4 w-4 text-teal" /> Browser
+          </h3>
+          <BreakdownList data={summary.browser_counts} />
+        </div>
+      </div>
+      </>
+      )}
+
+      <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
+        <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
+          <MapPin className="h-4 w-4 text-teal" /> Where orders ship to
+        </h3>
+        <p className="mb-3 text-xs text-ink-soft">
+          From real shipping addresses on real orders — not IP-based geolocation, which is coarse and
+          often wrong at city level.
+        </p>
+        {summary.top_locations.length === 0 ? (
+          <p className="text-sm text-ink-soft">No orders with an address yet.</p>
+        ) : (
+          <ul className="divide-y divide-ink/5">
+            {summary.top_locations.map((loc) => (
+              <li key={`${loc.city}-${loc.state}`} className="flex items-center justify-between py-2 text-sm">
+                <span className="text-ink">
+                  {loc.city}
+                  {loc.state ? `, ${loc.state}` : ""}
+                </span>
+                <span className="font-semibold text-ink">
+                  {loc.order_count} order{loc.order_count === 1 ? "" : "s"}
+                </span>
               </li>
             ))}
           </ul>

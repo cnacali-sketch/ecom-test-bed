@@ -5,7 +5,9 @@
 // ad-click velocity (bot/click-fraud burning Meta/Google ad spend) and
 // checkout velocity (fake-order / coupon-abuse pattern). Nothing here blocks
 // anyone automatically — shared/mobile IPs can trip these legitimately, so
-// flags are for a human to review, not to act on unilaterally.
+// flags are for a human to review, not to act on unilaterally. The raw IP is
+// shown alongside the hash specifically so a genuinely bad pattern is
+// actionable (block at the firewall) — the hash alone only lets you group.
 
 import { useEffect, useState } from "react";
 import { ShieldAlert } from "lucide-react";
@@ -14,13 +16,19 @@ import { apiFetch } from "@/lib/api-client";
 
 interface AdClickFlag {
   ip_hash: string;
+  sample_ip: string | null;
   ad_click_count: number;
   sample_user_agent: string | null;
+  sample_device: string;
+  sample_browser: string;
 }
 interface CheckoutVelocityFlag {
   ip_hash: string;
+  sample_ip: string | null;
   checkout_event_count: number;
   sample_user_agent: string | null;
+  sample_device: string;
+  sample_browser: string;
 }
 interface FraudSummary {
   window_hours: number;
@@ -33,32 +41,45 @@ function FlagTable({
   countLabel,
   emptyLabel,
 }: {
-  rows: { ip_hash: string; count: number; sample_user_agent: string | null }[];
+  rows: {
+    ip_hash: string;
+    sample_ip: string | null;
+    count: number;
+    sample_user_agent: string | null;
+    sample_device: string;
+    sample_browser: string;
+  }[];
   countLabel: string;
   emptyLabel: string;
 }) {
   if (rows.length === 0) return <p className="text-sm text-ink-soft">{emptyLabel}</p>;
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="border-b border-ink/10 text-left text-[11px] uppercase tracking-wide text-ink-soft">
-          <th className="py-2 font-semibold">IP (hashed)</th>
-          <th className="py-2 font-semibold">{countLabel}</th>
-          <th className="py-2 font-semibold">Sample user agent</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.ip_hash} className="border-b border-ink/5 last:border-0">
-            <td className="py-2 font-mono text-xs text-ink-soft">{row.ip_hash}</td>
-            <td className="py-2 font-semibold text-sale">{row.count}</td>
-            <td className="max-w-xs truncate py-2 text-xs text-ink-soft" title={row.sample_user_agent ?? ""}>
-              {row.sample_user_agent ?? "—"}
-            </td>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-ink/10 text-left text-[11px] uppercase tracking-wide text-ink-soft">
+            <th className="py-2 pr-4 font-semibold">IP address</th>
+            <th className="py-2 pr-4 font-semibold">{countLabel}</th>
+            <th className="py-2 pr-4 font-semibold">Device</th>
+            <th className="py-2 pr-4 font-semibold">Browser</th>
+            <th className="py-2 font-semibold">IP (hashed)</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.ip_hash} className="border-b border-ink/5 last:border-0">
+              <td className="py-2 pr-4 font-mono text-xs font-semibold text-ink">{row.sample_ip ?? "—"}</td>
+              <td className="py-2 pr-4 font-semibold text-sale">{row.count}</td>
+              <td className="py-2 pr-4 text-xs text-ink-soft">{row.sample_device}</td>
+              <td className="py-2 pr-4 text-xs text-ink-soft">{row.sample_browser}</td>
+              <td className="py-2 font-mono text-xs text-ink-soft/60" title={row.sample_user_agent ?? ""}>
+                {row.ip_hash}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -87,7 +108,9 @@ export function Fraud() {
   return (
     <div className="space-y-6">
       <p className="text-xs text-ink-soft">
-        Advisory only, last {summary.window_hours}h — nothing here blocks a customer automatically.
+        Advisory only, last {summary.window_hours}h — nothing here blocks a customer automatically. IP
+        addresses are shown so a genuinely bad pattern is actionable; treat shared-office and mobile-
+        carrier IPs with caution before acting on any single flag.
       </p>
 
       <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
@@ -97,8 +120,11 @@ export function Fraud() {
         <FlagTable
           rows={summary.ad_click_flags.map((f) => ({
             ip_hash: f.ip_hash,
+            sample_ip: f.sample_ip,
             count: f.ad_click_count,
             sample_user_agent: f.sample_user_agent,
+            sample_device: f.sample_device,
+            sample_browser: f.sample_browser,
           }))}
           countLabel="Ad clicks"
           emptyLabel="No repeat ad-click patterns in this window."
@@ -112,8 +138,11 @@ export function Fraud() {
         <FlagTable
           rows={summary.checkout_velocity_flags.map((f) => ({
             ip_hash: f.ip_hash,
+            sample_ip: f.sample_ip,
             count: f.checkout_event_count,
             sample_user_agent: f.sample_user_agent,
+            sample_device: f.sample_device,
+            sample_browser: f.sample_browser,
           }))}
           countLabel="Checkout events"
           emptyLabel="No repeat checkout patterns in this window."

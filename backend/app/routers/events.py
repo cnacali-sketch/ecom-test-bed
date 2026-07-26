@@ -1,12 +1,12 @@
 """Customer behavior tracking — first-party, no third-party analytics account
-needed. Feeds the admin Analytics screen (event funnel + most-viewed products).
+needed. Feeds the admin Analytics screen (event funnel + most-viewed products)
+and the Fraud & Abuse screen (ad-click/checkout velocity by IP).
 
 Reuses the pre-existing (previously unwired) UserEvent model/table: `user_id`
 holds either a real signed-in account id or an anonymous per-browser session
 id generated client-side, so behavior is attributable without requiring login.
 """
-import hashlib
-import hmac
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -15,11 +15,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
 from app.db import get_db_session
 from app.dependencies.auth import require_admin
+from app.models.order import Order
 from app.models.product import Product
 from app.models.user_event import UserEvent
+from app.services.request_ip import client_ip, hash_ip
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -36,28 +37,39 @@ FRAUD_WINDOW_HOURS = 24
 AD_CLICK_FLAG_THRESHOLD = 5
 CHECKOUT_FLAG_THRESHOLD = 5
 
+# Deliberately coarse, regex-based UA parsing — good enough to bucket
+# "mobile vs desktop" and "which browser" for a dashboard chart, not meant to
+# be a precise UA-sniffing library. Order matters: check bot/tablet/mobile
+# before falling through to desktop.
+_DEVICE_PATTERNS = [
+    ("Bot", re.compile(r"bot|crawler|spider|slurp", re.I)),
+    ("Tablet", re.compile(r"ipad|tablet", re.I)),
+    ("Mobile", re.compile(r"mobile|iphone|android", re.I)),
+]
+_BROWSER_PATTERNS = [
+    ("Edge", re.compile(r"edg/", re.I)),
+    ("Chrome", re.compile(r"chrome/", re.I)),
+    ("Safari", re.compile(r"safari/", re.I)),  # after Chrome — Chrome UAs also contain "Safari/"
+    ("Firefox", re.compile(r"firefox/", re.I)),
+]
 
-def _hash_ip(ip: str) -> str:
-    """HMAC-SHA256 of the client IP, truncated to 16 hex chars. Keyed on a
-    dedicated fraud_hash_secret (not a bare hash) so it can't be trivially
-    rainbow-tabled back to real IPs — only ever used to group repeat visits,
-    never reversed. 64 bits is ample collision resistance at this volume."""
-    settings = get_settings()
-    digest = hmac.new(settings.fraud_hash_secret.encode(), ip.encode(), hashlib.sha256).hexdigest()
-    return digest[:16]
+
+def _classify_device(user_agent: str | None) -> str:
+    if not user_agent:
+        return "Unknown"
+    for label, pattern in _DEVICE_PATTERNS:
+        if pattern.search(user_agent):
+            return label
+    return "Desktop"
 
 
-def _client_ip(request: Request) -> str:
-    """Best-effort client IP. NOTE: X-Forwarded-For is trusted as-is, which
-    assumes the app sits behind a proxy that overwrites it (Cloudflare tunnel
-    in dev). A client hitting the backend directly can forge this header — so
-    the fraud signals it feeds are advisory leads to investigate, never an
-    authorization or auto-block decision (which is why /fraud-summary is
-    admin-gated and read-only)."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+def _classify_browser(user_agent: str | None) -> str:
+    if not user_agent:
+        return "Unknown"
+    for label, pattern in _BROWSER_PATTERNS:
+        if pattern.search(user_agent):
+            return label
+    return "Other"
 
 
 class EventCreate(BaseModel):
@@ -81,6 +93,7 @@ async def record_event(payload: EventCreate, request: Request, db: AsyncSession 
     a tracking call must never surface as a user-visible failure."""
     if payload.event_type not in EVENT_TYPES:
         return
+    ip = client_ip(request)
     db.add(
         UserEvent(
             user_id=payload.user_id,
@@ -92,7 +105,8 @@ async def record_event(payload: EventCreate, request: Request, db: AsyncSession 
                 "gclid": payload.gclid,
                 "fbclid": payload.fbclid,
             },
-            ip_hash=_hash_ip(_client_ip(request)),
+            ip_hash=hash_ip(ip),
+            ip_address=ip[:64] or None,
             user_agent=(request.headers.get("user-agent") or "")[:256] or None,
         )
     )
@@ -105,10 +119,23 @@ class TopProduct(BaseModel):
     views: int
 
 
+class LocationCount(BaseModel):
+    city: str
+    state: str
+    order_count: int
+
+
 class EventSummary(BaseModel):
     counts: dict[str, int]
     top_products: list[TopProduct]
     total_events: int
+    # Decision-making data: where visitors browse from (device/browser, from
+    # the same events already collected) and where orders actually ship to
+    # (real shipping addresses — not IP geolocation, which this store
+    # deliberately doesn't do; see hash_ip in request_ip.py).
+    device_counts: dict[str, int]
+    browser_counts: dict[str, int]
+    top_locations: list[LocationCount]
 
 
 @router.get("/summary", response_model=EventSummary, dependencies=[Depends(require_admin)])
@@ -119,6 +146,31 @@ async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSum
     counts_rows = await db.execute(select(UserEvent.event_type, func.count()).group_by(UserEvent.event_type))
     counts = {row[0]: row[1] for row in counts_rows.all()}
     total = sum(counts.values())
+
+    ua_rows = await db.execute(select(UserEvent.user_agent))
+    device_counts: dict[str, int] = {}
+    browser_counts: dict[str, int] = {}
+    for (user_agent,) in ua_rows.all():
+        device = _classify_device(user_agent)
+        browser = _classify_browser(user_agent)
+        device_counts[device] = device_counts.get(device, 0) + 1
+        browser_counts[browser] = browser_counts.get(browser, 0) + 1
+
+    # Real customer locations, from actual shipping addresses on real orders
+    # — not derived from IP, which is coarse and often wrong at city level.
+    location_rows = await db.execute(select(Order.shipping_address))
+    location_tally: dict[tuple[str, str], int] = {}
+    for (address,) in location_rows.all():
+        city = (address or {}).get("city", "").strip()
+        state = (address or {}).get("state", "").strip()
+        if not city and not state:
+            continue
+        key = (city or "Unknown", state or "Unknown")
+        location_tally[key] = location_tally.get(key, 0) + 1
+    top_locations = [
+        LocationCount(city=city, state=state, order_count=count)
+        for (city, state), count in sorted(location_tally.items(), key=lambda kv: kv[1], reverse=True)[:10]
+    ]
 
     # Top viewed products: tally product_view events by payload.product_id.
     # JSON field extraction differs by dialect (Postgres ->> vs SQLite
@@ -147,19 +199,32 @@ async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSum
         for pid in top_ids
     ]
 
-    return EventSummary(counts=counts, top_products=top_products, total_events=total)
+    return EventSummary(
+        counts=counts,
+        top_products=top_products,
+        total_events=total,
+        device_counts=device_counts,
+        browser_counts=browser_counts,
+        top_locations=top_locations,
+    )
 
 
 class AdClickFlag(BaseModel):
     ip_hash: str
+    sample_ip: str | None
     ad_click_count: int
     sample_user_agent: str | None
+    sample_device: str
+    sample_browser: str
 
 
 class CheckoutVelocityFlag(BaseModel):
     ip_hash: str
+    sample_ip: str | None
     checkout_event_count: int
     sample_user_agent: str | None
+    sample_device: str
+    sample_browser: str
 
 
 class FraudSummary(BaseModel):
@@ -186,36 +251,47 @@ async def fraud_summary(db: AsyncSession = Depends(get_db_session)) -> FraudSumm
     since = datetime.now(timezone.utc) - timedelta(hours=FRAUD_WINDOW_HOURS)
 
     page_views = await db.execute(
-        select(UserEvent.ip_hash, UserEvent.user_agent, UserEvent.payload).where(
+        select(UserEvent.ip_hash, UserEvent.ip_address, UserEvent.user_agent, UserEvent.payload).where(
             UserEvent.event_type == "page_view",
             UserEvent.created_at >= since,
             UserEvent.ip_hash.is_not(None),
         )
     )
     ad_click_tally: dict[str, int] = {}
+    ad_click_ip: dict[str, str | None] = {}
     ad_click_ua: dict[str, str | None] = {}
-    for ip_hash, user_agent, event_payload in page_views.all():
+    for ip_hash, ip_address, user_agent, event_payload in page_views.all():
         if not (event_payload or {}).get("gclid") and not (event_payload or {}).get("fbclid"):
             continue
         ad_click_tally[ip_hash] = ad_click_tally.get(ip_hash, 0) + 1
+        ad_click_ip.setdefault(ip_hash, ip_address)
         ad_click_ua.setdefault(ip_hash, user_agent)
 
     checkout_events = await db.execute(
-        select(UserEvent.ip_hash, UserEvent.user_agent).where(
+        select(UserEvent.ip_hash, UserEvent.ip_address, UserEvent.user_agent).where(
             UserEvent.event_type.in_(["checkout_started", "order_placed"]),
             UserEvent.created_at >= since,
             UserEvent.ip_hash.is_not(None),
         )
     )
     checkout_tally: dict[str, int] = {}
+    checkout_ip: dict[str, str | None] = {}
     checkout_ua: dict[str, str | None] = {}
-    for ip_hash, user_agent in checkout_events.all():
+    for ip_hash, ip_address, user_agent in checkout_events.all():
         checkout_tally[ip_hash] = checkout_tally.get(ip_hash, 0) + 1
+        checkout_ip.setdefault(ip_hash, ip_address)
         checkout_ua.setdefault(ip_hash, user_agent)
 
     ad_click_flags = sorted(
         (
-            AdClickFlag(ip_hash=ip_hash, ad_click_count=count, sample_user_agent=ad_click_ua.get(ip_hash))
+            AdClickFlag(
+                ip_hash=ip_hash,
+                sample_ip=ad_click_ip.get(ip_hash),
+                ad_click_count=count,
+                sample_user_agent=ad_click_ua.get(ip_hash),
+                sample_device=_classify_device(ad_click_ua.get(ip_hash)),
+                sample_browser=_classify_browser(ad_click_ua.get(ip_hash)),
+            )
             for ip_hash, count in ad_click_tally.items()
             if count >= AD_CLICK_FLAG_THRESHOLD
         ),
@@ -225,7 +301,12 @@ async def fraud_summary(db: AsyncSession = Depends(get_db_session)) -> FraudSumm
     checkout_velocity_flags = sorted(
         (
             CheckoutVelocityFlag(
-                ip_hash=ip_hash, checkout_event_count=count, sample_user_agent=checkout_ua.get(ip_hash)
+                ip_hash=ip_hash,
+                sample_ip=checkout_ip.get(ip_hash),
+                checkout_event_count=count,
+                sample_user_agent=checkout_ua.get(ip_hash),
+                sample_device=_classify_device(checkout_ua.get(ip_hash)),
+                sample_browser=_classify_browser(checkout_ua.get(ip_hash)),
             )
             for ip_hash, count in checkout_tally.items()
             if count >= CHECKOUT_FLAG_THRESHOLD

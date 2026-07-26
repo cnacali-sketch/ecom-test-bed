@@ -55,6 +55,11 @@ class Order(Base):
     # tampering attempts surface too, not just gateway-mediated ones.
     flagged: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     flag_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # The IP that placed this order — separate from user_events.ip_hash: an
+    # order is a specific, high-stakes action worth being able to act on
+    # directly (block at the firewall) if it turns out fraudulent, not just
+    # group with other visits.
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     items: Mapped[list[OrderItem]] = relationship(

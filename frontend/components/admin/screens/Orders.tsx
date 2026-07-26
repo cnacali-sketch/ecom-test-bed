@@ -29,6 +29,7 @@ interface Order {
   total_amount: string;
   flagged: boolean;
   flag_reason: string | null;
+  ip_address: string | null;
   items: OrderItem[];
 }
 interface ReturnRequest {
@@ -293,6 +294,9 @@ function ShippingDetail({
               {order.shipping_address.phone}
             </a>
           </p>
+        )}
+        {order.ip_address && (
+          <p className="mt-1 font-mono text-xs text-ink-soft/70">Placed from {order.ip_address}</p>
         )}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">

@@ -31,6 +31,7 @@ from app.schemas.auth import Address
 from app.services import login_throttle
 from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
+from app.services.request_ip import client_ip
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -95,6 +96,7 @@ class OrderRead(BaseModel):
     total_amount: Decimal
     flagged: bool
     flag_reason: str | None
+    ip_address: str | None
     items: list[OrderItemRead] = []
 
 
@@ -288,6 +290,7 @@ async def create_order(
         total_amount=subtotal - discount_amount,
         flagged=flag_reason is not None,
         flag_reason=flag_reason,
+        ip_address=client_ip(request)[:64] or None,
     )
     for item in payload.items:
         order.items.append(
