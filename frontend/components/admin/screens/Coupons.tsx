@@ -40,6 +40,7 @@ export function Coupons() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   function load() {
     apiFetch("/api/coupons")
@@ -101,7 +102,14 @@ export function Coupons() {
     if (res?.ok) {
       const updated = (await res.json()) as Coupon;
       setCoupons((cur) => cur.map((c) => (c.id === coupon.id ? updated : c)));
+      setToggleError(null);
+      return;
     }
+    setToggleError(
+      res && (res.status === 401 || res.status === 403)
+        ? "Your admin session has expired. Please log out and log back in."
+        : "Couldn't update that coupon. Please try again.",
+    );
   }
 
   if (loading) return <p className="p-8 text-sm text-ink-soft">Loading coupons…</p>;
@@ -188,6 +196,14 @@ export function Coupons() {
         <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
           <h3 className="text-sm font-bold text-ink">Coupons ({coupons.length})</h3>
         </div>
+        {toggleError && (
+          <div className="flex items-center justify-between gap-3 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">
+            <span>{toggleError}</span>
+            <button type="button" onClick={() => setToggleError(null)} className="font-semibold uppercase tracking-wide hover:underline">
+              Dismiss
+            </button>
+          </div>
+        )}
         {coupons.length === 0 ? (
           <p className="p-8 text-center text-sm text-ink-soft">No coupons yet.</p>
         ) : (

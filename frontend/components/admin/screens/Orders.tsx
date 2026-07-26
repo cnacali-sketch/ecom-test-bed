@@ -66,6 +66,10 @@ export function Orders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // A PATCH (status/payment/shipping) can fail silently otherwise — a stale
+  // session or CSRF mismatch would 401/403 and the dropdown would just
+  // snap back with no explanation. Surface it instead of guessing why.
+  const [patchError, setPatchError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,8 +98,18 @@ export function Orders() {
     if (res?.ok) {
       const updated = (await res.json()) as Order;
       setOrders((cur) => cur.map((o) => (o.id === id ? updated : o)));
+      setPatchError(null);
+      return true;
     }
-    return res?.ok ?? false;
+    if (!res) {
+      setPatchError("Couldn't reach the server. Check your connection and try again.");
+    } else if (res.status === 401 || res.status === 403) {
+      setPatchError("Your admin session has expired. Please log out and log back in.");
+    } else {
+      const body = await res.json().catch(() => null);
+      setPatchError(body?.detail ?? `Update failed (HTTP ${res.status}).`);
+    }
+    return false;
   }
   const setStatus = (id: string, status: string) => patchOrder(id, "status", { status });
   const setPayment = (id: string, payment_status: string) => patchOrder(id, "payment", { payment_status });
@@ -106,7 +120,16 @@ export function Orders() {
   // so re-fetch both lists rather than trying to hand-patch order state here.
   async function resolveReturn(requestId: string, status: "approved" | "rejected") {
     const res = await apiFetch(`/api/returns/${requestId}?status=${status}`, { method: "PATCH" });
-    if (!res?.ok) return;
+    if (!res?.ok) {
+      if (res && (res.status === 401 || res.status === 403)) {
+        setPatchError("Your admin session has expired. Please log out and log back in.");
+      } else {
+        const body = await res?.json().catch(() => null);
+        setPatchError(body?.detail ?? "Couldn't resolve the return request. Please try again.");
+      }
+      return;
+    }
+    setPatchError(null);
     const [ordersRes, returnsRes] = await Promise.all([apiFetch("/api/orders/all"), apiFetch("/api/returns")]);
     if (ordersRes?.ok) setOrders((await ordersRes.json()) as Order[]);
     if (returnsRes?.ok) setReturnRequests((await returnsRes.json()) as ReturnRequest[]);
@@ -139,6 +162,16 @@ export function Orders() {
           )}
         </h3>
       </div>
+      {patchError && (
+        <div className="flex items-center justify-between gap-3 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {patchError}
+          </span>
+          <button type="button" onClick={() => setPatchError(null)} className="font-semibold uppercase tracking-wide hover:underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[820px] text-sm">
           <thead>
