@@ -15,16 +15,12 @@ import { CartProvider } from "@/lib/cart-context";
 import { WishlistProvider } from "@/lib/wishlist-context";
 import "./globals.css";
 
-// Without this, Next prerenders every page with no dynamic API (most of the
-// site) once at build time and serves that same snapshot to every visitor
-// afterward — a plain `fetch()` with no cache directive doesn't force
-// per-request rendering on its own. That silently broke live-editability:
-// an admin's Homepage editor save (GET /api/sections, fetched here) would
-// never reach a real visitor without a full rebuild + redeploy. Forcing the
-// whole tree dynamic is the correct tradeoff for a live storefront with an
-// admin CMS — the alternative (leaving pages static) means admin edits
-// don't take effect, which is a correctness bug, not a performance one.
-export const dynamic = "force-dynamic";
+// Previously force-dynamic here (see git history) so an admin's Homepage
+// editor save would reach visitors without a full rebuild. That worked but
+// meant NOTHING was ever cached — every page view did a live SSR round-trip,
+// measured live to cost 15-30s under real network conditions. Swapped for
+// fetchHomepageContent()'s own revalidate: 30 (lib/api.ts): pages cache
+// normally again, an admin edit shows up within ~30s instead of instantly.
 
 // Typefaces: Fraunces (display serif, echoes the gold-script logo) +
 // Archivo (grotesk body/UI), self-hosted via @fontsource-variable so

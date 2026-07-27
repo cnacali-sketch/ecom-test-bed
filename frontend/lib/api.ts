@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { adaptProduct, type BackendProduct } from "./backend-adapter";
 import {
   collections as mockCollections,
@@ -24,7 +26,7 @@ function apiBaseUrl(): string | null {
  * bundled mock data on any failure (network error, timeout, non-2xx, bad
  * JSON) instead of throwing — pages must never hard-crash for this reason.
  */
-async function fetchJson<T>(path: string): Promise<T | null> {
+async function fetchJson<T>(path: string, revalidateSeconds?: number): Promise<T | null> {
   const baseUrl = apiBaseUrl();
   if (!baseUrl) return null;
   const controller = new AbortController();
@@ -34,6 +36,7 @@ async function fetchJson<T>(path: string): Promise<T | null> {
     const response = await fetch(`${baseUrl}${path}`, {
       signal: controller.signal,
       headers: { Accept: "application/json" },
+      ...(revalidateSeconds != null ? { next: { revalidate: revalidateSeconds } } : {}),
     });
 
     if (!response.ok) return null;
@@ -108,6 +111,13 @@ export interface HomepageContentOverride {
   seo_faqs: { q: string; a: string }[] | null;
 }
 
-export async function fetchHomepageContent(): Promise<HomepageContentOverride | null> {
-  return fetchJson<HomepageContentOverride>("/api/sections");
-}
+// cache() dedupes this to exactly one backend call per request, regardless
+// of how many homepage sections (HeroBanner, QuickCtaRow, CampaignBand,
+// EditorialTiles, SeoContentBlock, layout.tsx's announcement, page.tsx's
+// New In heading) each independently call it — previously 7 real round-trips
+// per page view (measured live), now 1. revalidate: 30s means an admin
+// content edit takes up to 30s to appear instead of instantly, in exchange
+// for every other page load being served from Next's cache.
+export const fetchHomepageContent = cache(
+  async (): Promise<HomepageContentOverride | null> => fetchJson<HomepageContentOverride>("/api/sections", 30),
+);
