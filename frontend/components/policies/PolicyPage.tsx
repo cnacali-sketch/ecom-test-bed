@@ -23,10 +23,6 @@ export function PolicyPage({ title, updated, sections }: PolicyPageProps) {
       <h1 className="font-display mt-4 text-4xl italic text-ink">{title}</h1>
       <p className="mt-2 text-xs uppercase tracking-wide text-ink-soft">Last updated {updated}</p>
 
-      <div className="mt-6 border-l-2 border-gold bg-gold/5 px-4 py-3 text-sm text-ink-soft">
-        Draft policy — pending review before this store takes real orders.
-      </div>
-
       <div className="mt-8 space-y-8">
         {sections.map((section) => (
           <section key={section.heading}>
