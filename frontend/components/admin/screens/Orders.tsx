@@ -138,6 +138,16 @@ export function Orders({
   const setShipping = (id: string, courier: string, tracking_number: string) =>
     patchOrder(id, "shipping", { courier, tracking_number });
 
+  function toggleFlag(order: Order) {
+    if (order.flagged) {
+      patchOrder(order.id, "flag", { flagged: "false" });
+      return;
+    }
+    const reason = prompt(`Reason for flagging order #${order.id.slice(0, 8)}?`, "");
+    if (reason === null) return; // cancelled
+    patchOrder(order.id, "flag", { flagged: "true", reason: reason.trim() || "Flagged for review" });
+  }
+
   // Approving/rejecting also mutates the order (refund + restock on approve),
   // so re-fetch both lists rather than trying to hand-patch order state here.
   async function resolveReturn(requestId: string, status: "approved" | "rejected") {
@@ -265,10 +275,28 @@ export function Orders({
                     <tr className="border-b border-ink/5 bg-paper-tint/50">
                       <td colSpan={7} className="px-5 py-4">
                         {o.flagged && (
-                          <div className="mb-4 flex items-start gap-2 border border-sale/30 bg-sale/5 px-3 py-2 text-xs text-sale">
-                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                            <span>{o.flag_reason ?? "Flagged for review."}</span>
+                          <div className="mb-4 flex items-start justify-between gap-2 border border-sale/30 bg-sale/5 px-3 py-2 text-xs text-sale">
+                            <span className="flex items-start gap-2">
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              {o.flag_reason ?? "Flagged for review."}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleFlag(o)}
+                              className="shrink-0 font-semibold uppercase tracking-wide hover:underline"
+                            >
+                              Clear flag
+                            </button>
                           </div>
+                        )}
+                        {!o.flagged && (
+                          <button
+                            type="button"
+                            onClick={() => toggleFlag(o)}
+                            className="mb-4 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:text-sale"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" /> Flag for review
+                          </button>
                         )}
                         <ShippingDetail order={o} onSave={(courier, tracking) => setShipping(o.id, courier, tracking)} />
                         <ReturnRequestDetail

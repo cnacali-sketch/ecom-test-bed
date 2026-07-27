@@ -285,6 +285,12 @@ async def login(
         login_throttle.record_failure(email)
         raise _BAD_CREDENTIALS
 
+    if user.is_blocked:
+        # Deliberately distinct from _BAD_CREDENTIALS: the password was right,
+        # and a blocked customer needs to know to contact support rather than
+        # keep retrying a password that isn't the problem.
+        raise HTTPException(status_code=403, detail="This account has been suspended. Contact support.")
+
     login_throttle.reset(email)
     # No family_id: a fresh login is a new session, independent of any other
     # device. Revoking one must not touch the others.

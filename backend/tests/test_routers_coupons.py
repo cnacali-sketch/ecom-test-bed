@@ -120,7 +120,7 @@ async def test_validate_expired_coupon_422(admin_client: AsyncClient) -> None:
 async def test_validate_inactive_coupon_422(admin_client: AsyncClient) -> None:
     created = await admin_client.post("/api/coupons", json=_coupon_payload())
     coupon_id, code = created.json()["id"], created.json()["code"]
-    await admin_client.patch(f"/api/coupons/{coupon_id}?active=false")
+    await admin_client.patch(f"/api/coupons/{coupon_id}", json={"active": False})
     resp = await admin_client.post("/api/coupons/validate", json={"code": code, "subtotal": "500.00"})
     assert resp.status_code == 422
 
@@ -140,7 +140,7 @@ async def test_validate_does_not_increment_times_used(admin_client: AsyncClient)
 async def test_update_coupon_usage_limit(admin_client: AsyncClient) -> None:
     created = await admin_client.post("/api/coupons", json=_coupon_payload())
     coupon_id = created.json()["id"]
-    resp = await admin_client.patch(f"/api/coupons/{coupon_id}?usage_limit=5")
+    resp = await admin_client.patch(f"/api/coupons/{coupon_id}", json={"usage_limit": 5})
     assert resp.status_code == 200
     assert resp.json()["usage_limit"] == 5
 

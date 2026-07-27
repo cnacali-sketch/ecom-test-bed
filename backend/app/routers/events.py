@@ -9,6 +9,7 @@ id generated client-side, so behavior is attributable without requiring login.
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
@@ -36,6 +37,12 @@ EVENT_TYPES = {"page_view", "product_view", "add_to_cart", "checkout_started", "
 FRAUD_WINDOW_HOURS = 24
 AD_CLICK_FLAG_THRESHOLD = 5
 CHECKOUT_FLAG_THRESHOLD = 5
+# Coupon abuse looks at a code's whole lifetime, not a rolling window — a
+# coupon abuse pattern (one IP cycling through several accounts, or one
+# account/IP redeeming a code far more than a real shopper would) plays out
+# over the coupon's run, not necessarily within the last day.
+COUPON_ABUSE_MIN_ORDERS = 3
+COUPON_ABUSE_MIN_ACCOUNTS = 2
 
 # Deliberately coarse, regex-based UA parsing — good enough to bucket
 # "mobile vs desktop" and "which browser" for a dashboard chart, not meant to
@@ -241,22 +248,36 @@ class CheckoutVelocityFlag(BaseModel):
     sample_browser: str
 
 
+class CouponAbuseFlag(BaseModel):
+    coupon_code: str
+    ip_hash: str
+    sample_ip: str | None
+    order_count: int
+    distinct_accounts: int
+    total_discount_given: Decimal
+
+
 class FraudSummary(BaseModel):
     window_hours: int
     ad_click_flags: list[AdClickFlag]
     checkout_velocity_flags: list[CheckoutVelocityFlag]
+    coupon_abuse_flags: list[CouponAbuseFlag]
 
 
 @router.get("/fraud-summary", response_model=FraudSummary, dependencies=[Depends(require_admin)])
 async def fraud_summary(db: AsyncSession = Depends(get_db_session)) -> FraudSummary:
     """Tag-only fraud/abuse signals for admin review — never auto-blocks.
 
-    Two lenses, both derived from ip_hash grouping within FRAUD_WINDOW_HOURS:
+    Three lenses:
     - ad_click_flags: the same IP hitting page_view with a gclid/fbclid
-      (i.e. arriving via a Google/Meta ad) repeatedly — ad-click-fraud or bot
-      traffic burning ad spend, the main concern once most traffic is paid.
+      (i.e. arriving via a Google/Meta ad) repeatedly within FRAUD_WINDOW_HOURS
+      — ad-click-fraud or bot traffic burning ad spend.
     - checkout_velocity_flags: the same IP hitting checkout_started/
-      order_placed repeatedly — a fake-order or coupon-abuse pattern.
+      order_placed repeatedly within FRAUD_WINDOW_HOURS — a fake-order pattern.
+    - coupon_abuse_flags: a coupon code redeemed from the same IP across
+      several distinct accounts, or far more times than a real shopper would
+      need, over the coupon's whole lifetime (not windowed — this pattern
+      plays out over a coupon's run, not necessarily the last day).
 
     Deliberately advisory only: shared offices, CGNAT, and mobile carrier
     NAT all put many real shoppers behind one IP, so this flags for a human
@@ -329,8 +350,40 @@ async def fraud_summary(db: AsyncSession = Depends(get_db_session)) -> FraudSumm
         reverse=True,
     )
 
+    coupon_orders = await db.execute(
+        select(Order.coupon_code, Order.ip_address, Order.user_id, Order.discount_amount).where(
+            Order.coupon_code.is_not(None), Order.ip_address.is_not(None)
+        )
+    )
+    coupon_groups: dict[tuple[str, str], dict] = {}
+    for coupon_code, ip_address, user_id, discount_amount in coupon_orders.all():
+        group = coupon_groups.setdefault(
+            (coupon_code, ip_address), {"accounts": set(), "count": 0, "discount": Decimal("0")}
+        )
+        group["accounts"].add(user_id)
+        group["count"] += 1
+        group["discount"] += discount_amount or Decimal("0")
+
+    coupon_abuse_flags = sorted(
+        (
+            CouponAbuseFlag(
+                coupon_code=coupon_code,
+                ip_hash=hash_ip(ip_address),
+                sample_ip=ip_address,
+                order_count=group["count"],
+                distinct_accounts=len(group["accounts"]),
+                total_discount_given=group["discount"],
+            )
+            for (coupon_code, ip_address), group in coupon_groups.items()
+            if group["count"] >= COUPON_ABUSE_MIN_ORDERS or len(group["accounts"]) >= COUPON_ABUSE_MIN_ACCOUNTS
+        ),
+        key=lambda flag: flag.order_count,
+        reverse=True,
+    )
+
     return FraudSummary(
         window_hours=FRAUD_WINDOW_HOURS,
         ad_click_flags=ad_click_flags,
         checkout_velocity_flags=checkout_velocity_flags,
+        coupon_abuse_flags=coupon_abuse_flags,
     )

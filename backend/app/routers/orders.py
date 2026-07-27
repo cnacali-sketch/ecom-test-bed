@@ -10,6 +10,7 @@
   PATCH /api/orders/{id}/status   — fulfilment status (admin)
   PATCH /api/orders/{id}/payment  — payment status (admin)
   PATCH /api/orders/{id}/shipping — courier + tracking number (admin)
+  PATCH /api/orders/{id}/flag     — manually flag/unflag for review (admin)
 """
 import uuid
 from datetime import datetime, timezone
@@ -242,6 +243,9 @@ async def create_order(
     """
     is_admin_caller = bool(user and user.role == ROLE_ADMIN)
 
+    if user and user.is_blocked:
+        raise HTTPException(status_code=403, detail="This account has been suspended. Contact support.")
+
     if not is_admin_caller:
         # Admin phone/manual orders skip the throttle same as they skip T&C —
         # an admin isn't the abuse case this guards against.
@@ -413,6 +417,31 @@ async def update_payment_status(
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
     order.payment_status = payment_status
+    await db.commit()
+    await db.refresh(order, attribute_names=["items"])
+    return order
+
+
+@router.patch("/{order_id}/flag", response_model=OrderRead, dependencies=[Depends(require_admin)])
+async def flag_order(
+    order_id: uuid.UUID,
+    flagged: bool,
+    reason: str | None = None,
+    db: AsyncSession = Depends(get_db_session),
+) -> Order:
+    """Manually flag or clear an order for review. Admin-gated.
+
+    Separate from the automatic price-tampering flag set at order creation
+    (see `_authoritative_pricing`) — this is the human-initiated version, for
+    an order that looks off for reasons no automated check catches (a
+    suspicious address pattern, a coupon-abuse hit from the Fraud screen,
+    a support call). Both share the same `flagged`/`flag_reason` columns."""
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.flagged = flagged
+    order.flag_reason = reason if flagged else None
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order

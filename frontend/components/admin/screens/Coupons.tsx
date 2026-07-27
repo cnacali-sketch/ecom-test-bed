@@ -7,10 +7,11 @@
 // a full top-level navigation carries the admin auth cookie same as any other
 // authenticated page, no CORS credential dance needed).
 
-import { Ticket, QrCode } from "lucide-react";
+import { Pencil, QrCode, Ticket, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { apiBaseUrl, apiFetch } from "@/lib/api-client";
+import { rupee } from "@/lib/admin/helpers";
 
 interface Coupon {
   id: string;
@@ -22,7 +23,11 @@ interface Coupon {
   times_used: number;
   expires_at: string | null;
   active: boolean;
+  total_discount_given: string;
+  total_order_value: string;
 }
+
+const editCls = "w-full border border-ink/15 bg-card px-2 py-1 text-xs text-ink outline-none focus:border-teal";
 
 const emptyForm = {
   code: "",
@@ -41,6 +46,7 @@ export function Coupons() {
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function load() {
     apiFetch("/api/coupons")
@@ -97,18 +103,41 @@ export function Coupons() {
     }
   }
 
-  async function toggleActive(coupon: Coupon) {
-    const res = await apiFetch(`/api/coupons/${coupon.id}?active=${!coupon.active}`, { method: "PATCH" });
+  async function patchCoupon(id: string, body: Record<string, unknown>) {
+    const res = await apiFetch(`/api/coupons/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (res?.ok) {
       const updated = (await res.json()) as Coupon;
-      setCoupons((cur) => cur.map((c) => (c.id === coupon.id ? updated : c)));
+      setCoupons((cur) => cur.map((c) => (c.id === id ? updated : c)));
+      setToggleError(null);
+      return true;
+    }
+    if (res && (res.status === 401 || res.status === 403)) {
+      setToggleError("Your admin session has expired. Please log out and log back in.");
+    } else {
+      const body2 = await res?.json().catch(() => null);
+      setToggleError(body2?.detail ?? "Couldn't update that coupon. Please try again.");
+    }
+    return false;
+  }
+
+  const toggleActive = (coupon: Coupon) => patchCoupon(coupon.id, { active: !coupon.active });
+
+  async function deleteCoupon(coupon: Coupon) {
+    if (!confirm(`Delete coupon ${coupon.code}? This can't be undone.`)) return;
+    const res = await apiFetch(`/api/coupons/${coupon.id}`, { method: "DELETE" });
+    if (res?.ok || res?.status === 204) {
+      setCoupons((cur) => cur.filter((c) => c.id !== coupon.id));
       setToggleError(null);
       return;
     }
     setToggleError(
       res && (res.status === 401 || res.status === 403)
         ? "Your admin session has expired. Please log out and log back in."
-        : "Couldn't update that coupon. Please try again.",
+        : "Couldn't delete that coupon. Please try again.",
     );
   }
 
@@ -208,62 +237,187 @@ export function Coupons() {
           <p className="p-8 text-center text-sm text-ink-soft">No coupons yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full min-w-[960px] text-sm">
               <thead>
                 <tr className="border-b border-ink/10 text-left text-[11px] uppercase tracking-wide text-ink-soft">
                   <th className="px-5 py-3 font-semibold">Code</th>
                   <th className="px-3 py-3 font-semibold">Discount</th>
                   <th className="px-3 py-3 font-semibold">Min order</th>
                   <th className="px-3 py-3 font-semibold">Used</th>
+                  <th className="px-3 py-3 font-semibold">Discount given</th>
+                  <th className="px-3 py-3 font-semibold">Revenue</th>
                   <th className="px-3 py-3 font-semibold">Expires</th>
                   <th className="px-3 py-3 font-semibold">Status</th>
-                  <th className="px-5 py-3 font-semibold">QR</th>
+                  <th className="px-3 py-3 font-semibold">QR</th>
+                  <th className="px-5 py-3 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {coupons.map((c) => (
-                  <tr key={c.id} className="border-b border-ink/5 last:border-0">
-                    <td className="px-5 py-3 font-mono text-xs text-ink">{c.code}</td>
-                    <td className="px-3 py-3 text-ink-soft">
-                      {c.discount_type === "percent" ? `${c.value}%` : `₹${c.value}`}
-                    </td>
-                    <td className="px-3 py-3 text-ink-soft">₹{c.min_order_value}</td>
-                    <td className="px-3 py-3 text-ink-soft">
-                      {c.times_used}
-                      {c.usage_limit != null ? ` / ${c.usage_limit}` : ""}
-                    </td>
-                    <td className="px-3 py-3 text-ink-soft">
-                      {c.expires_at ? new Date(c.expires_at).toLocaleDateString() : "—"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <button
-                        type="button"
-                        onClick={() => toggleActive(c)}
-                        className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${c.active ? "bg-emerald-600/10 text-emerald-700" : "bg-ink/10 text-ink-soft"}`}
-                      >
-                        {c.active ? "Active" : "Inactive"}
-                      </button>
-                    </td>
-                    <td className="px-5 py-3">
-                      {apiBaseUrl() && (
-                        <a
-                          href={`${apiBaseUrl()}/api/coupons/${c.id}/qr`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="grid h-7 w-7 place-items-center text-ink-soft hover:text-teal"
-                          aria-label={`View QR code for ${c.code}`}
+                {coupons.map((c) =>
+                  editingId === c.id ? (
+                    <EditCouponRow
+                      key={c.id}
+                      coupon={c}
+                      onCancel={() => setEditingId(null)}
+                      onSave={async (body) => {
+                        const ok = await patchCoupon(c.id, body);
+                        if (ok) setEditingId(null);
+                      }}
+                    />
+                  ) : (
+                    <tr key={c.id} className="border-b border-ink/5 last:border-0">
+                      <td className="px-5 py-3 font-mono text-xs text-ink">{c.code}</td>
+                      <td className="px-3 py-3 text-ink-soft">
+                        {c.discount_type === "percent" ? `${c.value}%` : `₹${c.value}`}
+                      </td>
+                      <td className="px-3 py-3 text-ink-soft">₹{c.min_order_value}</td>
+                      <td className="px-3 py-3 text-ink-soft">
+                        {c.times_used}
+                        {c.usage_limit != null ? ` / ${c.usage_limit}` : ""}
+                      </td>
+                      <td className="px-3 py-3 text-ink-soft">{rupee(Number(c.total_discount_given))}</td>
+                      <td className="px-3 py-3 text-ink-soft">{rupee(Number(c.total_order_value))}</td>
+                      <td className="px-3 py-3 text-ink-soft">
+                        {c.expires_at ? new Date(c.expires_at).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-3 py-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleActive(c)}
+                          className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${c.active ? "bg-emerald-600/10 text-emerald-700" : "bg-ink/10 text-ink-soft"}`}
                         >
-                          <QrCode className="h-4 w-4" />
-                        </a>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                          {c.active ? "Active" : "Inactive"}
+                        </button>
+                      </td>
+                      <td className="px-3 py-3">
+                        {apiBaseUrl() && (
+                          <a
+                            href={`${apiBaseUrl()}/api/coupons/${c.id}/qr`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="grid h-7 w-7 place-items-center text-ink-soft hover:text-teal"
+                            aria-label={`View QR code for ${c.code}`}
+                          >
+                            <QrCode className="h-4 w-4" />
+                          </a>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(c.id)}
+                            className="grid h-7 w-7 place-items-center text-ink-soft hover:text-teal"
+                            aria-label={`Edit ${c.code}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteCoupon(c)}
+                            className="grid h-7 w-7 place-items-center text-ink-soft hover:text-sale"
+                            aria-label={`Delete ${c.code}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ),
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function EditCouponRow({
+  coupon,
+  onSave,
+  onCancel,
+}: {
+  coupon: Coupon;
+  onSave: (body: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [discountType, setDiscountType] = useState<"percent" | "flat">(coupon.discount_type);
+  const [value, setValue] = useState(coupon.value);
+  const [minOrder, setMinOrder] = useState(coupon.min_order_value);
+  const [usageLimit, setUsageLimit] = useState(coupon.usage_limit != null ? String(coupon.usage_limit) : "");
+  const [expiresAt, setExpiresAt] = useState(coupon.expires_at ? coupon.expires_at.slice(0, 10) : "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave({
+        discount_type: discountType,
+        value,
+        min_order_value: minOrder || "0",
+        usage_limit: usageLimit.trim() ? Number(usageLimit) : null,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <tr className="border-b border-ink/5 bg-paper-tint/50 last:border-0">
+      <td className="px-5 py-3 font-mono text-xs text-ink">{coupon.code}</td>
+      <td className="px-3 py-3" colSpan={2}>
+        <div className="flex items-center gap-1.5">
+          <select
+            value={discountType}
+            onChange={(e) => setDiscountType(e.target.value as "percent" | "flat")}
+            className={editCls}
+          >
+            <option value="percent">Percent</option>
+            <option value="flat">Flat</option>
+          </select>
+          <input value={value} onChange={(e) => setValue(e.target.value)} className={editCls} placeholder="Value" />
+          <input value={minOrder} onChange={(e) => setMinOrder(e.target.value)} className={editCls} placeholder="Min order" />
+        </div>
+      </td>
+      <td className="px-3 py-3">
+        <input
+          value={usageLimit}
+          onChange={(e) => setUsageLimit(e.target.value)}
+          className={editCls}
+          placeholder="Unlimited"
+        />
+      </td>
+      <td className="px-3 py-3 text-ink-soft" colSpan={2}>
+        {rupee(Number(coupon.total_discount_given))} given · {rupee(Number(coupon.total_order_value))} revenue
+      </td>
+      <td className="px-3 py-3">
+        <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className={editCls} />
+      </td>
+      <td className="px-3 py-3 text-ink-soft">{coupon.active ? "Active" : "Inactive"}</td>
+      <td className="px-3 py-3" />
+      <td className="px-5 py-3">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-md bg-teal px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-teal-deep disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="grid h-7 w-7 place-items-center text-ink-soft hover:text-ink"
+            aria-label="Cancel edit"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }

@@ -49,6 +49,10 @@ class User(Base):
     # When true, billing == postal and billing_address is ignored by consumers.
     billing_same: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
+    # ---- Admin blacklist (see routers/customers.py) ----
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    blocked_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
     @property
     def is_admin(self) -> bool:
         return self.role == ROLE_ADMIN
