@@ -1,17 +1,20 @@
 "use client";
 
 // Client-side image picker. Enforces an exact square (1000×1000) so the shop
-// grid stays uniform, and holds the result as a base64 data URL.
+// grid stays uniform, then uploads to /api/media and stores the returned URL.
 //
-// NOTE: images live only in browser state right now — there is no upload
-// endpoint yet, so a saved data URL is large and not shared across devices.
-// Replace with an upload-to-storage endpoint before production.
+// Storing the URL rather than a base64 data URL matters a lot: a data URL is
+// ~33% bigger than the file, gets written into the DB row, and is then
+// inlined into the HTML of every page that renders it. One 2 MB photo saved
+// this way made the homepage a 5.4 MB document (measured live) — the URL is
+// ~40 bytes and the browser caches the image separately.
 
 import { AlertTriangle, CheckCircle2, Trash2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { fmtSize } from "@/lib/admin/helpers";
 import { REQ_IMG } from "@/lib/admin/types";
+import { apiBaseUrl, apiFetch } from "@/lib/api-client";
 import { HelpTip } from "./atoms";
 
 interface Meta {
@@ -33,7 +36,27 @@ export function ImageDrop({
   const [drag, setDrag] = useState(false);
   const [err, setErr] = useState("");
   const [meta, setMeta] = useState<Meta | null>(null);
+  const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await apiFetch("/api/media", { method: "POST", body: form });
+      if (!res?.ok) {
+        setErr("Upload failed. Please try again.");
+        return;
+      }
+      const item = (await res.json()) as { url: string };
+      onChange(`${apiBaseUrl() ?? ""}${item.url}`);
+    } catch {
+      setErr("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const handle = (fileList: FileList | null) => {
     setErr("");
@@ -43,27 +66,30 @@ export function ImageDrop({
       setErr("That file isn't an image.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const url = String(e.target?.result ?? "");
-      const img = new Image();
-      img.onload = () => {
-        if (img.naturalWidth !== REQ_IMG.w || img.naturalHeight !== REQ_IMG.h) {
-          setErr(
-            `Your photo is ${img.naturalWidth} × ${img.naturalHeight} px. Must be exactly ${REQ_IMG.w} × ${REQ_IMG.h} px.`,
-          );
-          return;
-        }
-        if (file.size > REQ_IMG.maxMB * 1048576) {
-          setErr(`Photo is ${fmtSize(file.size)}. Must be under ${REQ_IMG.maxMB} MB.`);
-          return;
-        }
-        setMeta({ name: file.name, size: file.size, w: img.naturalWidth, h: img.naturalHeight });
-        onChange(url);
-      };
-      img.src = url;
+    // Read only to measure dimensions — the file itself is what gets
+    // uploaded, never this data URL.
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      if (img.naturalWidth !== REQ_IMG.w || img.naturalHeight !== REQ_IMG.h) {
+        setErr(
+          `Your photo is ${img.naturalWidth} × ${img.naturalHeight} px. Must be exactly ${REQ_IMG.w} × ${REQ_IMG.h} px.`,
+        );
+        return;
+      }
+      if (file.size > REQ_IMG.maxMB * 1048576) {
+        setErr(`Photo is ${fmtSize(file.size)}. Must be under ${REQ_IMG.maxMB} MB.`);
+        return;
+      }
+      setMeta({ name: file.name, size: file.size, w: img.naturalWidth, h: img.naturalHeight });
+      upload(file);
     };
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      setErr("Couldn't read that image.");
+    };
+    img.src = objectUrl;
   };
 
   return (
@@ -127,7 +153,7 @@ export function ImageDrop({
             className={`${compact ? "mb-1 h-6 w-6" : "mb-2 h-8 w-8"} ${drag ? "text-teal" : "text-ink-soft/60"}`}
           />
           <div className={`${compact ? "text-xs" : "text-sm"} font-semibold text-ink`}>
-            Drop photo or click
+            {uploading ? "Uploading…" : "Drop photo or click"}
           </div>
           {!compact && (
             <div className="mt-0.5 text-xs text-ink-soft/70">

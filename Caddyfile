@@ -1,7 +1,13 @@
+# `encode` is not on by default in Caddy — without it every HTML/JS/CSS/JSON
+# response goes out uncompressed. Measured live: the homepage was shipping
+# 5.4 MB raw to every visitor. zstd is listed first so clients that support
+# it get the better ratio; gzip covers everything else.
 savvyinteal.com, www.savvyinteal.com {
+	encode zstd gzip
 	reverse_proxy frontend:3000
 }
 
 api.savvyinteal.com {
+	encode zstd gzip
 	reverse_proxy backend:8000
 }

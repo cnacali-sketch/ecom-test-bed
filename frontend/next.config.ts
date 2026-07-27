@@ -20,6 +20,12 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "images.pexels.com",
       },
+      {
+        // Admin-uploaded media (ImageDrop -> POST /api/media), served by the
+        // backend's StaticFiles mount at /media.
+        protocol: "https",
+        hostname: "api.savvyinteal.com",
+      },
     ],
   },
 };
