@@ -291,7 +291,7 @@ export const siteConfig = {
           { label: "Track Order", href: "/track-order" },
           { label: "Returns & Exchanges", href: "/policies/returns" },
           { label: "Refund & Cancellation Policy", href: "/policies/refund" },
-          { label: "Contact", href: "/coming-soon" },
+          { label: "Contact", href: "/contact" },
           { label: "FAQ", href: "/coming-soon" },
         ],
       },
@@ -303,7 +303,7 @@ export const siteConfig = {
         ],
       },
     ],
-    fineprint: "Photography via Pexels (free license). Demo storefront — not a live shop.",
+    fineprint: "",
   },
 
   // ---------- Legal / policy pages ----------
@@ -348,7 +348,7 @@ export const siteConfig = {
         },
         {
           heading: "Contact",
-          body: "Questions about these Terms? Write to us at support@savvyinteal.com.",
+          body: "Questions about these Terms? Write to us at savvyinteal@gmail.com.",
         },
       ],
     },
@@ -419,11 +419,11 @@ export const siteConfig = {
         },
         {
           heading: "Your rights",
-          body: "You can view or update your profile from your account page at any time. To request a copy of your data, or ask us to delete your account, write to us at support@savvyinteal.com.",
+          body: "You can view or update your profile from your account page at any time. To request a copy of your data, or ask us to delete your account, write to us at savvyinteal@gmail.com.",
         },
         {
           heading: "Grievance officer",
-          body: "For any privacy or data-related complaint, contact our Grievance Officer: Savvy In Teal Support Team, support@savvyinteal.com.",
+          body: "For any privacy or data-related complaint, contact our Grievance Officer: Savvy In Teal Support Team, savvyinteal@gmail.com.",
         },
         {
           heading: "Changes to this policy",

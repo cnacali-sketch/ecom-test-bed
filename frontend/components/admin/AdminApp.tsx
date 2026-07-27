@@ -17,6 +17,7 @@ import {
   Images,
   LayoutGrid,
   LogOut,
+  Mail,
   Package,
   Settings,
   ShieldAlert,
@@ -57,6 +58,7 @@ import { Analytics } from "./screens/Analytics";
 import { Coupons } from "./screens/Coupons";
 import { Fraud } from "./screens/Fraud";
 import { ErrorLogs } from "./screens/ErrorLogs";
+import { Messages } from "./screens/Messages";
 
 // An order still "pending" (no status change at all) past this age is
 // flagged as unattended — long enough to not fire on normal same-day
@@ -281,6 +283,7 @@ export function AdminApp() {
       <NavBtn id="analytics" icon={TrendingUp} label="Analytics" />
       <NavBtn id="fraud" icon={ShieldAlert} label="Fraud & abuse" />
       <NavBtn id="errorLogs" icon={AlertTriangle} label="Error logs" />
+      <NavBtn id="messages" icon={Mail} label="Messages" />
     </nav>
   );
 
@@ -298,6 +301,7 @@ export function AdminApp() {
     coupons: "Coupons",
     fraud: "Fraud & abuse",
     errorLogs: "Error logs",
+    messages: "Messages",
   };
 
   return (
@@ -492,6 +496,7 @@ export function AdminApp() {
           {view === "coupons" && <Coupons />}
           {view === "fraud" && <Fraud />}
           {view === "errorLogs" && <ErrorLogs />}
+          {view === "messages" && <Messages />}
         </main>
       </div>
 

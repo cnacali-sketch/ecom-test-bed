@@ -11,6 +11,7 @@ from app.routers import (
     auth,
     categories,
     collections,
+    contact,
     coupons,
     customers,
     error_logs,
@@ -68,6 +69,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(media.router)
     fastapi_app.include_router(sections.router)
     fastapi_app.include_router(error_logs.router)
+    fastapi_app.include_router(contact.router)
 
     fastapi_app.mount("/media", StaticFiles(directory=media.UPLOAD_DIR), name="media")
 

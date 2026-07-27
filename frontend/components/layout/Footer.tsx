@@ -43,7 +43,7 @@ export function Footer() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-6 sm:flex-row sm:justify-between sm:px-6">
           <Image src={brand.logo.src} alt={brand.logo.alt} width={200} height={62} className="h-8 w-auto opacity-90" />
           <p className="text-xs text-ink-soft">
-            © {new Date().getFullYear()} {brand.name}. {footer.fineprint}
+            © {new Date().getFullYear()} {brand.name}.{footer.fineprint ? ` ${footer.fineprint}` : ""}
           </p>
         </div>
       </div>

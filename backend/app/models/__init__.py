@@ -6,6 +6,7 @@ which Alembic's `env.py` relies on for autogenerate support.
 from app.models.agent_decision import AgentDecision
 from app.models.category import Category
 from app.models.collection import Collection
+from app.models.contact_message import ContactMessage
 from app.models.coupon import Coupon
 from app.models.error_log import ErrorLog
 from app.models.homepage_content import HomepageContent
@@ -22,6 +23,7 @@ __all__ = [
     "AgentDecision",
     "Category",
     "Collection",
+    "ContactMessage",
     "Coupon",
     "ErrorLog",
     "HomepageContent",
