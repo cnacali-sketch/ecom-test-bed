@@ -1,6 +1,6 @@
 """add user blacklist columns
 
-Revision ID: b2c3d4e5f6a7
+Revision ID: 59fc96301fe3
 Revises: a1b2c3d4e5f6
 Create Date: 2026-07-27 00:00:00.000000
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-revision = "b2c3d4e5f6a7"
+revision = "59fc96301fe3"
 down_revision = "a1b2c3d4e5f6"
 branch_labels = None
 depends_on = None
