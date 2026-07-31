@@ -1,21 +1,32 @@
 "use client";
 
-// Client-side image picker. Enforces an exact square (1000×1000) so the shop
-// grid stays uniform, then uploads to /api/media and stores the returned URL.
+// Client-side image picker. Validates against the slot's ImageSpec, then
+// uploads to /api/media and stores the returned URL.
 //
-// Storing the URL rather than a base64 data URL matters a lot: a data URL is
-// ~33% bigger than the file, gets written into the DB row, and is then
-// inlined into the HTML of every page that renders it. One 2 MB photo saved
-// this way made the homepage a 5.4 MB document (measured live) — the URL is
-// ~40 bytes and the browser caches the image separately.
+// Two things it deliberately gets right:
+//
+// 1. Aspect ratio, not exact pixels. This used to demand an exact 1000×1000
+//    square for every slot — but product cards, hero, campaign and editorial
+//    tiles all render 4:5, so a square upload was silently centre-cropped and
+//    the owner lost the top and bottom of their photo without being told.
+//
+// 2. Stores the URL, never a base64 data URL. A data URL is ~33% bigger than
+//    the file, lands in the DB row, and gets inlined into the HTML of every
+//    page that renders it. One 2 MB photo saved that way made the homepage a
+//    5.4 MB document (measured live); the URL is ~40 bytes and the browser
+//    caches the image separately.
 
 import { AlertTriangle, CheckCircle2, Trash2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { fmtSize } from "@/lib/admin/helpers";
-import { REQ_IMG } from "@/lib/admin/types";
+import { IMG_SPECS, type ImageSpec } from "@/lib/admin/types";
 import { apiBaseUrl, apiFetch } from "@/lib/api-client";
 import { HelpTip } from "./atoms";
+
+// A photo cropped from a phone or edited by hand is rarely pixel-exact, so
+// compare ratios with a little slack rather than demanding exact dimensions.
+const RATIO_TOLERANCE = 0.02;
 
 interface Meta {
   name: string;
@@ -28,10 +39,13 @@ export function ImageDrop({
   value,
   onChange,
   compact = false,
+  spec = IMG_SPECS.product,
 }: {
   value: string;
   onChange: (url: string) => void;
   compact?: boolean;
+  /** Which slot this picker fills — drives the aspect ratio and size limit. */
+  spec?: ImageSpec;
 }) {
   const [drag, setDrag] = useState(false);
   const [err, setErr] = useState("");
@@ -72,17 +86,29 @@ export function ImageDrop({
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(objectUrl);
-      if (img.naturalWidth !== REQ_IMG.w || img.naturalHeight !== REQ_IMG.h) {
+      const { naturalWidth: w, naturalHeight: h } = img;
+
+      const wanted = spec.w / spec.h;
+      const got = w / h;
+      if (Math.abs(got - wanted) / wanted > RATIO_TOLERANCE) {
         setErr(
-          `Your photo is ${img.naturalWidth} × ${img.naturalHeight} px. Must be exactly ${REQ_IMG.w} × ${REQ_IMG.h} px.`,
+          `Your photo is ${w} × ${h}px, the wrong shape for this slot — it would get cropped. ` +
+            `Needs to be ${spec.shape} (recommended ${spec.w} × ${spec.h}px).`,
         );
         return;
       }
-      if (file.size > REQ_IMG.maxMB * 1048576) {
-        setErr(`Photo is ${fmtSize(file.size)}. Must be under ${REQ_IMG.maxMB} MB.`);
+
+      const maxBytes = spec.maxKB * 1024;
+      if (file.size > maxBytes) {
+        setErr(
+          `Photo is ${fmtSize(file.size)} — too heavy, it would slow the page down. ` +
+            `Keep it under ${spec.maxKB} KB. Saving as WebP instead of PNG usually shrinks it by 10x ` +
+            `with no visible difference (try squoosh.app).`,
+        );
         return;
       }
-      setMeta({ name: file.name, size: file.size, w: img.naturalWidth, h: img.naturalHeight });
+
+      setMeta({ name: file.name, size: file.size, w, h });
       upload(file);
     };
     img.onerror = () => {
@@ -97,9 +123,9 @@ export function ImageDrop({
       {!compact && (
         <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-ink">
           Product photo{" "}
-          <HelpTip text="Every photo must be the same shape so your shop grid stays neat." />
+          <HelpTip text="Every photo must be the same shape so your shop grid stays neat. Save as WebP to keep the file small — your pages load faster." />
           <span className="ml-auto rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-semibold text-ink-soft">
-            Square · exactly {REQ_IMG.w}×{REQ_IMG.h} · ≤{REQ_IMG.maxMB} MB
+            {spec.shape} · {spec.w}×{spec.h} · ≤{spec.maxKB} KB
           </span>
         </div>
       )}
@@ -155,11 +181,9 @@ export function ImageDrop({
           <div className={`${compact ? "text-xs" : "text-sm"} font-semibold text-ink`}>
             {uploading ? "Uploading…" : "Drop photo or click"}
           </div>
-          {!compact && (
-            <div className="mt-0.5 text-xs text-ink-soft/70">
-              Photos that aren&apos;t {REQ_IMG.w}×{REQ_IMG.h} px are rejected automatically
-            </div>
-          )}
+          <div className={`mt-0.5 text-ink-soft/70 ${compact ? "text-[11px]" : "text-xs"}`}>
+            {spec.shape} · {spec.w}×{spec.h}px · ≤{spec.maxKB} KB
+          </div>
           <input
             ref={inputRef}
             type="file"

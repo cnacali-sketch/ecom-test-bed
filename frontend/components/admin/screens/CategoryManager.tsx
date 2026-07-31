@@ -10,7 +10,7 @@ import { useState } from "react";
 import { GripVertical, Trash2 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
-import type { AdminCategory, AdminProduct } from "@/lib/admin/types";
+import { IMG_SPECS, type AdminCategory, type AdminProduct } from "@/lib/admin/types";
 import { inputCls, useDnd } from "../atoms";
 import { ImageDrop } from "../ImageDrop";
 
@@ -145,7 +145,7 @@ export function CategoryManager({
                 <GripVertical className="h-5 w-5" />
               </span>
               <div className="h-12 w-12 shrink-0">
-                <ImageDrop value={c.image} onChange={(v) => update(c.id, { image: v })} compact />
+                <ImageDrop value={c.image} onChange={(v) => update(c.id, { image: v })} compact spec={IMG_SPECS.tile} />
               </div>
               <input
                 className={inputCls + " max-w-xs"}

@@ -8,7 +8,7 @@ import { AlertTriangle, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl, apiFetch } from "@/lib/api-client";
-import { REQ_IMG, type MediaItem } from "@/lib/admin/types";
+import { MEDIA_MAX_KB, type MediaItem } from "@/lib/admin/types";
 
 function readDimensions(file: File): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {
@@ -49,17 +49,16 @@ export function MediaLibrary() {
         continue;
       }
       try {
-        const { width, height } = await readDimensions(file);
-        if (width !== REQ_IMG.w || height !== REQ_IMG.h) {
-          setErr(`Skipped ${file.name} — must be ${REQ_IMG.w}×${REQ_IMG.h}px.`);
-          continue;
-        }
+        await readDimensions(file);
       } catch {
         setErr(`Skipped ${file.name} — couldn't read as an image.`);
         continue;
       }
-      if (file.size > REQ_IMG.maxMB * 1024 * 1024) {
-        setErr(`Skipped ${file.name} — over ${REQ_IMG.maxMB}MB.`);
+      // No aspect-ratio rule here: this is a shared pool, so the right shape
+      // depends on which slot uses the image. Size still matters — see
+      // MEDIA_MAX_KB.
+      if (file.size > MEDIA_MAX_KB * 1024) {
+        setErr(`Skipped ${file.name} — over ${MEDIA_MAX_KB}KB. Save it as WebP to shrink it (try squoosh.app).`);
         continue;
       }
 
@@ -112,7 +111,7 @@ export function MediaLibrary() {
         <UploadCloud className="mb-2 h-8 w-8 text-ink-soft/60" />
         <div className="text-sm font-semibold text-ink">Drop photos or click to upload</div>
         <div className="text-xs text-ink-soft/70">
-          Exactly {REQ_IMG.w}×{REQ_IMG.h}px each · ≤{REQ_IMG.maxMB}MB · {media.length} in library
+          Any shape · ≤{MEDIA_MAX_KB}KB each · {media.length} in library
         </div>
         <input
           ref={inputRef}

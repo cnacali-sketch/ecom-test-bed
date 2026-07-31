@@ -21,6 +21,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
+import { IMG_SPECS, type ImageSpec } from "@/lib/admin/types";
 import { siteConfig } from "@/content/site.config";
 import { inputCls, Toggle } from "../atoms";
 import { ImageDrop } from "../ImageDrop";
@@ -138,7 +139,13 @@ function fillWithDefaults(fetched: HomepageContent): HomepageContent {
   };
 }
 
-type FieldSpec<T> = { key: keyof T; placeholder: string; type?: "text" | "textarea" | "image" };
+type FieldSpec<T> = {
+  key: keyof T;
+  placeholder: string;
+  type?: "text" | "textarea" | "image";
+  /** Required when type is "image" — quick CTAs are square, editorial tiles are 4:5. */
+  imageSpec?: ImageSpec;
+};
 
 /** Shared add/edit/remove list editor for the four repeating homepage sections. */
 function RepeatableList<T extends object>({
@@ -180,7 +187,12 @@ function RepeatableList<T extends object>({
             {fields.map((f) =>
               f.type === "image" ? (
                 <div key={String(f.key)} className="sm:col-span-2">
-                  <ImageDrop value={fieldValue(item, f.key)} onChange={(v) => updateItem(index, f.key, v)} compact />
+                  <ImageDrop
+                    value={fieldValue(item, f.key)}
+                    onChange={(v) => updateItem(index, f.key, v)}
+                    compact
+                    spec={f.imageSpec}
+                  />
                 </div>
               ) : f.type === "textarea" ? (
                 <textarea
@@ -316,7 +328,7 @@ export function SectionEditor() {
           <input className={inputCls} value={content.hero_cta_label ?? ""} onChange={(e) => set("hero_cta_label", e.target.value)} placeholder="Button label" />
           <input className={inputCls + " sm:col-span-2"} value={content.hero_cta_href ?? ""} onChange={(e) => set("hero_cta_href", e.target.value)} placeholder="Button link (e.g. /collections/hair-accessories)" />
           <div className="sm:col-span-2">
-            <ImageDrop value={content.hero_image ?? ""} onChange={(v) => set("hero_image", v)} compact />
+            <ImageDrop value={content.hero_image ?? ""} onChange={(v) => set("hero_image", v)} compact spec={IMG_SPECS.hero} />
           </div>
           <input className={inputCls + " sm:col-span-2"} value={content.hero_image_alt ?? ""} onChange={(e) => set("hero_image_alt", e.target.value)} placeholder="Image alt text (for screen readers)" />
         </div>
@@ -332,7 +344,7 @@ export function SectionEditor() {
           fields={[
             { key: "label", placeholder: "Label (e.g. Claw Clips)" },
             { key: "href", placeholder: "Link (e.g. /collections/hair-accessories)" },
-            { key: "image", placeholder: "Image", type: "image" },
+            { key: "image", placeholder: "Image", type: "image", imageSpec: IMG_SPECS.tile },
           ]}
         />
       </div>
@@ -356,7 +368,7 @@ export function SectionEditor() {
           <textarea className={inputCls + " sm:col-span-2"} rows={2} value={content.campaign_copy ?? ""} onChange={(e) => set("campaign_copy", e.target.value)} placeholder="Body copy" />
           <input className={inputCls + " sm:col-span-2"} value={content.campaign_cta_href ?? ""} onChange={(e) => set("campaign_cta_href", e.target.value)} placeholder="Button link" />
           <div className="sm:col-span-2">
-            <ImageDrop value={content.campaign_image ?? ""} onChange={(v) => set("campaign_image", v)} compact />
+            <ImageDrop value={content.campaign_image ?? ""} onChange={(v) => set("campaign_image", v)} compact spec={IMG_SPECS.campaign} />
           </div>
           <input className={inputCls + " sm:col-span-2"} value={content.campaign_image_alt ?? ""} onChange={(e) => set("campaign_image_alt", e.target.value)} placeholder="Image alt text" />
         </div>
@@ -374,7 +386,7 @@ export function SectionEditor() {
             { key: "title", placeholder: "Title" },
             { key: "copy", placeholder: "Copy", type: "textarea" },
             { key: "href", placeholder: "Link" },
-            { key: "image", placeholder: "Image", type: "image" },
+            { key: "image", placeholder: "Image", type: "image", imageSpec: IMG_SPECS.editorial },
             { key: "imageAlt", placeholder: "Image alt text" },
           ]}
         />
