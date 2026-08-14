@@ -16,6 +16,15 @@ export interface NavLink {
   href: string;
 }
 
+export interface StudioAddress {
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postcode: string;
+  country: string;
+}
+
 export interface NavItem {
   label: string;
   href: string;
@@ -53,6 +62,20 @@ export const siteConfig = {
     currency: "INR" as const,
     /** Shown under prices (India MRP transparency, Zara pattern). Empty string hides it. */
     taxLine: "MRP incl. of all taxes",
+  },
+
+  // ---------- Contact (shown on /contact; keep in sync with Terms/Privacy copy) ----------
+  contact: {
+    address: {
+      line1: "12 Agah Abdullah Street",
+      line2: "Richmond Town",
+      city: "Bengaluru",
+      state: "Karnataka",
+      postcode: "560025",
+      country: "India",
+    } as StudioAddress,
+    phone: "+91 99801 81106",
+    email: "savvyinteal@gmail.com",
   },
 
   // ---------- Announcement ribbon (scrolling marquee in the header) ----------

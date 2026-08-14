@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { apiBaseUrl } from "@/lib/api-client";
+import { siteConfig } from "@/content/site.config";
 
 const CATEGORIES = [
   { value: "query", label: "General query" },
@@ -88,6 +89,33 @@ export default function ContactPage() {
       <p className="mt-2 text-[15px] leading-relaxed text-ink-soft">
         Questions, grievances, complaints, or a business inquiry — write to us below.
       </p>
+
+      <dl className="mt-6 space-y-2 border-l-2 border-gold/40 pl-4 text-[15px] text-ink-soft">
+        <div className="flex gap-2">
+          <dt className="shrink-0 font-medium text-ink">Address</dt>
+          <dd>
+            {siteConfig.contact.address.line1}, {siteConfig.contact.address.line2},{" "}
+            {siteConfig.contact.address.city}, {siteConfig.contact.address.state}{" "}
+            {siteConfig.contact.address.postcode}, {siteConfig.contact.address.country}
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="shrink-0 font-medium text-ink">Phone</dt>
+          <dd>
+            <a href={`tel:${siteConfig.contact.phone.replace(/\s+/g, "")}`} className="hover:text-teal">
+              {siteConfig.contact.phone}
+            </a>
+          </dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="shrink-0 font-medium text-ink">Email</dt>
+          <dd>
+            <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-teal">
+              {siteConfig.contact.email}
+            </a>
+          </dd>
+        </div>
+      </dl>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
         <label className="block text-xs">
