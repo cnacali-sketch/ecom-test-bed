@@ -16,6 +16,15 @@ export interface NavLink {
   href: string;
 }
 
+export interface StudioAddress {
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postcode: string;
+  country: string;
+}
+
 export interface NavItem {
   label: string;
   href: string;
@@ -53,6 +62,20 @@ export const siteConfig = {
     currency: "INR" as const,
     /** Shown under prices (India MRP transparency, Zara pattern). Empty string hides it. */
     taxLine: "MRP incl. of all taxes",
+  },
+
+  // ---------- Contact (shown on /contact; keep in sync with Terms/Privacy copy) ----------
+  contact: {
+    address: {
+      line1: "12 Agah Abdullah Street",
+      line2: "Richmond Town",
+      city: "Bengaluru",
+      state: "Karnataka",
+      postcode: "560025",
+      country: "India",
+    } as StudioAddress,
+    phone: "+91 99801 81106",
+    email: "savvyinteal@gmail.com",
   },
 
   // ---------- Announcement ribbon (scrolling marquee in the header) ----------
@@ -147,6 +170,31 @@ export const siteConfig = {
         promoHref: "/collections/jewellery",
       },
     },
+    {
+      label: "Charms",
+      href: "/collections/charms",
+      megaMenu: {
+        columns: [
+          {
+            heading: "Shop by Type",
+            links: [
+              { label: "Bag Charms", href: "/collections/charms" },
+              { label: "Zip Charms", href: "/collections/charms" },
+            ],
+          },
+          {
+            heading: "Shop by Style",
+            links: [
+              { label: "Tassels", href: "/collections/charms" },
+              { label: "Enamel & Pearl", href: "/collections/charms" },
+            ],
+          },
+        ],
+        promoImage: px(7723760, 480, 480),
+        promoLabel: "New: Bag & Zip Charms",
+        promoHref: "/collections/charms",
+      },
+    },
     { label: "Sale", href: "/collections/hair-accessories" },
   ] satisfies NavItem[],
 
@@ -191,8 +239,8 @@ export const siteConfig = {
         title: "Worn, not stored",
         copy: "Pieces made for actual days — school runs, standing fans, monsoon commutes.",
         href: "/collections/hair-accessories",
-        image: px(29346469, 900, 1125),
-        imageAlt: "Monochrome portrait of a young woman wearing hair clips",
+        image: px(7450827, 900, 1125),
+        imageAlt: "Barrettes worn in curly hair, portrait",
       },
       {
         eyebrow: "Materials",
@@ -257,26 +305,155 @@ export const siteConfig = {
         links: [
           { label: "Hair Accessories", href: "/collections/hair-accessories" },
           { label: "Jewellery", href: "/collections/jewellery" },
+          { label: "Charms", href: "/collections/charms" },
         ],
       },
       {
         heading: "Help",
         links: [
-          { label: "Track Order", href: "/coming-soon" },
-          { label: "Returns & Exchanges", href: "/coming-soon" },
-          { label: "Contact", href: "/coming-soon" },
+          { label: "Track Order", href: "/track-order" },
+          { label: "Returns & Exchanges", href: "/policies/returns" },
+          { label: "Refund & Cancellation Policy", href: "/policies/refund" },
+          { label: "Contact", href: "/contact" },
           { label: "FAQ", href: "/coming-soon" },
         ],
       },
       {
         heading: "Company",
         links: [
-          { label: "Privacy", href: "/coming-soon" },
-          { label: "Terms", href: "/coming-soon" },
+          { label: "Privacy", href: "/policies/privacy" },
+          { label: "Terms", href: "/policies/terms" },
         ],
       },
     ],
-    fineprint: "Photography via Pexels (free license). Demo storefront — not a live shop.",
+    fineprint: "",
+  },
+
+  // ---------- Legal / policy pages ----------
+  // Reviewed copy — short, Razorpay-activation-compliant (refund/cancellation
+  // timelines are explicit, not vague; contact + grievance officer named;
+  // jurisdiction and data-hosting location stated). `termsVersion` is the
+  // string stamped onto every order's consent record (see checkout's T&C
+  // checkbox); bump it whenever the terms wording changes so old orders keep
+  // an accurate record of which version they agreed to.
+  policies: {
+    termsVersion: "2026-07-27",
+    terms: {
+      updated: "27 July 2026",
+      sections: [
+        {
+          heading: "About Savvy In Teal",
+          body: "Savvy In Teal sells hair accessories and jewellery online, shipped from our studio in Bengaluru, India. These Terms govern your use of this website and any order you place with us.",
+        },
+        {
+          heading: "Eligibility",
+          body: "You must be at least 18 years old, or place your order with the involvement of a parent or guardian, to use this site.",
+        },
+        {
+          heading: "Orders & pricing",
+          body: "All prices are shown in INR and include applicable taxes unless stated otherwise. We reserve the right to cancel any order where a listed price or stock level was incorrect; if we cancel your order for this reason, you receive a full refund.",
+        },
+        {
+          heading: "Payment",
+          body: "We currently accept Cash on Delivery. Online payment via UPI, cards, and net banking, processed securely through Razorpay, is being added. We never see or store your card, UPI, or bank details — these are handled directly by Razorpay.",
+        },
+        {
+          heading: "Cancellations & refunds",
+          body: "See our Refund & Cancellation Policy for how to cancel an order and how refunds are processed.",
+        },
+        {
+          heading: "Limitation of liability",
+          body: "To the maximum extent permitted by law, Savvy In Teal is not liable for indirect or consequential losses arising from your use of this site or your order. Our total liability for any claim is limited to the amount you paid for the relevant order.",
+        },
+        {
+          heading: "Governing law & disputes",
+          body: "These Terms are governed by the laws of India. Courts located in Bangalore, Karnataka shall have exclusive jurisdiction over any dispute arising from these Terms.",
+        },
+        {
+          heading: "Contact",
+          body: "Questions about these Terms? Write to us at savvyinteal@gmail.com.",
+        },
+      ],
+    },
+    refund: {
+      updated: "27 July 2026",
+      sections: [
+        {
+          heading: "Cancellation",
+          body: "Orders can be cancelled free of charge any time before they are shipped. Once shipped, cancellation is no longer possible — please use our return process instead (see our Returns & Exchanges policy).",
+        },
+        {
+          heading: "Refund window",
+          body: "Once we approve a return or cancellation, refunds are processed within 5–7 business days.",
+        },
+        {
+          heading: "Refund method",
+          body: "Cash on Delivery orders are refunded via UPI or bank transfer to the details you provide. Prepaid (online payment) orders are refunded to the original payment method through Razorpay.",
+        },
+        {
+          heading: "Non-refundable items",
+          body: "All items are eligible for return under our 15-day returns window (see Returns & Exchanges), provided they are unused, unworn, and in original packaging. There are no final-sale items at this time.",
+        },
+      ],
+    },
+    returns: {
+      updated: "27 July 2026",
+      sections: [
+        {
+          heading: "Return window",
+          body: "We accept return requests within 15 days of delivery, matching the returns policy already shown across the site.",
+        },
+        {
+          heading: "Condition",
+          body: "Items must be unused, unworn, and returned in their original packaging with any tags or protective film intact.",
+        },
+        {
+          heading: "How to start a return",
+          body: "Sign in and open Your Orders to request a return on an eligible order.",
+        },
+        {
+          heading: "Pickup",
+          body: "We don't yet offer reverse pickup — please ship the item back to us using a courier of your choice. Once we receive and inspect it, your refund is processed per our Refund & Cancellation Policy.",
+        },
+      ],
+    },
+    privacy: {
+      updated: "27 July 2026",
+      sections: [
+        {
+          heading: "What we collect",
+          body: "When you create an account, place an order, or browse this site, we may collect your name, email, phone number, shipping and billing address, and order/payment status. We never see or store your card, UPI, or bank details — these are handled directly by our payment partner, Razorpay. With your consent, we also collect anonymous browsing behaviour (pages viewed, device/browser type) to help us improve the site.",
+        },
+        {
+          heading: "How we use it",
+          body: "We use this information to process and deliver your orders, provide customer support, and prevent fraud — and, only with your consent, to understand how shoppers use our site. We do not sell your data to anyone.",
+        },
+        {
+          heading: "Who we share it with",
+          body: "We share order and payment details with Razorpay (to process payment) and our courier partners (to deliver your order). We do not share your data with advertisers or any other third party.",
+        },
+        {
+          heading: "Cookies",
+          body: "We use essential cookies to keep you signed in and your cart working. Optional analytics cookies are set only if you accept them, and you can decline them at any time.",
+        },
+        {
+          heading: "Where your data is stored",
+          body: "This website and its data are hosted on servers located in India.",
+        },
+        {
+          heading: "Your rights",
+          body: "You can view or update your profile from your account page at any time. To request a copy of your data, or ask us to delete your account, write to us at savvyinteal@gmail.com.",
+        },
+        {
+          heading: "Grievance officer",
+          body: "For any privacy or data-related complaint, contact our Grievance Officer: Savvy In Teal Support Team, savvyinteal@gmail.com.",
+        },
+        {
+          heading: "Changes to this policy",
+          body: "We may update this policy from time to time. The date above shows when it was last revised.",
+        },
+      ],
+    },
   },
 } as const;
 

@@ -18,6 +18,7 @@ identifiable so it can be purged. See services/refresh_tokens.rotate.
 """
 from __future__ import annotations
 
+import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from app.config import get_settings
 TOKEN_ACCESS = "access"
 TOKEN_REFRESH = "refresh"
 TOKEN_VERIFY = "verify"
+TOKEN_RESET = "reset"
 
 # bcrypt truncates silently at 72 bytes; reject longer input instead of
 # letting two different passwords authenticate the same account.
@@ -144,6 +146,30 @@ def create_verify_token(subject: uuid.UUID, email: str) -> str:
         ttl=timedelta(hours=settings.email_verify_ttl_hours),
         extra={"email": email},
     )
+
+
+def create_reset_token(subject: uuid.UUID, email: str) -> str:
+    """Single-purpose token proving the caller controls `email`'s inbox at
+    reset-request time. Short-lived (1h, not the multi-hour verify TTL) since
+    a leaked reset link is a full account takeover, not just an unconfirmed
+    signup."""
+    return _create_token(
+        subject=subject,
+        role="",
+        token_type=TOKEN_RESET,
+        ttl=timedelta(hours=1),
+        extra={"email": email},
+    )
+
+
+def generate_csrf_token() -> str:
+    """Opaque random value for the double-submit CSRF cookie/header pair.
+
+    Not a JWT — it carries no claims and is never decoded, only compared
+    byte-for-byte against the same value echoed back as a header. See
+    dependencies/auth.py for where that comparison happens.
+    """
+    return secrets.token_urlsafe(32)
 
 
 def decode_token(token: str, expected_type: str) -> dict:

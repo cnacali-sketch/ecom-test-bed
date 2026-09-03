@@ -29,4 +29,12 @@ class UserEvent(Base):
     user_id: Mapped[str] = mapped_column(String(64))
     event_type: Mapped[str] = mapped_column(String(32))
     payload: Mapped[dict] = mapped_column(JSON(), default=dict)
+    # HMAC of the client IP (never the raw address — see events.py _hash_ip)
+    # and the request's User-Agent. Both feed the admin fraud/abuse summary
+    # (ad-click velocity, checkout/coupon abuse) — never used to auto-block.
+    ip_hash: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Raw IP, kept alongside the hash so a fraud pattern is actually
+    # actionable (block at the firewall) rather than only groupable.
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

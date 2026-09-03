@@ -1,13 +1,21 @@
+# Port policy: ONLY caddy publishes to the host. Docker's port publishing
+# writes iptables rules ahead of ufw, so a `ports:` mapping here is reachable
+# from the public internet no matter what ufw says — publishing postgres/redis/
+# rabbitmq is a direct path to the database. Everything else talks over the
+# compose network by service name, which stays private.
+#
+# For local development, use docker-compose.override.yml to re-publish the
+# ports you need; compose merges it automatically and it is gitignored.
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: savvy
-      POSTGRES_PASSWORD: savvy_dev_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-savvy_dev_password}
       POSTGRES_DB: savvyarchitect
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -19,8 +27,8 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -32,10 +40,10 @@ services:
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: savvy
-      RABBITMQ_DEFAULT_PASS: savvy_dev_password
-    ports:
-      - "5672:5672"
-      - "15672:15672" # management UI
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-savvy_dev_password}
+    expose:
+      - "5672"
+      - "15672" # management UI — reach it with `docker compose port`/SSH tunnel
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -49,11 +57,15 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://savvy:savvy_dev_password@postgres:5432/savvyarchitect
+      DATABASE_URL: postgresql+asyncpg://savvy:${POSTGRES_PASSWORD:-savvy_dev_password}@postgres:5432/savvyarchitect
       REDIS_URL: redis://redis:6379/0
-      RABBITMQ_URL: amqp://savvy:savvy_dev_password@rabbitmq:5672//
-    ports:
-      - "8000:8000"
+      RABBITMQ_URL: amqp://savvy:${RABBITMQ_PASSWORD:-savvy_dev_password}@rabbitmq:5672//
+    expose:
+      - "8000"
+    volumes:
+      # Media-library uploads (app/routers/media.py) live on disk, not in
+      # Postgres — without this, a rebuild wipes every uploaded image.
+      - media_uploads:/app/media_uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,5 +74,36 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # NEXT_PUBLIC_* vars are inlined into the client bundle at build
+        # time, so this must be set (via a root .env file or shell env)
+        # before `docker compose build`, not just at container run time.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    restart: unless-stopped
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
+  media_uploads:

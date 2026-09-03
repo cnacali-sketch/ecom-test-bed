@@ -41,12 +41,28 @@ class Settings(BaseSettings):
     # Dev default keeps tests runnable without a .env; production MUST override.
     # `is_production` below hard-fails startup if this default survives to prod.
     jwt_secret: str = "dev_only_insecure_secret_do_not_use_in_production"
+    # Independent secret for hashing client IPs in the fraud/abuse layer
+    # (events.py _hash_ip). Kept separate from jwt_secret so rotating the auth
+    # secret for an incident doesn't silently break IP-grouping continuity, and
+    # vice versa — key separation across two unrelated trust boundaries.
+    fraud_hash_secret: str = "dev_only_fraud_hash_secret_change_in_production"
     jwt_algorithm: str = "HS256"
     jwt_access_ttl_min: int = 15
     jwt_refresh_ttl_days: int = 30
     # Cookies are httpOnly always; Secure is off in dev so http://localhost works.
     cookie_secure: bool = False
     cookie_samesite: str = "lax"
+    # Empty = host-only cookie (fine when frontend and backend share an origin).
+    # When they're on different subdomains of the same site (frontend on
+    # savvyinteal.com, API on api.savvyinteal.com), a host-only cookie is
+    # scoped to whichever host set it — the browser still SENDS it on
+    # requests to that host, but page JS on the OTHER subdomain can never
+    # READ it via document.cookie. That silently broke the CSRF double-submit
+    # check for every admin write action: the frontend always sent an empty
+    # X-CSRF-Token header, since it could never see the cookie to copy from.
+    # Set to ".savvyinteal.com" (leading dot) in production so the cookie is
+    # shared across both subdomains.
+    cookie_domain: str = ""
 
     # --- Email (P2 groundwork; used today by the enumeration-safe /register) ---
     # Dev stub logs the message to the app logger instead of sending it, so the

@@ -11,6 +11,7 @@ backend/.venv/
 backend/*.egg-info/
 backend/.pytest_cache/
 backend/.coverage
+backend/media_uploads/
 
 # Env
 .env
@@ -27,6 +28,9 @@ Thumbs.db
 
 # Docker/Podman volumes
 pgdata/
+
+# Runtime log dumps (podman compose logs redirected here during dev)
+logs/
 
 # graphify: derived knowledge-graph output. Rebuildable with `/graphify --update`,
 # and embeds absolute paths from whoever generated it.

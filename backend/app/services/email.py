@@ -67,6 +67,61 @@ def send_verification_email(to: str, token: str) -> None:
     )
 
 
+def send_password_reset_email(to: str, token: str) -> None:
+    """Forgot-password request: prove control of the inbox before letting a
+    new password through."""
+    link = f"{get_settings().frontend_url}/reset-password?token={quote(token)}"
+    _send(
+        to,
+        "Reset your Savvy In Teal password",
+        (
+            "Someone (hopefully you) asked to reset the password on this account.\n\n"
+            f"Choose a new password:\n{link}\n\n"
+            "This link expires in 1 hour and works once. If you didn't request "
+            "this, you can ignore this email — your password hasn't changed."
+        ),
+    )
+
+
+def send_order_confirmation_email(to: str, order_id: str) -> None:
+    """Order placed — sent right after checkout (COD or, once wired, prepaid)."""
+    settings = get_settings()
+    track_link = f"{settings.frontend_url}/track-order?order_id={quote(order_id)}"
+    _send(
+        to,
+        "Your Savvy In Teal order is confirmed",
+        (
+            "Thanks for your order!\n\n"
+            f"Order reference: {order_id}\n\n"
+            f"Track it any time:\n{track_link}\n\n"
+            "We'll email you again as soon as it ships."
+        ),
+    )
+
+
+def send_order_shipped_email(
+    to: str, order_id: str, courier: str | None, tracking_number: str | None
+) -> None:
+    """Order moved to 'shipped' with a courier/tracking number attached."""
+    settings = get_settings()
+    track_link = f"{settings.frontend_url}/track-order?order_id={quote(order_id)}"
+    courier_line = (
+        f"Carrier: {courier}\nTracking number: {tracking_number}\n\n"
+        if courier or tracking_number
+        else ""
+    )
+    _send(
+        to,
+        "Your Savvy In Teal order has shipped",
+        (
+            "Good news — your order is on its way.\n\n"
+            f"Order reference: {order_id}\n\n"
+            f"{courier_line}"
+            f"Track it any time:\n{track_link}"
+        ),
+    )
+
+
 def send_account_exists_email(to: str) -> None:
     """Signup attempt on an address that already has an account.
 

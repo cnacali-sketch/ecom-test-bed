@@ -24,9 +24,14 @@ function LoginPage() {
       submitLabel="Sign in"
       onSubmit={handleLogin}
       footer={
-        <>
-          New here? <AuthLink href="/register">Create an account</AuthLink>
-        </>
+        <div className="space-y-2">
+          <p>
+            New here? <AuthLink href="/register">Create an account</AuthLink>
+          </p>
+          <p>
+            <AuthLink href="/forgot-password">Forgot your password?</AuthLink>
+          </p>
+        </div>
       }
     />
   );

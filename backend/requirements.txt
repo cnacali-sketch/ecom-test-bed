@@ -16,6 +16,9 @@ bcrypt==4.2.1
 PyJWT==2.10.1
 python-barcode==0.15.1
 Pillow==11.0.0
+# QR codes for coupons (alphanumeric — python-barcode above is EAN13/UPCA
+# numeric-only, wrong shape for a coupon code). Reuses Pillow, already a dep.
+qrcode==8.0
 textstat==0.7.4
 # textstat depends on pkg_resources, which recent setuptools no longer ships.
 # Pin below 81 so the optional textstat path works; app.services.description_analyzer
@@ -24,3 +27,7 @@ setuptools<81
 pytest==8.3.4
 pytest-asyncio==0.25.0
 httpx==0.28.1
+# Starlette's UploadFile/Form parsing requires this at runtime, not import
+# time, so its absence goes unnoticed until an actual multipart request
+# arrives — needed for the media-library upload endpoint.
+python-multipart==0.0.20

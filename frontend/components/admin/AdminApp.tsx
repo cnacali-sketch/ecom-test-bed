@@ -2,12 +2,11 @@
 
 // Admin console shell: top bar, sidebar nav, view switch, toast.
 //
-// Products are SEEDED from the live backend (GET /api/products) on mount, so
-// the console reflects real catalogue data. Create (POST) and delete (DELETE)
-// hit real endpoints; edits to an existing product are held locally for now
-// because the backend has no product-update route yet (see handoff).
+// Products/categories are SEEDED from the live backend on mount, so the
+// console reflects real data. Create/update/delete all hit real endpoints.
 
 import {
+  AlertTriangle,
   BarChart3,
   Bell,
   Boxes,
@@ -18,10 +17,14 @@ import {
   Images,
   LayoutGrid,
   LogOut,
+  Mail,
   Package,
   Settings,
+  ShieldAlert,
   Sparkles,
   ShoppingBag,
+  Ticket,
+  TrendingUp,
   Users,
   X,
 } from "lucide-react";
@@ -35,9 +38,7 @@ import {
   LOW_STOCK,
   type AdminCategory,
   type AdminProduct,
-  type AdminSection,
   type AdminView,
-  type MediaItem,
 } from "@/lib/admin/types";
 import { uid } from "@/lib/admin/helpers";
 import { apiFetch } from "@/lib/api-client";
@@ -51,24 +52,18 @@ import { ProductEditor } from "./screens/ProductEditor";
 import { Inventory } from "./screens/Inventory";
 import { CategoryManager } from "./screens/CategoryManager";
 import { MediaLibrary } from "./screens/MediaLibrary";
+import { Orders } from "./screens/Orders";
+import { Customers } from "./screens/Customers";
+import { Analytics } from "./screens/Analytics";
+import { Coupons } from "./screens/Coupons";
+import { Fraud } from "./screens/Fraud";
+import { ErrorLogs } from "./screens/ErrorLogs";
+import { Messages } from "./screens/Messages";
 
-const SEED_CATEGORIES: AdminCategory[] = [
-  { id: "c1", name: "Scrunchies", parent: "Hair Accessories", slug: "scrunchies", image: "" },
-  { id: "c2", name: "Claw Clips", parent: "Hair Accessories", slug: "claw-clips", image: "" },
-  { id: "c3", name: "Earrings", parent: "Jewellery", slug: "earrings", image: "" },
-  { id: "c4", name: "Necklaces", parent: "Jewellery", slug: "necklaces", image: "" },
-  { id: "c5", name: "Bracelets", parent: "Jewellery", slug: "bracelets", image: "" },
-  { id: "c6", name: "Chokers", parent: "Bridal", slug: "chokers", image: "" },
-];
-
-const SEED_SECTIONS: AdminSection[] = [
-  { id: "s1", type: "announcement", on: true, text: "Free shipping on orders over ₹999 · COD available" },
-  { id: "s2", type: "hero", on: true, heading: "Teal, gold, everything gorgeous", sub: "Handpicked accessories from ₹179.", ctaLabel: "Shop the collection", image: "" },
-  { id: "s3", type: "trust", on: true },
-  { id: "s4", type: "categories", on: true, heading: "Shop by category" },
-  { id: "s5", type: "featured", on: true, heading: "Featured this week" },
-  { id: "s6", type: "grid", on: true, heading: "All jewellery & accessories" },
-];
+// An order still "pending" (no status change at all) past this age is
+// flagged as unattended — long enough to not fire on normal same-day
+// processing, short enough that a genuinely missed order gets caught.
+const STALE_ORDER_HOURS = 24;
 
 function newDraft(): AdminProduct {
   return {
@@ -98,14 +93,20 @@ export function AdminApp() {
   const { user, logout } = useAuth();
 
   const [products, setProducts] = useState<AdminProduct[]>([]);
-  const [categories, setCategories] = useState<AdminCategory[]>(SEED_CATEGORIES);
-  const [sections, setSections] = useState<AdminSection[]>(SEED_SECTIONS);
-  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [view, setView] = useState<AdminView>("dashboard");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AdminProduct | null>(null);
   const [toast, setToast] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [flaggedOrders, setFlaggedOrders] = useState<{ id: string; user_id: string; flag_reason: string | null }[]>([]);
+  const [pendingReturns, setPendingReturns] = useState<{ id: string; order_id: string; reason: string }[]>([]);
+  const [staleOrders, setStaleOrders] = useState<{ id: string; user_id: string; created_at: string }[]>([]);
+  // Set when a notification is clicked for a specific order, so the Orders
+  // screen (which owns its own order list + expand state) opens that exact
+  // order instead of just landing on the unfiltered list.
+  const [ordersDeepLinkId, setOrdersDeepLinkId] = useState<string | null>(null);
 
   // Seed from the live catalogue once.
   useEffect(() => {
@@ -115,6 +116,59 @@ export function AdminApp() {
         if (cancelled || !res?.ok) return;
         const data = (await res.json()) as BackendProduct[];
         if (Array.isArray(data)) setProducts(data.map(toAdmin));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/categories")
+      .then(async (res) => {
+        if (cancelled || !res?.ok) return;
+        const data = (await res.json()) as AdminCategory[];
+        if (Array.isArray(data)) setCategories(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Powers the notification bell: real signals from data the console already
+  // needs elsewhere (Orders/Fraud screens re-fetch their own copies for
+  // per-screen interactivity — this is just a lightweight summary count).
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/orders/all")
+      .then(async (res) => {
+        if (cancelled || !res?.ok) return;
+        const data = (await res.json()) as {
+          id: string;
+          user_id: string;
+          status: string;
+          flagged: boolean;
+          flag_reason: string | null;
+          created_at: string;
+        }[];
+        if (!Array.isArray(data)) return;
+        setFlaggedOrders(data.filter((o) => o.flagged));
+        // "Unattended": still pending (no status change since it came in)
+        // and older than the threshold — an order sitting untouched this
+        // long usually means it was missed, not that it's just early.
+        const staleCutoff = Date.now() - STALE_ORDER_HOURS * 60 * 60 * 1000;
+        setStaleOrders(
+          data.filter((o) => o.status === "pending" && new Date(o.created_at).getTime() < staleCutoff),
+        );
+      })
+      .catch(() => {});
+    apiFetch("/api/returns")
+      .then(async (res) => {
+        if (cancelled || !res?.ok) return;
+        const data = (await res.json()) as { id: string; order_id: string; reason: string; status: string }[];
+        if (Array.isArray(data)) setPendingReturns(data.filter((r) => r.status === "pending"));
       })
       .catch(() => {});
     return () => {
@@ -180,10 +234,12 @@ export function AdminApp() {
     flash(res?.ok ? "Saved" : "Could not save that change");
   };
 
-  const lowCount = useMemo(
-    () => products.filter((p) => p.stock <= LOW_STOCK && p.published).length,
+  const lowStockProducts = useMemo(
+    () => products.filter((p) => p.stock <= LOW_STOCK && p.published),
     [products],
   );
+  const lowCount = lowStockProducts.length;
+  const notifCount = lowCount + flaggedOrders.length + pendingReturns.length + staleOrders.length;
 
   const NavBtn = ({
     id,
@@ -219,13 +275,15 @@ export function AdminApp() {
       <NavBtn id="home" icon={Home} label="Homepage editor" />
       <NavBtn id="products" icon={Package} label="Products" />
       <NavBtn id="inventory" icon={Boxes} label="Inventory" badge={lowCount} />
-      <NavBtn id="categories" icon={FolderTree} label="Categories" />
-      <NavBtn id="media" icon={Images} label="Media library" />
-      <div className="px-3 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-ink-soft/40">
-        Coming soon
-      </div>
       <NavBtn id="orders" icon={ShoppingBag} label="Orders" />
       <NavBtn id="customers" icon={Users} label="Customers" />
+      <NavBtn id="coupons" icon={Ticket} label="Coupons" />
+      <NavBtn id="categories" icon={FolderTree} label="Categories" />
+      <NavBtn id="media" icon={Images} label="Media library" />
+      <NavBtn id="analytics" icon={TrendingUp} label="Analytics" />
+      <NavBtn id="fraud" icon={ShieldAlert} label="Fraud & abuse" />
+      <NavBtn id="errorLogs" icon={AlertTriangle} label="Error logs" />
+      <NavBtn id="messages" icon={Mail} label="Messages" />
     </nav>
   );
 
@@ -239,6 +297,11 @@ export function AdminApp() {
     media: "Media library",
     orders: "Orders",
     customers: "Customers",
+    analytics: "Analytics",
+    coupons: "Coupons",
+    fraud: "Fraud & abuse",
+    errorLogs: "Error logs",
+    messages: "Messages",
   };
 
   return (
@@ -264,14 +327,98 @@ export function AdminApp() {
             <Link href="/" target="_blank" className="hidden items-center gap-1.5 rounded-lg border border-ink/10 px-3 py-1.5 text-xs font-semibold text-teal hover:bg-teal/10 sm:flex">
               <Eye className="h-3.5 w-3.5" /> View storefront
             </Link>
-            <button className="relative grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5">
-              <Bell className="h-4 w-4" />
-              {lowCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 grid h-4 w-4 place-items-center rounded-full bg-gold text-[9px] font-bold text-white">
-                  {lowCount}
-                </span>
+            <div className="relative">
+              <button
+                onClick={() => setNotifOpen((v) => !v)}
+                className="relative grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5"
+              >
+                <Bell className="h-4 w-4" />
+                {notifCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 grid h-4 w-4 place-items-center rounded-full bg-gold text-[9px] font-bold text-white">
+                    {notifCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-2 max-h-96 w-80 overflow-y-auto rounded-xl border border-ink/10 bg-card shadow-lg">
+                    <div className="border-b border-ink/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-ink-soft">
+                      Notifications
+                    </div>
+                    {notifCount === 0 ? (
+                      <p className="p-4 text-sm text-ink-soft">Nothing needs attention.</p>
+                    ) : (
+                      <div className="divide-y divide-ink/5">
+                        {staleOrders.map((o) => (
+                          <button
+                            key={o.id}
+                            onClick={() => {
+                              setOrdersDeepLinkId(o.id);
+                              setView("orders");
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-sale">Unattended order</span> — {o.user_id}
+                            <br />
+                            <span className="text-ink-soft">
+                              Still pending after{" "}
+                              {Math.round((Date.now() - new Date(o.created_at).getTime()) / (60 * 60 * 1000))}h — no
+                              status change yet
+                            </span>
+                          </button>
+                        ))}
+                        {flaggedOrders.map((o) => (
+                          <button
+                            key={o.id}
+                            onClick={() => {
+                              setOrdersDeepLinkId(o.id);
+                              setView("orders");
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-sale">Flagged order</span> — {o.user_id}
+                            <br />
+                            <span className="text-ink-soft">{o.flag_reason ?? "Review recommended"}</span>
+                          </button>
+                        ))}
+                        {pendingReturns.map((r) => (
+                          <button
+                            key={r.id}
+                            onClick={() => {
+                              setOrdersDeepLinkId(r.order_id);
+                              setView("orders");
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-gold">Return requested</span>
+                            <br />
+                            <span className="text-ink-soft">{r.reason}</span>
+                          </button>
+                        ))}
+                        {lowStockProducts.map((p) => (
+                          <button
+                            key={p.id}
+                            onClick={() => {
+                              openProduct(p.id);
+                              setNotifOpen(false);
+                            }}
+                            className="block w-full px-4 py-2.5 text-left text-xs hover:bg-ink/5"
+                          >
+                            <span className="font-semibold text-teal">Low stock</span> — {p.name}
+                            <br />
+                            <span className="text-ink-soft">{p.stock} left</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
-            </button>
+            </div>
             <button className="grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5">
               <Settings className="h-4 w-4" />
             </button>
@@ -315,7 +462,7 @@ export function AdminApp() {
           </header>
 
           {view === "dashboard" && <Dashboard products={products} />}
-          {view === "home" && <SectionEditor sections={sections} setSections={setSections} />}
+          {view === "home" && <SectionEditor />}
           {view === "products" && <ProductList products={products} onOpen={openProduct} onNew={newProduct} />}
           {view === "editor" && draft && (
             <ProductEditor
@@ -340,12 +487,16 @@ export function AdminApp() {
           {view === "categories" && (
             <CategoryManager categories={categories} setCategories={setCategories} products={products} />
           )}
-          {view === "media" && <MediaLibrary media={media} setMedia={setMedia} />}
-          {(view === "orders" || view === "customers") && (
-            <div className="rounded-2xl border border-dashed border-ink/20 bg-card p-16 text-center text-ink-soft/60">
-              This section is a placeholder — coming next.
-            </div>
+          {view === "media" && <MediaLibrary />}
+          {view === "orders" && (
+            <Orders deepLinkOrderId={ordersDeepLinkId} onDeepLinkConsumed={() => setOrdersDeepLinkId(null)} />
           )}
+          {view === "customers" && <Customers />}
+          {view === "analytics" && <Analytics />}
+          {view === "coupons" && <Coupons />}
+          {view === "fraud" && <Fraud />}
+          {view === "errorLogs" && <ErrorLogs />}
+          {view === "messages" && <Messages />}
         </main>
       </div>
 

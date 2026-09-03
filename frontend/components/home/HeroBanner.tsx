@@ -1,14 +1,28 @@
 import Image from "next/image";
 import Link from "next/link";
 import { siteConfig } from "@/content/site.config";
+import { fetchHomepageContent } from "@/lib/api";
 
 /**
  * Signature hero: oversized italic serif accent word overlapping a
  * full-height editorial photograph that bleeds to the viewport edge.
- * All copy/images from siteConfig.home.hero.
+ * Copy/images come from content/site.config.ts by default, per-field
+ * overridden by the admin Homepage editor (GET /api/sections) when set.
  */
-export function HeroBanner() {
-  const { hero } = siteConfig.home;
+export async function HeroBanner() {
+  const defaults = siteConfig.home.hero;
+  const override = await fetchHomepageContent();
+  const hero = {
+    accentWord: override?.hero_accent_word || defaults.accentWord,
+    headline: override?.hero_headline || defaults.headline,
+    subline: override?.hero_subline || defaults.subline,
+    ctaLabel: override?.hero_cta_label || defaults.ctaLabel,
+    ctaHref: override?.hero_cta_href || defaults.ctaHref,
+    image: override?.hero_image || defaults.image,
+    imageAlt: override?.hero_image_alt || defaults.imageAlt,
+    secondaryImage: defaults.secondaryImage,
+    secondaryImageAlt: defaults.secondaryImageAlt,
+  };
 
   return (
     <section className="relative overflow-hidden">

@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 
+import { OrderHistory } from "@/components/account/OrderHistory";
+import { ProfileForm } from "@/components/account/ProfileForm";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { useAuth } from "@/lib/auth-context";
 
@@ -30,7 +32,10 @@ function AccountView() {
         </div>
       </dl>
 
-      {/* Order history and a persisted wishlist land in P4. */}
+      {user && <OrderHistory userId={user.id} />}
+      {user && <ProfileForm user={user} />}
+
+      {/* A persisted wishlist lands in P4. */}
       <button
         type="button"
         onClick={handleSignOut}

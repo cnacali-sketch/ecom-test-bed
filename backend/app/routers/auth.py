@@ -20,21 +20,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db import get_db_session
-from app.dependencies.auth import ACCESS_COOKIE, REFRESH_COOKIE, require_current_user
+from app.dependencies.auth import ACCESS_COOKIE, CSRF_COOKIE, REFRESH_COOKIE, require_current_user
 from app.models.user import ROLE_CUSTOMER, User, normalize_email
-from app.schemas.auth import LoginRequest, MessageResponse, RegisterRequest, UserRead
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    MessageResponse,
+    ProfileUpdate,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserRead,
+)
 from app.services import login_throttle, refresh_tokens
-from app.services.email import send_account_exists_email, send_verification_email
+from app.services.email import send_account_exists_email, send_password_reset_email, send_verification_email
 from app.services.refresh_tokens import TokenReuseError
 from app.services.security import (
     TOKEN_REFRESH,
+    TOKEN_RESET,
     TOKEN_VERIFY,
     IssuedRefreshToken,
     TokenError,
     create_access_token,
+    create_reset_token,
     create_verify_token,
     decode_token,
     dummy_verify,
+    generate_csrf_token,
     hash_password,
     verify_password,
 )
@@ -50,10 +61,14 @@ _TOO_MANY = HTTPException(status_code=429, detail="Too many attempts. Try again 
 # Refresh is cheap but shouldn't be a free token-minting loop either.
 REGISTER_MAX_PER_IP = 10
 REFRESH_MAX_PER_IP = 30
+FORGOT_PASSWORD_MAX_PER_IP = 10
 
 # The only thing /register ever says. Identical for a new address and an
 # existing one — that uniformity IS the fix, so don't branch this string.
 REGISTER_ACCEPTED = "If that email address is valid, a verification link has been sent."
+# Same idea for /forgot-password: identical whether or not the address has
+# an account, so the endpoint can't be used to enumerate registered emails.
+FORGOT_PASSWORD_ACCEPTED = "If that email address has an account, a password reset link has been sent."
 
 
 def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToken) -> None:
@@ -63,6 +78,7 @@ def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToke
         "secure": settings.cookie_secure,
         "samesite": settings.cookie_samesite,
         "path": "/",
+        "domain": settings.cookie_domain or None,
     }
     response.set_cookie(
         ACCESS_COOKIE,
@@ -76,11 +92,28 @@ def _set_auth_cookies(response: Response, user: User, refresh: IssuedRefreshToke
         max_age=settings.jwt_refresh_ttl_days * 24 * 60 * 60,
         **common,
     )
+    # NOT httpOnly: the frontend must read this value with JS (document.cookie)
+    # to echo it back as a header on every state-changing request — that's the
+    # double-submit CSRF defense in dependencies/auth.py. Same lifetime as the
+    # refresh cookie so it doesn't expire mid-session while the login itself
+    # is still valid. domain=cookie_domain is what actually makes this
+    # readable from the frontend's subdomain — see the Settings.cookie_domain
+    # docstring for why a host-only cookie silently broke this.
+    response.set_cookie(
+        CSRF_COOKIE,
+        generate_csrf_token(),
+        max_age=settings.jwt_refresh_ttl_days * 24 * 60 * 60,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+        path="/",
+        domain=settings.cookie_domain or None,
+    )
 
 
 def _clear_auth_cookies(response: Response) -> None:
-    for name in (ACCESS_COOKIE, REFRESH_COOKIE):
-        response.delete_cookie(name, path="/")
+    settings = get_settings()
+    for name in (ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE):
+        response.delete_cookie(name, path="/", domain=settings.cookie_domain or None)
 
 
 @router.post("/register", response_model=MessageResponse, status_code=202)
@@ -169,6 +202,63 @@ async def verify_email(
     return user
 
 
+@router.post("/forgot-password", response_model=MessageResponse, status_code=202)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: AsyncSession = Depends(get_db_session),
+) -> MessageResponse:
+    """Begin a password reset. Always 202, identical response whether or not
+    the address has an account — same enumeration-safety shape as /register.
+    """
+    throttle_key = login_throttle.client_key(request, "forgot-password")
+    if login_throttle.is_locked(throttle_key, FORGOT_PASSWORD_MAX_PER_IP):
+        raise _TOO_MANY
+    login_throttle.record_failure(throttle_key)
+
+    email = normalize_email(payload.email)
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user is not None:
+        background.add_task(send_password_reset_email, email, create_reset_token(user.id, email))
+
+    return MessageResponse(detail=FORGOT_PASSWORD_ACCEPTED)
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db_session),
+) -> MessageResponse:
+    """Consume a reset token and set a new password.
+
+    Revokes every refresh-token family for the account afterward — a
+    password reset should end every other session (e.g. whoever's session
+    prompted the reset in the first place), not just prove inbox control.
+    """
+    try:
+        payload_claims = decode_token(payload.token, TOKEN_RESET)
+    except TokenError:
+        raise HTTPException(status_code=400, detail="This link is invalid or has expired")
+
+    try:
+        user_id = uuid.UUID(payload_claims["sub"])
+    except (ValueError, KeyError):
+        raise HTTPException(status_code=400, detail="This link is invalid or has expired")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if user is None or user.email != payload_claims.get("email"):
+        raise HTTPException(status_code=400, detail="This link is invalid or has expired")
+
+    user.password_hash = hash_password(payload.new_password)
+    await refresh_tokens.revoke_all_for_user(db, user.id)
+    await db.commit()
+    return MessageResponse(detail="Password updated. Please sign in with your new password.")
+
+
 @router.post("/login", response_model=UserRead)
 async def login(
     payload: LoginRequest,
@@ -194,6 +284,12 @@ async def login(
     if not verify_password(payload.password, user.password_hash):
         login_throttle.record_failure(email)
         raise _BAD_CREDENTIALS
+
+    if user.is_blocked:
+        # Deliberately distinct from _BAD_CREDENTIALS: the password was right,
+        # and a blocked customer needs to know to contact support rather than
+        # keep retrying a password that isn't the problem.
+        raise HTTPException(status_code=403, detail="This account has been suspended. Contact support.")
 
     login_throttle.reset(email)
     # No family_id: a fresh login is a new session, independent of any other
@@ -304,4 +400,32 @@ async def logout(
 @router.get("/me", response_model=UserRead)
 async def me(user: User = Depends(require_current_user)) -> User:
     """Return the signed-in account — drives frontend auth state."""
+    return user
+
+
+@router.patch("/me", response_model=UserRead)
+async def update_profile(
+    payload: ProfileUpdate,
+    user: User = Depends(require_current_user),
+    db: AsyncSession = Depends(get_db_session),
+) -> User:
+    """Customer edits their own profile (name, phone, addresses). Only the
+    fields present in the request are applied, so the form can PATCH partials.
+    Persists immediately and returns the updated account."""
+    data = payload.model_dump(exclude_unset=True)
+    if "full_name" in data:
+        user.full_name = data["full_name"]
+    if "phone" in data:
+        user.phone = data["phone"]
+    if "postal_address" in data:
+        user.postal_address = data["postal_address"] or {}
+    if "billing_same" in data:
+        user.billing_same = bool(data["billing_same"])
+    # When billing mirrors postal, keep billing empty to avoid a stale copy.
+    if user.billing_same:
+        user.billing_address = {}
+    elif "billing_address" in data:
+        user.billing_address = data["billing_address"] or {}
+    await db.commit()
+    await db.refresh(user)
     return user

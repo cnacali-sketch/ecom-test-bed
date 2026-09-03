@@ -1,59 +1,98 @@
 "use client";
 
-// Bulk photo library. LOCAL-ONLY — images are held in browser state as base64
-// data URLs (no upload endpoint yet), so nothing here persists across reloads.
+// Bulk photo library. Backed by POST/GET/DELETE /api/media (see
+// backend/app/routers/media.py) — files persist to disk on the server and
+// are served back at their returned `url`, so uploads survive a refresh.
 
 import { AlertTriangle, Trash2, UploadCloud } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { uid } from "@/lib/admin/helpers";
-import { REQ_IMG, type MediaItem } from "@/lib/admin/types";
+import { apiBaseUrl, apiFetch } from "@/lib/api-client";
+import { MEDIA_MAX_KB, type MediaItem } from "@/lib/admin/types";
 
-export function MediaLibrary({
-  media,
-  setMedia,
-}: {
-  media: MediaItem[];
-  setMedia: (updater: (m: MediaItem[]) => MediaItem[]) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function readDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Not a readable image"));
+    };
+    img.src = url;
+  });
+}
+
+export function MediaLibrary() {
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [drag, setDrag] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const add = (files: FileList | null) => {
+  useEffect(() => {
+    apiFetch("/api/media")
+      .then(async (res) => {
+        if (res?.ok) setMedia((await res.json()) as MediaItem[]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function add(files: FileList | null) {
     setErr("");
-    const list = Array.from(files ?? []);
-    if (!list.length) return;
-    list.forEach((f) => {
-      if (!f.type.startsWith("image/")) {
+    for (const file of Array.from(files ?? [])) {
+      if (!file.type.startsWith("image/")) {
         setErr("Only images.");
-        return;
+        continue;
       }
-      const r = new FileReader();
-      r.onload = (e) => {
-        const url = String(e.target?.result ?? "");
-        const img = new Image();
-        img.onload = () => {
-          if (img.naturalWidth !== REQ_IMG.w || img.naturalHeight !== REQ_IMG.h) {
-            setErr(`Skipped ${f.name} — must be ${REQ_IMG.w}×${REQ_IMG.h}px.`);
-            return;
-          }
-          setMedia((m) => [{ id: `m-${uid()}`, name: f.name, url, size: f.size }, ...m]);
-        };
-        img.src = url;
-      };
-      r.readAsDataURL(f);
-    });
-  };
+      try {
+        await readDimensions(file);
+      } catch {
+        setErr(`Skipped ${file.name} — couldn't read as an image.`);
+        continue;
+      }
+      // No aspect-ratio rule here: this is a shared pool, so the right shape
+      // depends on which slot uses the image. Size still matters — see
+      // MEDIA_MAX_KB.
+      if (file.size > MEDIA_MAX_KB * 1024) {
+        setErr(`Skipped ${file.name} — over ${MEDIA_MAX_KB}KB. Save it as WebP to shrink it (try squoosh.app).`);
+        continue;
+      }
+
+      const form = new FormData();
+      form.append("file", file);
+      const res = await apiFetch("/api/media", { method: "POST", body: form });
+      if (!res?.ok) {
+        const body = await res?.json().catch(() => null);
+        setErr(body?.detail ?? `Couldn't upload ${file.name}.`);
+        continue;
+      }
+      const uploaded = (await res.json()) as MediaItem;
+      setMedia((m) => [uploaded, ...m]);
+    }
+  }
+
+  async function remove(id: string) {
+    const res = await apiFetch(`/api/media/${id}`, { method: "DELETE" });
+    if (res?.ok || res?.status === 204) {
+      setMedia((cur) => cur.filter((x) => x.id !== id));
+    } else {
+      setErr("Couldn't delete that file. Please try again.");
+    }
+  }
+
+  const base = apiBaseUrl() ?? "";
+
+  if (loading) return <p className="p-8 text-sm text-ink-soft">Loading media library…</p>;
 
   return (
     <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
       <div className="mb-4">
         <h2 className="text-lg font-bold text-ink">Media library</h2>
-        <p className="text-sm text-ink-soft">
-          Drop many photos at once.{" "}
-          <span className="font-semibold text-gold">Local only — held in this browser, not uploaded.</span>
-        </p>
+        <p className="text-sm text-ink-soft">Drop many photos at once.</p>
       </div>
       <div
         onDragOver={(e) => {
@@ -72,7 +111,7 @@ export function MediaLibrary({
         <UploadCloud className="mb-2 h-8 w-8 text-ink-soft/60" />
         <div className="text-sm font-semibold text-ink">Drop photos or click to upload</div>
         <div className="text-xs text-ink-soft/70">
-          Exactly {REQ_IMG.w}×{REQ_IMG.h}px each · ≤{REQ_IMG.maxMB}MB · {media.length} in library
+          Any shape · ≤{MEDIA_MAX_KB}KB each · {media.length} in library
         </div>
         <input
           ref={inputRef}
@@ -95,9 +134,9 @@ export function MediaLibrary({
             className="group relative aspect-square overflow-hidden rounded-lg border border-ink/10"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={m.url} alt={m.name} className="h-full w-full object-cover" />
+            <img src={`${base}${m.url}`} alt={m.name} className="h-full w-full object-cover" />
             <button
-              onClick={() => setMedia((cur) => cur.filter((x) => x.id !== m.id))}
+              onClick={() => remove(m.id)}
               className="absolute right-1 top-1 hidden rounded-full bg-card/95 p-1 group-hover:block"
             >
               <Trash2 className="h-3.5 w-3.5 text-sale" />

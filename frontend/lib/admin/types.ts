@@ -72,26 +72,6 @@ export interface AdminCategory {
   image: string;
 }
 
-export type SectionType =
-  | "announcement"
-  | "hero"
-  | "trust"
-  | "categories"
-  | "featured"
-  | "storyBanner"
-  | "grid";
-
-export interface AdminSection {
-  id: string;
-  type: SectionType;
-  on: boolean;
-  text?: string;
-  heading?: string;
-  sub?: string;
-  ctaLabel?: string;
-  image?: string;
-}
-
 export interface MediaItem {
   id: string;
   name: string;
@@ -108,10 +88,57 @@ export type AdminView =
   | "categories"
   | "media"
   | "orders"
-  | "customers";
+  | "customers"
+  | "analytics"
+  | "coupons"
+  | "fraud"
+  | "errorLogs"
+  | "messages";
 
 export const LOW_STOCK = 5;
-export const REQ_IMG = { w: 1000, h: 1000, maxMB: 2 };
+
+/**
+ * Upload rules per image slot.
+ *
+ * `w`/`h` are the recommended upload size — 2x what the slot actually renders
+ * at, so it stays sharp on retina screens without shipping wasted pixels.
+ * What's *enforced* is the aspect ratio (a 4:5 slot crops a square upload,
+ * silently cutting off the top and bottom) and `maxKB`.
+ *
+ * maxKB matters more than usual here: next.config sets `unoptimized: true`,
+ * so Next never resizes or recompresses — the uploaded file is delivered
+ * byte-for-byte to every visitor, and gzip/zstd don't shrink already-
+ * compressed image formats.
+ */
+export interface ImageSpec {
+  w: number;
+  h: number;
+  maxKB: number;
+  /** Human name for the shape, used in error messages. */
+  shape: string;
+}
+
+export const IMG_SPECS = {
+  /** Product grid card + detail gallery. */
+  product: { w: 1000, h: 1250, maxKB: 250, shape: "4:5 portrait" },
+  /** Homepage hero, the largest image on the site. */
+  hero: { w: 1400, h: 1750, maxKB: 400, shape: "4:5 portrait" },
+  /** Small inset image beside the hero copy (desktop only). */
+  heroInset: { w: 640, h: 480, maxKB: 100, shape: "4:3 landscape" },
+  /** Full-bleed teal campaign band. */
+  campaign: { w: 1000, h: 1250, maxKB: 250, shape: "4:5 portrait" },
+  /** Editorial story tiles. */
+  editorial: { w: 900, h: 1125, maxKB: 200, shape: "4:5 portrait" },
+  /** Circle-cropped quick CTA tiles + category tiles. */
+  tile: { w: 640, h: 640, maxKB: 120, shape: "square" },
+} as const satisfies Record<string, ImageSpec>;
+
+/**
+ * File-size cap for the general Media Library. No aspect-ratio rule there —
+ * it's a shared pool, and the right shape depends on which slot ends up
+ * using the image. Matches the most generous slot (hero).
+ */
+export const MEDIA_MAX_KB = 400;
 
 export const BADGE_BG = [
   "#f59e0b", "#b8860b", "#0d9488", "#e11d48", "#b91c1c", "#7c3aed", "#059669", "#1f2937", "#ffffff",

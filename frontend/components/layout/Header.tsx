@@ -15,13 +15,27 @@ import { SearchOverlay } from "./SearchOverlay";
  * search overlay, cart trigger, and mobile accordion nav.
  * All copy/links come from content/site.config.ts.
  */
-export function Header() {
+interface HeaderProps {
+  /** Admin override for the announcement ribbon (see GET /api/sections),
+   * fetched server-side in layout.tsx since this is a client component.
+   * Both fields null means "use content/site.config.ts's default". */
+  announcementOverride?: { enabled: boolean | null; messages: string[] | null };
+}
+
+export function Header({ announcementOverride }: HeaderProps = {}) {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { itemCount, openCart } = useCart();
   const { user } = useAuth();
-  const { brand, announcement, nav } = siteConfig;
+  const { brand, nav } = siteConfig;
+  const announcement = {
+    enabled: announcementOverride?.enabled ?? siteConfig.announcement.enabled,
+    messages:
+      announcementOverride?.messages && announcementOverride.messages.length > 0
+        ? announcementOverride.messages
+        : siteConfig.announcement.messages,
+  };
 
   // Send signed-out shoppers straight to the sign-in page; signed-in ones to
   // their account. Avoids the /account "Loading…" → redirect bounce.

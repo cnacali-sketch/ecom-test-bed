@@ -13,10 +13,23 @@ from sqlalchemy.pool import StaticPool
 
 from app.config import get_settings
 from app.db import Base, get_db_session
-from app.dependencies.auth import ACCESS_COOKIE
+from app.dependencies.auth import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER
 from app.main import app
 from app.models.user import ROLE_ADMIN, ROLE_CUSTOMER, User
+from app.services import login_throttle
 from app.services.security import create_access_token, hash_password
+
+
+@pytest.fixture(autouse=True)
+def _clear_login_throttle() -> "Generator[None, None, None]":
+    """Every login_throttle key (register/refresh/login/order/...) lives in one
+    process-global dict, keyed by IP — and every test client resolves to the
+    same fake IP under ASGITransport. Without a reset, throttle counts would
+    accumulate across unrelated tests in unrelated files and start producing
+    spurious 429s once enough order/coupon/etc. tests ran in one session."""
+    login_throttle._attempts.clear()
+    yield
+    login_throttle._attempts.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +75,17 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides.clear()
 
 
+def _set_csrf(ac: AsyncClient) -> None:
+    """These fixtures inject the access-token cookie directly (bypassing a
+    real /login round-trip), so they must also stand in for the CSRF
+    cookie+header pair a real login response would set — otherwise every
+    mutating call in the suite would 403 against the double-submit check in
+    dependencies/auth.py."""
+    token = "test-csrf-token"
+    ac.cookies.set(CSRF_COOKIE, token)
+    ac.headers[CSRF_HEADER] = token
+
+
 @pytest_asyncio.fixture
 async def admin_user(db_session: AsyncSession) -> User:
     """A persisted admin account."""
@@ -88,6 +112,7 @@ async def admin_client(
     app.dependency_overrides[get_db_session] = _override
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         ac.cookies.set(ACCESS_COOKIE, create_access_token(admin_user.id, admin_user.role))
+        _set_csrf(ac)
         yield ac
     app.dependency_overrides.clear()
 
@@ -118,6 +143,7 @@ async def customer_client(
     app.dependency_overrides[get_db_session] = _override
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         ac.cookies.set(ACCESS_COOKIE, create_access_token(customer_user.id, customer_user.role))
+        _set_csrf(ac)
         yield ac
     app.dependency_overrides.clear()
 

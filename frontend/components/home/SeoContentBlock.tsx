@@ -1,13 +1,21 @@
 import Link from "next/link";
 import { siteConfig } from "@/content/site.config";
+import { fetchHomepageContent } from "@/lib/api";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
  * Brand story + per-category blurbs + FAQ accordion (native <details>).
- * All copy comes from siteConfig.home.seo — edit there, not here.
+ * Copy comes from siteConfig.home.seo by default, per-field or whole-list
+ * overridden by the admin Homepage editor (GET /api/sections) when set.
  */
-export function SeoContentBlock() {
-  const { seo } = siteConfig.home;
+export async function SeoContentBlock() {
+  const defaults = siteConfig.home.seo;
+  const override = await fetchHomepageContent();
+  const seo = {
+    brandStory: override?.seo_brand_story || defaults.brandStory,
+    categories: override?.seo_categories?.length ? override.seo_categories : defaults.categories,
+    faqs: override?.seo_faqs?.length ? override.seo_faqs : defaults.faqs,
+  };
 
   return (
     <section className="border-t border-ink/10 bg-paper-tint">

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 
-import { AuthForm } from "@/components/auth/AuthForm";
+import { AuthForm, AuthLink } from "@/components/auth/AuthForm";
 import { AuthError, useAuth } from "@/lib/auth-context";
 
 export default function AdminLoginPage() {
@@ -26,6 +26,7 @@ export default function AdminLoginPage() {
       subtitle="Staff access to the Savvy In Teal catalogue."
       submitLabel="Sign in"
       onSubmit={handleLogin}
+      footer={<AuthLink href="/forgot-password">Forgot your password?</AuthLink>}
     />
   );
 }

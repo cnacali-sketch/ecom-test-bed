@@ -12,7 +12,12 @@ const EMPTY_STATE_SHORTCUTS = siteConfig.nav.map(({ label, href }) => ({ label, 
 
 const FREE_SHIPPING_THRESHOLD = 1499;
 
-/** Slide-out cart: line items, subtotal, checkout CTA, empty-state w/ category shortcuts. */
+/**
+ * Cart popover: a thumb-reachable bottom sheet on mobile (fast checkout —
+ * the CTA stays within reach without scrolling to the screen's top corner),
+ * a floating top-right popout on desktop (mirrors the cart icon's corner
+ * instead of a full-height side drawer).
+ */
 export function CartDrawer() {
   const { items, isOpen, subtotal, closeCart, removeItem, updateQuantity } = useCart();
 
@@ -21,15 +26,15 @@ export function CartDrawer() {
   const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
 
   return (
-    <div className="fixed inset-0 z-[100] flex justify-end">
+    <div className="fixed inset-0 z-[100]">
       <button
         type="button"
         aria-label="Close cart"
         onClick={closeCart}
-        className="absolute inset-0 bg-ink/40"
+        className="animate-fade absolute inset-0 bg-ink/40"
       />
 
-      <div className="relative flex h-full w-full flex-col bg-paper shadow-xl sm:max-w-md">
+      <div className="animate-rise fixed inset-x-0 bottom-0 z-[101] flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-3xl bg-paper shadow-xl sm:inset-x-auto sm:inset-y-auto sm:bottom-auto sm:left-auto sm:right-6 sm:top-6 sm:h-auto sm:max-h-[calc(100vh-3rem)] sm:w-full sm:max-w-md sm:rounded-2xl sm:shadow-2xl">
         <div className="flex items-center justify-between border-b border-ink/10 px-6 py-4">
           <h2 className="font-display text-xl italic text-ink">Your cart</h2>
           <button

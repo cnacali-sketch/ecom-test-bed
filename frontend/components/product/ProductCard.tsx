@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 import { useCart } from "@/lib/cart-context";
 import { calculateDiscountPercent } from "@/lib/format";
 import type { Product } from "@/lib/types";
@@ -38,8 +39,8 @@ export function ProductCard({ product }: ProductCardProps) {
     ? (items.find((item) => item.variantId === activeVariant.id)?.quantity ?? 0)
     : 0;
 
-  // First add for this swatch. Stays on the grid — no drawer — then the button
-  // swaps to the qty stepper below so the shopper can keep browsing.
+  // First add for this swatch. addItem() opens the cart popover; the button
+  // also swaps to the qty stepper below so a re-add from the grid works too.
   const handleAddToCart = () => {
     if (!activeVariant || !product.inStock) return;
     addItem({
@@ -52,6 +53,7 @@ export function ProductCard({ product }: ProductCardProps) {
       currency: product.currency,
       quantity: 1,
     });
+    trackEvent("add_to_cart", { product_id: product.id });
   };
   const secondaryImage = product.images[1]?.url ?? primaryImage;
   const displayImage = isHovered ? secondaryImage : primaryImage;
