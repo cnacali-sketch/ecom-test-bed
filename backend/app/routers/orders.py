@@ -553,7 +553,9 @@ async def init_razorpay_payment(
         charge = order.total_amount
 
     try:
-        rzp = create_razorpay_order(charge, f"order_{order.id}")
+        rzp = create_razorpay_order(
+            charge, f"order_{order.id}", {"order_id": str(order.id)}
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

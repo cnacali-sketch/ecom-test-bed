@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # payment signatures; never ship it to the frontend.
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
+    # Secret used to verify Razorpay WEBHOOK signatures (X-Razorpay-Signature).
+    # Distinct from the Key Secret — set separately in the Razorpay dashboard
+    # when you register the webhook endpoint.
+    razorpay_webhook_secret: str = ""
 
     # --- COD confirmation deposit (INR) ---
     # Cash-on-Delivery orders require this amount paid online (Razorpay) at

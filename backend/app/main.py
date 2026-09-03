@@ -20,6 +20,7 @@ from app.routers import (
     inventory,
     media,
     orders,
+    payments,
     pricing,
     products,
     recommendation,
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(sections.router)
     fastapi_app.include_router(error_logs.router)
     fastapi_app.include_router(contact.router)
+    fastapi_app.include_router(payments.router)
 
     fastapi_app.mount("/media", StaticFiles(directory=media.UPLOAD_DIR), name="media")
 

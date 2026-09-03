@@ -37,7 +37,9 @@ def _basic_auth() -> str:
     return "Basic " + base64.b64encode(raw.encode("utf-8")).decode("ascii")
 
 
-def create_razorpay_order(total: Decimal, receipt: str) -> dict:
+def create_razorpay_order(
+    total: Decimal, receipt: str, extra_notes: dict | None = None
+) -> dict:
     """Create a Razorpay order for ``total`` (INR, paise = total*100).
 
     Returns ``{"id", "amount", "currency"}``. Raises RuntimeError on failure so
@@ -50,12 +52,16 @@ def create_razorpay_order(total: Decimal, receipt: str) -> dict:
     if amount_paise <= 0:
         raise RuntimeError("Cannot create a Razorpay order for a zero total")
 
+    notes = {"source": "savvy-in-teal-storefront"}
+    if extra_notes:
+        notes.update(extra_notes)
+
     payload = json.dumps(
         {
             "amount": amount_paise,
             "currency": CURRENCY,
             "receipt": receipt,
-            "notes": {"source": "savvy-in-teal-storefront"},
+            "notes": notes,
         }
     ).encode("utf-8")
 
@@ -92,6 +98,23 @@ def verify_payment_signature(order_id: str, payment_id: str, signature: str) -> 
     expected = hmac.new(
         get_settings().razorpay_key_secret.encode("utf-8"),
         msg=f"{order_id}|{payment_id}".encode("utf-8"),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+def verify_webhook_signature(raw_body: bytes, signature: str) -> bool:
+    """Verify a Razorpay webhook's ``X-Razorpay-Signature`` header.
+
+    Razorpay signs the RAW request body with the Webhook Secret (a different
+    secret from the Key Secret, configured when the webhook is registered).
+    """
+    secret = get_settings().razorpay_webhook_secret
+    if not secret:
+        return False
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        msg=raw_body,
         digestmod=hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
