@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
 
+    # --- COD confirmation deposit (INR) ---
+    # Cash-on-Delivery orders require this amount paid online (Razorpay) at
+    # checkout to confirm the order; the balance (total - deposit) is paid on
+    # delivery. Non-refundable once collected. Orders totalling less than this
+    # cannot use COD (they must pay in full online).
+    cod_deposit_amount: int = 200
+
     # Only these opt IN to dev conveniences (insecure default secret, open CORS).
     # Anything else — including a typo'd or unset APP_ENV — is treated as
     # production, so a misconfigured deploy fails closed rather than silently

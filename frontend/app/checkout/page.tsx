@@ -33,6 +33,11 @@ export default function CheckoutPage() {
   const [checkingCoupon, setCheckingCoupon] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
   const total = subtotal - (appliedCoupon?.discount ?? 0);
+  // Cash-on-Delivery requires a non-refundable confirmation deposit paid
+  // online; orders under the deposit amount must pay in full online instead.
+  // Keep in sync with the backend COD_DEPOSIT_AMOUNT.
+  const COD_DEPOSIT = 200;
+  const codAvailable = total >= COD_DEPOSIT;
 
   useEffect(() => {
     trackEvent("checkout_started");
@@ -114,7 +119,8 @@ export default function CheckoutPage() {
             unit_price: item.price,
           })),
           shipping_address: address,
-          payment_method: paymentMethod,
+          // Orders under the COD deposit amount can't use COD — force prepaid.
+          payment_method: paymentMethod === "cod" && !codAvailable ? "prepaid" : paymentMethod,
           terms_accepted: termsAccepted,
           terms_version: siteConfig.policies.termsVersion,
           coupon_code: appliedCoupon?.code,
@@ -132,14 +138,10 @@ export default function CheckoutPage() {
       }
       const order = await response.json();
 
-      if (paymentMethod === "cod") {
-        trackEvent("order_placed");
-        clearCart();
-        router.push(`/track-order?order_id=${order.id}&placed=1`);
-        return;
-      }
-
-      // Prepaid: create a Razorpay payment for the unpaid order and open the modal.
+      // Collect payment via Razorpay. Prepaid pays the full total; Cash on
+      // Delivery pays its non-refundable confirmation deposit now, with the
+      // balance paid on delivery. The backend decides the amount via
+      // /razorpay/init.
       const init = await apiFetch(`/api/orders/${order.id}/razorpay/init`, {
         method: "POST",
       });
@@ -147,7 +149,7 @@ export default function CheckoutPage() {
         const initBody = await init?.json().catch(() => null);
         setError(
           initBody?.detail ??
-            "Could not start payment. Your order is saved as pending — try again or choose Cash on Delivery.",
+            "Could not start payment. Your order is saved as pending — you can try again.",
         );
         return;
       }
@@ -187,9 +189,7 @@ export default function CheckoutPage() {
         clearCart();
         router.push(`/track-order?order_id=${order.id}&placed=1`);
       } catch {
-        setError(
-          "Payment was not completed. Your order is saved as pending — you can retry or choose Cash on Delivery.",
-        );
+        setError("Payment was not completed. Your order is saved as pending — you can try again.");
       }
     } catch {
       setError("Cannot reach the server. Please try again.");
@@ -229,7 +229,11 @@ export default function CheckoutPage() {
             <h2 className="font-display text-xl italic text-ink">Payment</h2>
             <label
               className={`flex cursor-pointer items-center gap-3 border px-4 py-3 transition-colors ${
-                paymentMethod === "cod" ? "border-teal bg-teal/5" : "border-ink/10"
+                !codAvailable
+                  ? "cursor-not-allowed opacity-50"
+                  : paymentMethod === "cod"
+                    ? "border-teal bg-teal/5"
+                    : "border-ink/10"
               }`}
             >
               <input
@@ -237,10 +241,16 @@ export default function CheckoutPage() {
                 name="payment"
                 value="cod"
                 checked={paymentMethod === "cod"}
+                disabled={!codAvailable}
                 onChange={() => setPaymentMethod("cod")}
                 className="h-4 w-4 accent-teal"
               />
-              <span className="text-sm font-medium text-ink">Cash on Delivery</span>
+              <span>
+                <span className="block text-sm font-medium text-ink">Cash on Delivery</span>
+                <span className="block text-xs text-ink-soft">
+                  Pay a non-refundable ₹{COD_DEPOSIT} deposit online to confirm · balance on delivery
+                </span>
+              </span>
             </label>
             <label
               className={`flex cursor-pointer items-center gap-3 border px-4 py-3 transition-colors ${
@@ -259,6 +269,17 @@ export default function CheckoutPage() {
                 Pay online (UPI / card / net-banking)
               </span>
             </label>
+            {!codAvailable && (
+              <p className="text-xs text-sale">
+                Cash on Delivery needs an order of ₹{COD_DEPOSIT}+ — please pay online instead.
+              </p>
+            )}
+            {paymentMethod === "cod" && codAvailable && (
+              <p className="text-xs text-ink-soft">
+                Non-refundable ₹{COD_DEPOSIT} collected now ·{" "}
+                {formatPrice(total - COD_DEPOSIT)} balance on delivery
+              </p>
+            )}
           </section>
 
           <label className="flex items-start gap-3 text-sm text-ink-soft">

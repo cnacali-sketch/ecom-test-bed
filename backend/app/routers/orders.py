@@ -101,6 +101,8 @@ class OrderRead(BaseModel):
     coupon_code: str | None
     discount_amount: Decimal
     total_amount: Decimal
+    deposit_amount: Decimal
+    deposit_paid: bool
     flagged: bool
     flag_reason: str | None
     ip_address: str | None
@@ -288,6 +290,26 @@ async def create_order(
         if payload.coupon_code
         else (None, Decimal("0"))
     )
+    order_total = subtotal - discount_amount
+
+    settings = get_settings()
+    cod_deposit = Decimal(settings.cod_deposit_amount)
+
+    # COD orders require a non-refundable confirmation deposit paid online
+    # (Razorpay) at checkout; the balance (total - deposit) is paid on
+    # delivery. Orders under the deposit amount can't use COD — they must pay
+    # in full online instead.
+    deposit_amount = Decimal("0")
+    if payload.payment_method == "cod":
+        if order_total < cod_deposit:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"This order totals {order_total} which is below the ₹{cod_deposit} COD "
+                    f"confirmation deposit. Cash on Delivery isn't available — please pay online instead."
+                ),
+            )
+        deposit_amount = cod_deposit
 
     order = Order(
         user_id=effective_user_id,
@@ -298,7 +320,8 @@ async def create_order(
         terms_accepted_at=datetime.now(timezone.utc) if payload.terms_accepted else None,
         coupon_code=coupon_code,
         discount_amount=discount_amount,
-        total_amount=subtotal - discount_amount,
+        total_amount=order_total,
+        deposit_amount=deposit_amount,
         flagged=flag_reason is not None,
         flag_reason=flag_reason,
         ip_address=client_ip(request)[:64] or None,
@@ -315,10 +338,12 @@ async def create_order(
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
 
+    # Storefront orders (guest/customer) confirm via online payment — prepaid
+    # pays in full, COD pays its deposit — so the confirmation email is sent
+    # from the razorpay/verify endpoint once payment clears. Admin-created
+    # (phone/manual) orders collect nothing online, so confirm them here.
     notify_email = await _resolve_order_email(db, order)
-    # COD is paid on delivery, so confirm immediately. Prepaid orders are only
-    # confirmed once payment is verified (see POST .../razorpay/verify).
-    if notify_email and order.payment_method != "prepaid":
+    if is_admin_caller and notify_email:
         background_tasks.add_task(send_order_confirmation_email, notify_email, str(order.id))
 
     return order
@@ -509,13 +534,24 @@ async def init_razorpay_payment(
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
-    if order.payment_method != "prepaid":
-        raise HTTPException(status_code=400, detail="This order isn't an online-payment order")
-    if order.payment_status == "paid":
-        raise HTTPException(status_code=400, detail="This order is already paid")
+    if order.payment_method not in {"prepaid", "cod"}:
+        raise HTTPException(status_code=400, detail="This order isn't an online/deposit order")
+
+    # What we collect now: prepaid pays the full total; COD pays its
+    # confirmation deposit (the balance is collected on delivery).
+    if order.payment_method == "cod":
+        if order.deposit_paid:
+            raise HTTPException(status_code=400, detail="This order's deposit is already collected")
+        if not order.deposit_amount or order.deposit_amount <= 0:
+            raise HTTPException(status_code=400, detail="No COD deposit is due on this order")
+        charge = order.deposit_amount
+    else:  # prepaid
+        if order.payment_status == "paid":
+            raise HTTPException(status_code=400, detail="This order is already paid")
+        charge = order.total_amount
 
     try:
-        rzp = create_razorpay_order(order.total_amount, f"order_{order.id}")
+        rzp = create_razorpay_order(charge, f"order_{order.id}")
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -544,10 +580,14 @@ async def verify_razorpay_payment(
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
-    if order.payment_method != "prepaid":
-        raise HTTPException(status_code=400, detail="This order isn't an online-payment order")
-    if order.payment_status == "paid":
-        return order  # idempotent — a retried verify is fine
+    if order.payment_method not in {"prepaid", "cod"}:
+        raise HTTPException(status_code=400, detail="This order isn't an online/deposit order")
+
+    # Idempotent: a retried verify is fine.
+    if order.payment_method == "prepaid" and order.payment_status == "paid":
+        return order
+    if order.payment_method == "cod" and order.deposit_paid:
+        return order
 
     if not verify_payment_signature(
         payload.razorpay_order_id,
@@ -556,7 +596,11 @@ async def verify_razorpay_payment(
     ):
         raise HTTPException(status_code=400, detail="Payment verification failed")
 
-    order.payment_status = "paid"
+    if order.payment_method == "cod":
+        # Deposit collected; the balance is still owed on delivery.
+        order.deposit_paid = True
+    else:
+        order.payment_status = "paid"
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
 

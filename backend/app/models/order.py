@@ -48,6 +48,12 @@ class Order(Base):
     coupon_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
     discount_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"), server_default="0")
     total_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    # COD confirmation deposit: an amount collected online (via Razorpay) at
+    # checkout to confirm a Cash-on-Delivery order; the balance
+    # (total_amount - deposit_amount) is paid on delivery. 0 for prepaid
+    # orders. Non-refundable once `deposit_paid` is true.
+    deposit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"), server_default="0")
+    deposit_paid: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Server-side price-tampering signal: set when a client-sent unit_price
     # didn't match Product.price at order time. The order still gets charged
     # the CORRECT (server) price either way — this is a human-review alert,
