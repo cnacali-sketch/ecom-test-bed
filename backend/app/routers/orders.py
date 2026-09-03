@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import get_settings
 from app.db import get_db_session
 from app.dependencies.auth import optional_current_user, require_admin, require_current_user
 from app.models.coupon import Coupon
@@ -32,6 +33,11 @@ from app.schemas.auth import Address
 from app.services import login_throttle
 from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
+from app.services.razorpay import (
+    create_razorpay_order,
+    razorpay_enabled,
+    verify_payment_signature,
+)
 from app.services.request_ip import client_ip
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -310,7 +316,9 @@ async def create_order(
     await db.refresh(order, attribute_names=["items"])
 
     notify_email = await _resolve_order_email(db, order)
-    if notify_email:
+    # COD is paid on delivery, so confirm immediately. Prepaid orders are only
+    # confirmed once payment is verified (see POST .../razorpay/verify).
+    if notify_email and order.payment_method != "prepaid":
         background_tasks.add_task(send_order_confirmation_email, notify_email, str(order.id))
 
     return order
@@ -469,4 +477,91 @@ async def update_shipping(
         order.tracking_number = tracking_number
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
+    return order
+
+
+# ---- Razorpay online payment (prepaid orders) ----
+# Guests check out unauthenticated, so the order id (an unguessable UUID) is the
+# credential — the same model as the public GET /{order_id} tracker.
+
+class RazorpayVerifyRequest(BaseModel):
+    """Client confirms a captured Razorpay payment with its signature."""
+
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+@router.post("/{order_id}/razorpay/init")
+async def init_razorpay_payment(
+    order_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_session),
+) -> dict:
+    """Create a Razorpay payment order for an unpaid prepaid order.
+
+    The Key Secret stays server-side here. The returned `key_id` is public and
+    is what the checkout SDK needs to open the modal.
+    """
+    if not razorpay_enabled():
+        raise HTTPException(status_code=503, detail="Online payment isn't configured yet")
+
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.payment_method != "prepaid":
+        raise HTTPException(status_code=400, detail="This order isn't an online-payment order")
+    if order.payment_status == "paid":
+        raise HTTPException(status_code=400, detail="This order is already paid")
+
+    try:
+        rzp = create_razorpay_order(order.total_amount, f"order_{order.id}")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return {
+        "ok": True,
+        "razorpay_order_id": rzp["id"],
+        "amount": rzp["amount"],
+        "currency": rzp["currency"],
+        "key_id": get_settings().razorpay_key_id,
+    }
+
+
+@router.post("/{order_id}/razorpay/verify", response_model=OrderRead)
+async def verify_razorpay_payment(
+    order_id: uuid.UUID,
+    payload: RazorpayVerifyRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db_session),
+) -> Order:
+    """Verify a captured payment's signature and mark the order paid.
+
+    The signature proves Razorpay actually captured the money for THIS order —
+    the client can't self-report a successful payment.
+    """
+    result = await db.execute(select(Order).where(Order.id == order_id))
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.payment_method != "prepaid":
+        raise HTTPException(status_code=400, detail="This order isn't an online-payment order")
+    if order.payment_status == "paid":
+        return order  # idempotent — a retried verify is fine
+
+    if not verify_payment_signature(
+        payload.razorpay_order_id,
+        payload.razorpay_payment_id,
+        payload.razorpay_signature,
+    ):
+        raise HTTPException(status_code=400, detail="Payment verification failed")
+
+    order.payment_status = "paid"
+    await db.commit()
+    await db.refresh(order, attribute_names=["items"])
+
+    notify_email = await _resolve_order_email(db, order)
+    if notify_email:
+        background_tasks.add_task(send_order_confirmation_email, notify_email, str(order.id))
+
     return order

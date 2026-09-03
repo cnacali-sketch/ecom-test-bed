@@ -14,6 +14,7 @@ import { apiFetch } from "@/lib/api-client";
 import { useAuth, type Address } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { formatPrice } from "@/lib/format";
+import { openRazorpayCheckout } from "@/lib/razorpay";
 
 export default function CheckoutPage() {
   const { items, subtotal, clearCart } = useCart();
@@ -23,6 +24,7 @@ export default function CheckoutPage() {
   const [email, setEmail] = useState(user?.email ?? "");
   const [address, setAddress] = useState<Address>(seedAddress(user?.postal_address));
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "prepaid">("cod");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -112,7 +114,7 @@ export default function CheckoutPage() {
             unit_price: item.price,
           })),
           shipping_address: address,
-          payment_method: "cod",
+          payment_method: paymentMethod,
           terms_accepted: termsAccepted,
           terms_version: siteConfig.policies.termsVersion,
           coupon_code: appliedCoupon?.code,
@@ -128,11 +130,67 @@ export default function CheckoutPage() {
         setError(body?.detail ?? "Could not place your order. Please try again.");
         return;
       }
-
       const order = await response.json();
-      trackEvent("order_placed");
-      clearCart();
-      router.push(`/track-order?order_id=${order.id}&placed=1`);
+
+      if (paymentMethod === "cod") {
+        trackEvent("order_placed");
+        clearCart();
+        router.push(`/track-order?order_id=${order.id}&placed=1`);
+        return;
+      }
+
+      // Prepaid: create a Razorpay payment for the unpaid order and open the modal.
+      const init = await apiFetch(`/api/orders/${order.id}/razorpay/init`, {
+        method: "POST",
+      });
+      if (!init?.ok) {
+        const initBody = await init?.json().catch(() => null);
+        setError(
+          initBody?.detail ??
+            "Could not start payment. Your order is saved as pending — try again or choose Cash on Delivery.",
+        );
+        return;
+      }
+      const rzp = await init.json();
+
+      try {
+        const result = await openRazorpayCheckout({
+          keyId: rzp.key_id,
+          orderId: rzp.razorpay_order_id,
+          amount: rzp.amount,
+          currency: rzp.currency ?? "INR",
+          name: siteConfig.brand.name,
+          description: `${items.length} item${items.length > 1 ? "s" : ""} from ${siteConfig.brand.name}`,
+          prefill: {
+            email: user?.email ?? email,
+            contact: address.phone,
+          },
+          notes: { order_id: String(order.id) },
+        });
+
+        const verify = await apiFetch(`/api/orders/${order.id}/razorpay/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            razorpay_order_id: result.razorpay_order_id,
+            razorpay_payment_id: result.razorpay_payment_id,
+            razorpay_signature: result.razorpay_signature ?? "",
+          }),
+        });
+        if (!verify?.ok) {
+          setError(
+            "Your payment succeeded but we couldn't confirm it yet. Your order is saved — if it isn't confirmed shortly, contact us.",
+          );
+          return;
+        }
+        trackEvent("order_placed");
+        clearCart();
+        router.push(`/track-order?order_id=${order.id}&placed=1`);
+      } catch {
+        setError(
+          "Payment was not completed. Your order is saved as pending — you can retry or choose Cash on Delivery.",
+        );
+      }
     } catch {
       setError("Cannot reach the server. Please try again.");
     } finally {
@@ -169,14 +227,38 @@ export default function CheckoutPage() {
 
           <section className="space-y-3">
             <h2 className="font-display text-xl italic text-ink">Payment</h2>
-            <label className="flex items-center gap-3 border border-teal bg-teal/5 px-4 py-3">
-              <input type="radio" checked readOnly className="h-4 w-4 accent-teal" />
+            <label
+              className={`flex cursor-pointer items-center gap-3 border px-4 py-3 transition-colors ${
+                paymentMethod === "cod" ? "border-teal bg-teal/5" : "border-ink/10"
+              }`}
+            >
+              <input
+                type="radio"
+                name="payment"
+                value="cod"
+                checked={paymentMethod === "cod"}
+                onChange={() => setPaymentMethod("cod")}
+                className="h-4 w-4 accent-teal"
+              />
               <span className="text-sm font-medium text-ink">Cash on Delivery</span>
             </label>
-            <div className="flex items-center gap-3 border border-ink/10 px-4 py-3 opacity-60">
-              <input type="radio" disabled className="h-4 w-4" />
-              <span className="text-sm text-ink-soft">Pay online (UPI / card) — coming soon</span>
-            </div>
+            <label
+              className={`flex cursor-pointer items-center gap-3 border px-4 py-3 transition-colors ${
+                paymentMethod === "prepaid" ? "border-teal bg-teal/5" : "border-ink/10"
+              }`}
+            >
+              <input
+                type="radio"
+                name="payment"
+                value="prepaid"
+                checked={paymentMethod === "prepaid"}
+                onChange={() => setPaymentMethod("prepaid")}
+                className="h-4 w-4 accent-teal"
+              />
+              <span className="text-sm font-medium text-ink">
+                Pay online (UPI / card / net-banking)
+              </span>
+            </label>
           </section>
 
           <label className="flex items-start gap-3 text-sm text-ink-soft">
@@ -207,7 +289,11 @@ export default function CheckoutPage() {
             disabled={submitting || !termsAccepted}
             className="w-full bg-teal py-3.5 text-xs uppercase tracking-[0.2em] text-white transition-colors hover:bg-teal-deep disabled:opacity-60 sm:w-auto sm:px-10"
           >
-            {submitting ? "Placing order…" : "Place order (Cash on Delivery)"}
+            {submitting
+              ? "Processing…"
+              : paymentMethod === "cod"
+                ? "Place order (Cash on Delivery)"
+                : `Pay ${formatPrice(total)} online`}
           </button>
         </form>
 

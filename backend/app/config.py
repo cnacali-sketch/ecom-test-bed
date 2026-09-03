@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # Base URL used to build links inside emails.
     frontend_url: str = "http://localhost:3000"
 
+    # --- Razorpay (online payment) ---
+    # Key ID is safe to expose to the browser (used by the checkout SDK).
+    # Key Secret must stay SERVER-ONLY — used to create orders and to verify
+    # payment signatures; never ship it to the frontend.
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+
     # Only these opt IN to dev conveniences (insecure default secret, open CORS).
     # Anything else — including a typo'd or unset APP_ENV — is treated as
     # production, so a misconfigured deploy fails closed rather than silently
