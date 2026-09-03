@@ -295,12 +295,14 @@ async def create_order(
     settings = get_settings()
     cod_deposit = Decimal(settings.cod_deposit_amount)
 
-    # COD orders require a non-refundable confirmation deposit paid online
-    # (Razorpay) at checkout; the balance (total - deposit) is paid on
-    # delivery. Orders under the deposit amount can't use COD — they must pay
-    # in full online instead.
+    # COD orders placed through the STOREFRONT (guest/customer) require a
+    # non-refundable confirmation deposit paid online (Razorpay) at checkout;
+    # the balance (total - deposit) is paid on delivery. Orders under the
+    # deposit amount can't use COD — they must pay in full online instead.
+    # Admin-created (phone/manual) orders skip this — there's no checkout or
+    # Razorpay modal behind them.
     deposit_amount = Decimal("0")
-    if payload.payment_method == "cod":
+    if payload.payment_method == "cod" and not is_admin_caller:
         if order_total < cod_deposit:
             raise HTTPException(
                 status_code=422,
