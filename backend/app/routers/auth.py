@@ -63,6 +63,14 @@ REGISTER_MAX_PER_IP = 10
 REFRESH_MAX_PER_IP = 30
 FORGOT_PASSWORD_MAX_PER_IP = 10
 
+# Login is keyed by TWO independent throttles, not just email: a tight one
+# scoped to (source IP, email) so one attacker can't lock a victim out of
+# their own account from a single machine, and a looser one scoped to just
+# the email so guessing distributed across many IPs still hits a ceiling
+# instead of an unbounded credential-stuffing budget.
+LOGIN_MAX_PER_IP_AND_EMAIL = 5
+LOGIN_MAX_PER_EMAIL = 20
+
 # The only thing /register ever says. Identical for a new address and an
 # existing one — that uniformity IS the fix, so don't branch this string.
 REGISTER_ACCEPTED = "If that email address is valid, a verification link has been sent."
@@ -262,13 +270,18 @@ async def reset_password(
 @router.post("/login", response_model=UserRead)
 async def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db_session),
 ) -> User:
     """Verify credentials, open a new token family, and set auth cookies."""
     email = normalize_email(payload.email)
+    ip_email_key = f"{login_throttle.client_key(request, 'login')}:{email}"
+    email_key = f"login-email:{email}"
 
-    if login_throttle.is_locked(email):
+    if login_throttle.is_locked(ip_email_key, LOGIN_MAX_PER_IP_AND_EMAIL) or login_throttle.is_locked(
+        email_key, LOGIN_MAX_PER_EMAIL
+    ):
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
 
     result = await db.execute(select(User).where(User.email == email))
@@ -278,11 +291,13 @@ async def login(
         # Hash anyway: skipping it would return far faster than a wrong-password
         # attempt and turn response time into an account-existence oracle.
         dummy_verify(payload.password)
-        login_throttle.record_failure(email)
+        login_throttle.record_failure(ip_email_key)
+        login_throttle.record_failure(email_key)
         raise _BAD_CREDENTIALS
 
     if not verify_password(payload.password, user.password_hash):
-        login_throttle.record_failure(email)
+        login_throttle.record_failure(ip_email_key)
+        login_throttle.record_failure(email_key)
         raise _BAD_CREDENTIALS
 
     if user.is_blocked:
@@ -291,7 +306,8 @@ async def login(
         # keep retrying a password that isn't the problem.
         raise HTTPException(status_code=403, detail="This account has been suspended. Contact support.")
 
-    login_throttle.reset(email)
+    login_throttle.reset(ip_email_key)
+    login_throttle.reset(email_key)
     # No family_id: a fresh login is a new session, independent of any other
     # device. Revoking one must not touch the others.
     issued = await refresh_tokens.issue(db, user.id, user.role)

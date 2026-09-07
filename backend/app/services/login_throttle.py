@@ -42,11 +42,11 @@ def reset(key: str) -> None:
 def client_key(request, prefix: str) -> str:
     """Throttle key derived from the caller's IP.
 
-    Reads `request.client.host` directly and ignores X-Forwarded-For: behind a
-    proxy every caller looks like the proxy (throttling everyone together), but
-    trusting the header would let anyone forge a fresh identity per request and
-    bypass the throttle entirely. Configure the proxy/uvicorn `--forwarded-allow-ips`
-    before switching to forwarded headers.
+    Reads `request.client.host`, which uvicorn's ProxyHeadersMiddleware
+    (--proxy-headers, set in backend/Dockerfile) rewrites to the real visitor
+    IP by parsing X-Forwarded-For at the trusted Caddy hop -- reading that
+    header by hand here again would trust whatever a client sends as its own
+    entry, since a client hitting the domain directly can set it to anything.
     """
     host = request.client.host if request.client else "unknown"
     return f"{prefix}:{host}"

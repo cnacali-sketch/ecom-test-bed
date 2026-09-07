@@ -17,4 +17,12 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers makes uvicorn trust X-Forwarded-For/-Proto and rewrite
+# request.client.host to the real visitor IP instead of the immediate TCP
+# peer. --forwarded-allow-ips=* is safe here specifically because this
+# container is never reachable directly from the internet (see
+# docker-compose.yml's port policy comment) -- Caddy is the only possible
+# peer, so there's no untrusted source that could forge the header at this
+# hop. Without this, every request looks like it came from Caddy's container
+# IP, collapsing every visitor's rate-limit bucket into one shared counter.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]

@@ -8,10 +8,12 @@ of sync with what's actually on disk.
   POST   /api/media        — upload a file (admin)
   DELETE /api/media/{id}   — delete a file (admin)
 """
+import io
 import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
 from app.dependencies.auth import require_admin
@@ -22,8 +24,14 @@ UPLOAD_DIR = Path(__file__).resolve().parents[2] / "media_uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Images only — this is a product/homepage image library, not a general file
-# store, and an unrestricted upload endpoint is a real attack surface.
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml"}
+# store, and an unrestricted upload endpoint is a real attack surface. The
+# upload's own Content-Type header and filename extension are both
+# attacker-controlled (a script-bearing file can claim to be image/png), and
+# StaticFiles serves by extension — so neither is trusted. Pillow decodes the
+# actual bytes; the verified format is what decides the stored extension.
+# SVG is deliberately excluded even though it's an image format: it can embed
+# <script>, and this library has no sanitizer for that.
+ALLOWED_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "GIF": ".gif"}
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
 
@@ -49,15 +57,26 @@ async def list_media() -> list[MediaItem]:
 
 @router.post("", response_model=MediaItem, status_code=201)
 async def upload_media(file: UploadFile) -> MediaItem:
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=422, detail=f"Unsupported file type: {file.content_type}")
-
     contents = await file.read()
     if len(contents) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=422, detail="File exceeds 8MB limit")
 
-    original_name = Path(file.filename or "upload").name  # strip any path components
-    stored_name = f"{uuid.uuid4()}__{original_name}"
+    try:
+        with Image.open(io.BytesIO(contents)) as img:
+            img.verify()
+            image_format = img.format
+    except (UnidentifiedImageError, OSError):
+        raise HTTPException(status_code=422, detail="File is not a valid image")
+
+    extension = ALLOWED_FORMATS.get(image_format or "")
+    if extension is None:
+        raise HTTPException(status_code=422, detail=f"Unsupported image type: {image_format}")
+
+    # .stem drops both any path components and the client's own extension —
+    # the stored extension always comes from the verified format above, never
+    # from the upload's filename or Content-Type.
+    original_stem = Path(file.filename or "upload").stem
+    stored_name = f"{uuid.uuid4()}__{original_stem}{extension}"
     (UPLOAD_DIR / stored_name).write_bytes(contents)
     return _to_item(UPLOAD_DIR / stored_name)
 

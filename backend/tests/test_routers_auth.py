@@ -223,6 +223,56 @@ async def test_login_throttled_after_repeated_failures(client: AsyncClient, regi
 
 
 @pytest.mark.asyncio
+async def test_login_throttle_does_not_lock_out_a_different_account(
+    client: AsyncClient, registered_user, db_session
+) -> None:
+    """Regression: the throttle used to be keyed on email alone, so anyone
+    who knew a victim's email could lock them out of their own account from
+    a single source, forever, without ever touching another account. Proves
+    exhausting one account's throttle leaves an unrelated account untouched."""
+    other = User(
+        email="someone-else@example.com",
+        password_hash=hash_password("their-own-password"),
+        role="customer",
+    )
+    db_session.add(other)
+    await db_session.commit()
+
+    for _ in range(login_throttle.MAX_ATTEMPTS):
+        await client.post("/api/auth/login", json={**LOGIN, "password": "wrong-password"})
+    locked = await client.post("/api/auth/login", json=LOGIN)
+    assert locked.status_code == 429
+
+    resp = await client.post(
+        "/api/auth/login",
+        json={"email": "someone-else@example.com", "password": "their-own-password"},
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_login_throttle_still_caps_total_attempts_from_many_sources(
+    client: AsyncClient, registered_user, monkeypatch
+) -> None:
+    """The tight (ip, email) throttle alone would let an attacker spread
+    guesses across many source IPs to bypass it entirely -- the looser
+    per-email ceiling must still catch that."""
+    from app.routers import auth as auth_module
+
+    fake_ip = iter(f"203.0.113.{i}" for i in range(1, 100))
+    monkeypatch.setattr(
+        auth_module.login_throttle,
+        "client_key",
+        lambda request, prefix: f"{prefix}:{next(fake_ip)}",
+    )
+
+    for _ in range(auth_module.LOGIN_MAX_PER_EMAIL):
+        await client.post("/api/auth/login", json={**LOGIN, "password": "wrong-password"})
+    resp = await client.post("/api/auth/login", json=LOGIN)
+    assert resp.status_code == 429
+
+
+@pytest.mark.asyncio
 async def test_each_login_opens_its_own_family(
     client: AsyncClient, registered_user, db_session
 ) -> None:

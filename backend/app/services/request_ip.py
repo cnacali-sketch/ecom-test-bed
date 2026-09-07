@@ -10,14 +10,19 @@ from app.config import get_settings
 
 
 def client_ip(request: Request) -> str:
-    """Best-effort client IP. NOTE: X-Forwarded-For is trusted as-is, which
-    assumes the app sits behind a proxy that overwrites it (Caddy in
-    production). A client hitting the backend directly can forge this header
-    — so IP-derived signals are advisory leads to investigate, never an
-    authorization or auto-block decision."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Best-effort client IP.
+
+    Reads request.client.host, not the X-Forwarded-For header directly:
+    uvicorn's ProxyHeadersMiddleware (--proxy-headers, enabled in
+    backend/Dockerfile) already parses that header and rewrites
+    request.client.host to the real visitor IP, correctly peeling the chain
+    at the trusted hop. Parsing X-Forwarded-For by hand here again would
+    trust whatever value a client sends as its own leftmost entry — a client
+    hitting the domain directly can set that to anything, since a proxy that
+    appends (Caddy's default) puts the real IP at the END of the chain, not
+    the start. IP-derived signals stay advisory leads to investigate, never
+    an authorization or auto-block decision, even though this is no longer
+    trivially spoofable."""
     return request.client.host if request.client else "unknown"
 
 
