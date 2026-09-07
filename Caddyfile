@@ -2,12 +2,33 @@
 # response goes out uncompressed. Measured live: the homepage was shipping
 # 5.4 MB raw to every visitor. zstd is listed first so clients that support
 # it get the better ratio; gzip covers everything else.
+# Baseline security headers on every response. CSP is deliberately NOT set
+# here: the storefront loads the Razorpay checkout script/modal, Next.js
+# inline hydration data, and ad-pixel scripts (gclid/fbclid landing pages) --
+# a CSP tight enough to matter but wrong in one directive would silently
+# break checkout (real payments) or hydration. Needs its own pass with the
+# actual script/frame/connect sources enumerated and tested in a browser,
+# not guessed here. HSTS omits `preload`: submitting to browsers' preload
+# list is a one-way door (very slow to undo), left for a deliberate decision.
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), microphone=(), camera=()"
+		-Server
+	}
+}
+
 savvyinteal.com, www.savvyinteal.com {
 	encode zstd gzip
+	import security_headers
 	reverse_proxy frontend:3000
 }
 
 api.savvyinteal.com {
 	encode zstd gzip
+	import security_headers
 	reverse_proxy backend:8000
 }
