@@ -108,10 +108,13 @@ export function AdminApp() {
   // order instead of just landing on the unfiltered list.
   const [ordersDeepLinkId, setOrdersDeepLinkId] = useState<string | null>(null);
 
-  // Seed from the live catalogue once.
+  // Seed from the live catalogue once. limit=200 (the backend's max) --
+  // without it the default limit=48 silently truncates the admin's product
+  // list once the catalogue grows past that (the storefront fetch in
+  // lib/api.ts already passes this; this one was the one inconsistent gap).
   useEffect(() => {
     let cancelled = false;
-    apiFetch("/api/products")
+    apiFetch("/api/products?limit=200")
       .then(async (res) => {
         if (cancelled || !res?.ok) return;
         const data = (await res.json()) as BackendProduct[];
