@@ -559,6 +559,14 @@ async def init_razorpay_payment(
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    # Bind this order to the Razorpay order id we just minted. /verify checks
+    # the client-supplied razorpay_order_id against this exact value before
+    # trusting any signature — a signature proves a payment happened, never
+    # which internal order it was for, so without this the same valid
+    # signature could be replayed against a different order's /verify.
+    order.razorpay_order_id = rzp["id"]
+    await db.commit()
+
     return {
         "ok": True,
         "razorpay_order_id": rzp["id"],
@@ -592,6 +600,14 @@ async def verify_razorpay_payment(
         return order
     if order.payment_method == "cod" and order.deposit_paid:
         return order
+
+    # The signature alone only proves SOME payment was captured — it says
+    # nothing about which internal order it was for. Require the client's
+    # razorpay_order_id to match the one THIS order was issued at /init;
+    # otherwise a signature paid for order A (e.g. a genuine ₹1 purchase)
+    # could be replayed against order B's /verify to mark it paid for free.
+    if not order.razorpay_order_id or payload.razorpay_order_id != order.razorpay_order_id:
+        raise HTTPException(status_code=400, detail="Payment verification failed")
 
     if not verify_payment_signature(
         payload.razorpay_order_id,

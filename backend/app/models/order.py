@@ -54,6 +54,12 @@ class Order(Base):
     # orders. Non-refundable once `deposit_paid` is true.
     deposit_amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"), server_default="0")
     deposit_paid: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # The Razorpay order id issued for THIS order at /razorpay/init. /razorpay/verify
+    # requires the client-supplied razorpay_order_id to match this exact value before
+    # trusting its signature — a signature is only proof of payment for the Razorpay
+    # order it was actually generated for, so without this binding a signature paid
+    # for one order could be replayed to mark ANY other order paid for free.
+    razorpay_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Server-side price-tampering signal: set when a client-sent unit_price
     # didn't match Product.price at order time. The order still gets charged
     # the CORRECT (server) price either way — this is a human-review alert,
