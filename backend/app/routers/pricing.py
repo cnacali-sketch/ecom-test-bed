@@ -1,6 +1,7 @@
 """Pricing calculator endpoints (Pricing Agent tools)."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.dependencies.auth import require_admin
 from app.schemas.pricing import (
     BreakEvenRequest,
     BreakEvenResponse,
@@ -11,7 +12,10 @@ from app.schemas.pricing import (
 )
 from app.services import pricing_calculators
 
-router = APIRouter(prefix="/api/pricing", tags=["pricing"])
+# Internal back-office tooling, same reasoning as inventory.py's router-level
+# gate: pure computation (no DB access, nothing data-leaking) but still an
+# unauthenticated CPU-spend lever with no reason to be public.
+router = APIRouter(prefix="/api/pricing", tags=["pricing"], dependencies=[Depends(require_admin)])
 
 
 @router.post("/markup", response_model=MarkupResponse)

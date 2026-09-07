@@ -1,10 +1,16 @@
 """Inventory generator endpoints (Inventory Agent tools)."""
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 
+from app.dependencies.auth import require_admin
 from app.schemas.inventory import BarcodeRequest, SkuBulkRequest, SkuBulkResponse
 from app.services import barcode_generator, sku_generator
 
-router = APIRouter(prefix="/api/inventory", tags=["inventory"])
+# Internal tooling for admin/back-office use only. Was unauthenticated --
+# not data-leaking (no DB access, pure computation), but bulk SKU/barcode
+# generation is still a CPU-spend lever a public, unthrottled caller could
+# lean on (e.g. a large `count` in a loop) -- gate it like every other
+# internal-tool router instead of leaving it the one inconsistent exception.
+router = APIRouter(prefix="/api/inventory", tags=["inventory"], dependencies=[Depends(require_admin)])
 
 _MEDIA_TYPES = {"png": "image/png", "svg": "image/svg+xml"}
 

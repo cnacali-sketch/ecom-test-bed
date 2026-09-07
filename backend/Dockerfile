@@ -15,6 +15,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Run as an unprivileged user rather than root -- limits what an RCE via a
+# dependency or the app itself can do to the host (no privileged port bind
+# needed here, so there's no reason to run as root at all). Fixed numeric
+# uid/gid (not just a name) so the docker-compose media_uploads volume can be
+# chowned to match from outside the container deterministically.
+RUN groupadd -g 10001 appuser \
+    && useradd -u 10001 -g appuser -M -s /usr/sbin/nologin appuser \
+    && mkdir -p /app/media_uploads \
+    && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 # --proxy-headers makes uvicorn trust X-Forwarded-For/-Proto and rewrite
