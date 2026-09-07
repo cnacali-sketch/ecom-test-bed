@@ -81,7 +81,7 @@ function newDraft(): AdminProduct {
     desc: "",
     image: "",
     published: false,
-    featured: false,
+    isNew: false,
     show: defShow(),
     stockMode: "hidden",
     dims: { h: "", w: "", l: "", unit: "cm" },

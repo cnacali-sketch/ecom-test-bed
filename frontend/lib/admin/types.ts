@@ -57,7 +57,10 @@ export interface AdminProduct {
   desc: string;
   image: string;
   published: boolean;
-  featured: boolean;
+  // Drives the storefront's "New In" homepage section + New badge (see
+  // lib/types.ts BackendProduct.isNew). Named to match what it actually
+  // does -- there is no separate "Featured" concept anywhere in the app.
+  isNew: boolean;
   show: AdminShow;
   stockMode: StockMode;
   dims: AdminDims;

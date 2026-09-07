@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { fetchProducts, fetchProductsByCollectionSlug } from "./api";
+import { fetchCollectionBySlug, fetchCollections, fetchProducts, fetchProductsByCollectionSlug } from "./api";
 import type { BackendProduct } from "./backend-adapter";
-import { products as mockProducts } from "./mock-data";
+import { collections as mockCollections, getCollectionBySlug as getMockCollectionBySlug, products as mockProducts } from "./mock-data";
 
 function backendProduct(overrides: Partial<BackendProduct> = {}): BackendProduct {
   return {
@@ -119,5 +119,79 @@ describe("fetchProductsByCollectionSlug", () => {
 
     expect(result.every((p) => p.collectionSlugs.includes("hair-accessories"))).toBe(true);
     expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe("fetchCollections", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:8000");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  test("maps a live 200 response through adaptCollection", async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve([
+          { slug: "live-collection", name: "Live Collection", description: "From the backend.", hero_image: "https://example.com/hero.jpg" },
+        ]),
+    });
+
+    const result = await fetchCollections();
+
+    expect(result).toEqual([
+      {
+        id: "live-collection",
+        slug: "live-collection",
+        name: "Live Collection",
+        description: "From the backend.",
+        seoDescription: "From the backend.",
+        heroImage: "https://example.com/hero.jpg",
+        productIds: [],
+      },
+    ]);
+  });
+
+  test("falls back to mock data when the backend is unreachable", async () => {
+    mockFetchOnce(null);
+
+    const result = await fetchCollections();
+
+    expect(result).toBe(mockCollections);
+  });
+});
+
+describe("fetchCollectionBySlug", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:8000");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  test("maps a live 200 response through adaptCollection", async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({ slug: "hair-accessories", name: "Hair Accessories", description: null, hero_image: null }),
+    });
+
+    const result = await fetchCollectionBySlug("hair-accessories");
+
+    expect(result).toMatchObject({ slug: "hair-accessories", name: "Hair Accessories", description: "", heroImage: "" });
+  });
+
+  test("falls back to mock data on a 404 (slug not seeded in the backend yet)", async () => {
+    mockFetchOnce({ ok: false });
+
+    const result = await fetchCollectionBySlug("hair-accessories");
+
+    expect(result).toEqual(getMockCollectionBySlug("hair-accessories"));
   });
 });

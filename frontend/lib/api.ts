@@ -65,14 +65,44 @@ export async function fetchProducts(): Promise<Product[]> {
   return (await fetchLiveProducts()) ?? mockProducts;
 }
 
-// Collections (nav/marketing metadata: name, hero image, SEO copy) aren't
-// modeled in the backend in Phase 1 — this intentionally stays on mock data.
+// Backend Collection rows (see backend/app/routers/collections.py). Only the
+// fields the storefront actually needs -- id/seoDescription/productIds have
+// no backend column (collections are seed-script-managed only, no admin UI
+// yet), so adaptCollection below fills those with safe fallbacks rather than
+// leaving fetchCollectionBySlug callers to handle a third, partial shape.
+interface BackendCollection {
+  slug: string;
+  name: string;
+  description: string | null;
+  hero_image: string | null;
+}
+
+function adaptCollection(c: BackendCollection): Collection {
+  return {
+    id: c.slug,
+    slug: c.slug,
+    name: c.name,
+    description: c.description ?? "",
+    seoDescription: c.description ?? "",
+    heroImage: c.hero_image ?? "",
+    productIds: [],
+  };
+}
+
+// Same live-first, mock-fallback pattern as fetchProducts: the backend's
+// Collection table (name/description/hero image) has a real, working read
+// API, but nothing previously called it -- the storefront always rendered
+// the bundled mock collections regardless of what was live. Falls back to
+// mock on any failure (unreachable backend, or a slug that only exists in
+// the bundled catalog and was never migrated to the backend's seed data).
 export async function fetchCollections(): Promise<Collection[]> {
-  return mockCollections;
+  const data = await fetchJson<BackendCollection[]>("/api/collections");
+  return Array.isArray(data) ? data.map(adaptCollection) : mockCollections;
 }
 
 export async function fetchCollectionBySlug(slug: string): Promise<Collection | undefined> {
-  return getMockCollectionBySlug(slug);
+  const data = await fetchJson<BackendCollection>(`/api/collections/${encodeURIComponent(slug)}`);
+  return data ? adaptCollection(data) : getMockCollectionBySlug(slug);
 }
 
 export async function fetchProductsByCollectionSlug(slug: string): Promise<Product[]> {

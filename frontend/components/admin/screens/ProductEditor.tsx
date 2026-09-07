@@ -393,8 +393,8 @@ export function ProductEditor({
               <textarea rows={3} className={inputCls} value={draft.desc} onChange={(e) => set("desc", e.target.value)} placeholder="What makes this piece special?" />
             </Field>
 
-            <Field label="Featured on homepage" help="Show in the Featured section on the homepage.">
-              <Toggle on={draft.featured} onChange={(v) => set("featured", v)} label={draft.featured ? "Yes" : "No"} />
+            <Field label="New arrival" help="Shows in the homepage's New In section and gets the New badge. There is no separate Featured section — this toggle is the site's only homepage-highlight mechanism.">
+              <Toggle on={draft.isNew} onChange={(v) => set("isNew", v)} label={draft.isNew ? "Yes" : "No"} />
             </Field>
           </div>
 
