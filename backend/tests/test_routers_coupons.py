@@ -93,6 +93,19 @@ async def test_validate_flat_coupon_never_exceeds_subtotal(admin_client: AsyncCl
 
 
 @pytest.mark.asyncio
+async def test_validate_coupon_throttled_per_ip_after_threshold(client: AsyncClient) -> None:
+    """Public and unauthenticated -- without this cap it's a free oracle for
+    brute-forcing valid coupon codes by trying every candidate."""
+    from app.routers.coupons import COUPON_VALIDATE_MAX_PER_IP
+
+    for _ in range(COUPON_VALIDATE_MAX_PER_IP):
+        resp = await client.post("/api/coupons/validate", json={"code": "NOPE", "subtotal": "500.00"})
+        assert resp.status_code == 422
+    resp = await client.post("/api/coupons/validate", json={"code": "NOPE", "subtotal": "500.00"})
+    assert resp.status_code == 429
+
+
+@pytest.mark.asyncio
 async def test_validate_unknown_code_422(client: AsyncClient) -> None:
     resp = await client.post("/api/coupons/validate", json={"code": "NOPE", "subtotal": "500.00"})
     assert resp.status_code == 422

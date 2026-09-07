@@ -16,7 +16,7 @@ from datetime import datetime
 from decimal import Decimal
 
 import qrcode
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -26,9 +26,19 @@ from app.db import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.coupon import DISCOUNT_TYPES, Coupon
 from app.models.order import Order
+from app.services import login_throttle
 from app.services.coupons import compute_discount
 
 router = APIRouter(prefix="/api/coupons", tags=["coupons"])
+
+# Public and unauthenticated (checkout calls it live as the shopper types a
+# code), so without a cap it's a free oracle for brute-forcing valid codes.
+# Generous enough for a shopper trying a few codes by hand; nowhere near
+# enough to brute-force a coupon's keyspace.
+COUPON_VALIDATE_MAX_PER_IP = 20
+_TOO_MANY_VALIDATIONS = HTTPException(
+    status_code=429, detail="Too many coupon attempts. Try again shortly."
+)
 
 
 class CouponCreate(BaseModel):
@@ -197,7 +207,14 @@ class CouponValidateResponse(BaseModel):
 
 
 @router.post("/validate", response_model=CouponValidateResponse)
-async def validate_coupon(payload: CouponValidate, db: AsyncSession = Depends(get_db_session)) -> CouponValidateResponse:
+async def validate_coupon(
+    payload: CouponValidate, request: Request, db: AsyncSession = Depends(get_db_session)
+) -> CouponValidateResponse:
+    throttle_key = login_throttle.client_key(request, "coupon-validate")
+    if login_throttle.is_locked(throttle_key, COUPON_VALIDATE_MAX_PER_IP):
+        raise _TOO_MANY_VALIDATIONS
+    login_throttle.record_failure(throttle_key)
+
     result = await db.execute(select(Coupon).where(Coupon.code == payload.code.strip().upper()))
     coupon = result.scalar_one_or_none()
     if coupon is None:

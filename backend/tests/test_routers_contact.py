@@ -54,6 +54,22 @@ async def test_list_contact_messages_as_admin(admin_client: AsyncClient, client:
 
 
 @pytest.mark.asyncio
+async def test_submit_response_omits_ip_address(client: AsyncClient) -> None:
+    """The submitter's own confirmation must not echo back their recorded IP."""
+    resp = await client.post("/api/contact", json=_contact_payload())
+    assert resp.status_code == 201
+    assert "ip_address" not in resp.json()
+
+
+@pytest.mark.asyncio
+async def test_admin_list_still_includes_ip_address(admin_client: AsyncClient, client: AsyncClient) -> None:
+    await client.post("/api/contact", json=_contact_payload())
+    resp = await admin_client.get("/api/contact")
+    assert resp.status_code == 200
+    assert "ip_address" in resp.json()[0]
+
+
+@pytest.mark.asyncio
 async def test_mark_message_read_as_admin(admin_client: AsyncClient, client: AsyncClient) -> None:
     created = await client.post("/api/contact", json=_contact_payload())
     message_id = created.json()["id"]

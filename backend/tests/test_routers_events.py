@@ -2,8 +2,11 @@
 import uuid
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.routers.events import AD_CLICK_FLAG_THRESHOLD, CHECKOUT_FLAG_THRESHOLD
+from app.models.user_event import UserEvent
+from app.routers.events import AD_CLICK_FLAG_THRESHOLD, CHECKOUT_FLAG_THRESHOLD, EVENT_MAX_PER_IP
 
 
 @pytest.mark.asyncio
@@ -36,6 +39,28 @@ async def test_record_event_requires_no_auth(client: AsyncClient) -> None:
 async def test_summary_requires_admin(client: AsyncClient) -> None:
     resp = await client.get("/api/events/summary")
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_event_ingest_throttled_per_ip_after_threshold(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Public, unauthenticated, fire-and-forget -- without a cap this is a
+    free DB-fill / fraud-data-poisoning vector. Throttled requests still
+    return 204 (a tracking call must never surface as a user-visible
+    failure) but must not actually write a row past the cap."""
+    for _ in range(EVENT_MAX_PER_IP):
+        resp = await client.post(
+            "/api/events", json={"user_id": "anon-flood", "event_type": "page_view", "path": "/"}
+        )
+        assert resp.status_code == 204
+    resp = await client.post(
+        "/api/events", json={"user_id": "anon-flood", "event_type": "page_view", "path": "/"}
+    )
+    assert resp.status_code == 204
+
+    count = await db_session.scalar(select(func.count()).select_from(UserEvent))
+    assert count == EVENT_MAX_PER_IP
 
 
 @pytest.mark.asyncio

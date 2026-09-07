@@ -87,6 +87,14 @@ class OrderItemRead(BaseModel):
 
 
 class OrderRead(BaseModel):
+    """Customer/guest-facing order view. Deliberately omits `flag_reason` and
+    `ip_address` — those are internal fraud-review fields, and this schema is
+    also what the public, unauthenticated GET /{order_id} tracker returns (the
+    order id is the only credential). Leaking `flag_reason` back to the same
+    customer who triggered it tells them exactly what tripped the check, and
+    `ip_address` is a raw identifier of theirs they never consented to see
+    echoed back. Admin views use OrderAdminRead instead, which adds both."""
+
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     user_id: str
@@ -104,10 +112,15 @@ class OrderRead(BaseModel):
     deposit_amount: Decimal
     deposit_paid: bool
     flagged: bool
-    flag_reason: str | None
-    ip_address: str | None
     created_at: datetime
     items: list[OrderItemRead] = []
+
+
+class OrderAdminRead(OrderRead):
+    """Admin-only order view — adds the fraud-review fields OrderRead omits."""
+
+    flag_reason: str | None
+    ip_address: str | None
 
 
 async def _reserve_stock(db: AsyncSession, items: list[OrderItemCreate]) -> None:
@@ -226,14 +239,14 @@ async def _resolve_order_email(db: AsyncSession, order: Order) -> str | None:
 
 # ---- Endpoints ----
 
-@router.post("", response_model=OrderRead, status_code=201)
+@router.post("", response_model=None, status_code=201)
 async def create_order(
     payload: OrderCreate,
     request: Request,
     background_tasks: BackgroundTasks,
     user: User | None = Depends(optional_current_user),
     db: AsyncSession = Depends(get_db_session),
-) -> Order:
+) -> OrderRead | OrderAdminRead:
     """Create an order from a cart payload. Calculates total server-side,
     reserves stock, and snapshots the shipping address.
 
@@ -348,7 +361,15 @@ async def create_order(
     if is_admin_caller and notify_email:
         background_tasks.add_task(send_order_confirmation_email, notify_email, str(order.id))
 
-    return order
+    # This endpoint is dual-purpose: guest/customer checkout AND admin
+    # phone/manual order entry. An admin placing a phone order legitimately
+    # wants the price-tampering flag surfaced immediately in the response
+    # (there's no other UI moment for it); a guest/customer must never see
+    # it (see OrderRead's docstring). response_model=None below so the
+    # returned schema instance's own fields decide the JSON shape instead of
+    # a single static response_model filtering both cases identically.
+    schema = OrderAdminRead if is_admin_caller else OrderRead
+    return schema.model_validate(order)
 
 
 @router.get("", response_model=list[OrderRead])
@@ -377,7 +398,7 @@ async def list_orders(
 
 # Registered before GET /{order_id} so "/all" matches this literal route
 # rather than being parsed as an order id.
-@router.get("/all", response_model=list[OrderRead], dependencies=[Depends(require_admin)])
+@router.get("/all", response_model=list[OrderAdminRead], dependencies=[Depends(require_admin)])
 async def list_all_orders(db: AsyncSession = Depends(get_db_session)) -> list[Order]:
     """Every order, newest first — the admin console Orders screen. Admin-gated."""
     result = await db.execute(
@@ -403,7 +424,7 @@ async def get_order(order_id: uuid.UUID, db: AsyncSession = Depends(get_db_sessi
     return order
 
 
-@router.patch("/{order_id}/status", response_model=OrderRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/status", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
 async def update_order_status(
     order_id: uuid.UUID,
     status: str,
@@ -433,7 +454,7 @@ async def update_order_status(
     return order
 
 
-@router.patch("/{order_id}/payment", response_model=OrderRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/payment", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
 async def update_payment_status(
     order_id: uuid.UUID,
     payment_status: str,
@@ -457,7 +478,7 @@ async def update_payment_status(
     return order
 
 
-@router.patch("/{order_id}/flag", response_model=OrderRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/flag", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
 async def flag_order(
     order_id: uuid.UUID,
     flagged: bool,
@@ -482,7 +503,7 @@ async def flag_order(
     return order
 
 
-@router.patch("/{order_id}/shipping", response_model=OrderRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/shipping", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
 async def update_shipping(
     order_id: uuid.UUID,
     courier: str | None = None,

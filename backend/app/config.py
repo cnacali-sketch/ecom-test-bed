@@ -113,6 +113,7 @@ class Settings(BaseSettings):
 
 
 DEV_JWT_SECRET = "dev_only_insecure_secret_do_not_use_in_production"
+DEV_FRAUD_HASH_SECRET = "dev_only_fraud_hash_secret_change_in_production"
 
 
 @lru_cache
@@ -124,6 +125,15 @@ def get_settings() -> Settings:
     if settings.is_production and settings.jwt_secret == DEV_JWT_SECRET:
         raise RuntimeError(
             f"JWT_SECRET must be set to a real secret when APP_ENV={settings.app_env!r}. "
+            f"Recognised dev environments: {sorted(Settings.DEV_ENVS)}"
+        )
+
+    # Same fail-closed check for the fraud IP-hashing secret: running on the
+    # public dev default defeats hash_ip's rainbow-table resistance entirely
+    # (anyone can precompute the hash for any IP against the known default key).
+    if settings.is_production and settings.fraud_hash_secret == DEV_FRAUD_HASH_SECRET:
+        raise RuntimeError(
+            f"FRAUD_HASH_SECRET must be set to a real secret when APP_ENV={settings.app_env!r}. "
             f"Recognised dev environments: {sorted(Settings.DEV_ENVS)}"
         )
 

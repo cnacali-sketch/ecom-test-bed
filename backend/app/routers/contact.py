@@ -43,6 +43,10 @@ class ContactCreate(BaseModel):
 
 
 class ContactRead(BaseModel):
+    """Response for the public POST — the submitter's own confirmation.
+    Omits `ip_address`: no reason to echo a visitor's own recorded IP back to
+    them. Admin list/update views use ContactAdminRead, which adds it back."""
+
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     category: str
@@ -50,9 +54,12 @@ class ContactRead(BaseModel):
     email: str | None
     phone: str | None
     message: str
-    ip_address: str | None
     is_read: bool
     created_at: datetime
+
+
+class ContactAdminRead(ContactRead):
+    ip_address: str | None
 
 
 async def _get_message_or_404(db: AsyncSession, message_id: uuid.UUID) -> ContactMessage:
@@ -89,13 +96,13 @@ async def create_contact_message(
     return message
 
 
-@router.get("", response_model=list[ContactRead], dependencies=[Depends(require_admin)])
+@router.get("", response_model=list[ContactAdminRead], dependencies=[Depends(require_admin)])
 async def list_contact_messages(db: AsyncSession = Depends(get_db_session)) -> list[ContactMessage]:
     result = await db.execute(select(ContactMessage).order_by(ContactMessage.created_at.desc()))
     return list(result.scalars().all())
 
 
-@router.patch("/{message_id}", response_model=ContactRead, dependencies=[Depends(require_admin)])
+@router.patch("/{message_id}", response_model=ContactAdminRead, dependencies=[Depends(require_admin)])
 async def update_contact_message(
     message_id: uuid.UUID, is_read: bool, db: AsyncSession = Depends(get_db_session)
 ) -> ContactMessage:

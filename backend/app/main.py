@@ -43,7 +43,15 @@ def create_app() -> FastAPI:
             format="%(asctime)s %(levelname)s %(name)s | %(message)s",
         )
 
-    fastapi_app = FastAPI(title=settings.app_name)
+    # /docs, /redoc, and /openapi.json fully disclose the API surface (every
+    # route, schema, and field) to anyone who requests them -- fine for local
+    # dev, but no reason to hand that map to the public internet in production.
+    docs_kwargs = (
+        {"docs_url": None, "redoc_url": None, "openapi_url": None}
+        if settings.is_production
+        else {}
+    )
+    fastapi_app = FastAPI(title=settings.app_name, **docs_kwargs)
 
     fastapi_app.add_middleware(
         CORSMiddleware,

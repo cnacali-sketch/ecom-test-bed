@@ -172,6 +172,60 @@ async def test_get_order_404(client: AsyncClient) -> None:
     assert resp.status_code == 404
 
 
+# ---- Fraud-review fields must never reach the customer/guest ----
+
+@pytest.mark.asyncio
+async def test_create_order_response_omits_fraud_fields(client: AsyncClient) -> None:
+    """flag_reason/ip_address are internal fraud-review fields -- the guest
+    who just placed the order must never see them in their own confirmation."""
+    resp = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert "flag_reason" not in body
+    assert "ip_address" not in body
+
+
+@pytest.mark.asyncio
+async def test_public_order_tracker_omits_fraud_fields(client: AsyncClient) -> None:
+    """GET /{order_id} is deliberately public (order id is the tracking
+    credential) -- it must not leak WHY an order was flagged or the IP it
+    was placed from back to whoever holds that id."""
+    create = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = create.json()["id"]
+    resp = await client.get(f"/api/orders/{order_id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "flag_reason" not in body
+    assert "ip_address" not in body
+    assert "flagged" in body  # the boolean itself is fine to expose
+
+
+@pytest.mark.asyncio
+async def test_own_order_list_omits_fraud_fields(customer_client: AsyncClient) -> None:
+    create = await customer_client.post("/api/orders", json=ORDER_PAYLOAD)
+    assert create.status_code == 201
+    own_id = create.json()["user_id"]  # customer's real id (anti-spoofing override)
+    resp = await customer_client.get(f"/api/orders?user_id={own_id}")
+    assert resp.status_code == 200
+    assert len(resp.json()) >= 1
+    for order in resp.json():
+        assert "flag_reason" not in order
+        assert "ip_address" not in order
+
+
+@pytest.mark.asyncio
+async def test_admin_all_orders_still_includes_fraud_fields(admin_client: AsyncClient) -> None:
+    """The admin view is where these fields belong -- confirm the split
+    didn't accidentally hide them from the people who need them."""
+    await admin_client.post("/api/orders", json=ORDER_PAYLOAD)
+    resp = await admin_client.get("/api/orders/all")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) >= 1
+    assert "flag_reason" in body[0]
+    assert "ip_address" in body[0]
+
+
 @pytest.mark.asyncio
 async def test_update_status(admin_client: AsyncClient) -> None:
     create = await admin_client.post("/api/orders", json=ORDER_PAYLOAD)

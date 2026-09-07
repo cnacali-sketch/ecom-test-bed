@@ -21,9 +21,17 @@ from app.dependencies.auth import require_admin
 from app.models.order import Order
 from app.models.product import Product
 from app.models.user_event import UserEvent
+from app.services import login_throttle
 from app.services.request_ip import client_ip, hash_ip
 
 router = APIRouter(prefix="/api/events", tags=["events"])
+
+# Public, unauthenticated, fire-and-forget ingest -- without a cap it's a free
+# DB-fill and fraud-data-poisoning vector (flood fake events to drown out or
+# skew the ad-click/checkout-velocity fraud signals this same data feeds).
+# High ceiling: a real browsing session legitimately fires many of these
+# (every page_view, product_view, add_to_cart).
+EVENT_MAX_PER_IP = 200
 
 # Funnel stages, roughly in order: a shopper moves page_view -> product_view ->
 # add_to_cart -> checkout_started -> order_placed. `search` is tracked
@@ -96,10 +104,17 @@ class EventCreate(BaseModel):
 @router.post("", status_code=204)
 async def record_event(payload: EventCreate, request: Request, db: AsyncSession = Depends(get_db_session)) -> None:
     """Ingest one behavior event. Public and fire-and-forget (sendBeacon-
-    friendly): an unknown event_type is silently dropped rather than 422'd —
-    a tracking call must never surface as a user-visible failure."""
+    friendly): an unknown event_type, and a throttled caller, are both
+    silently dropped rather than surfaced as an error — a tracking call must
+    never show up as a user-visible failure."""
     if payload.event_type not in EVENT_TYPES:
         return
+
+    throttle_key = login_throttle.client_key(request, "event")
+    if login_throttle.is_locked(throttle_key, EVENT_MAX_PER_IP):
+        return
+    login_throttle.record_failure(throttle_key)
+
     ip = client_ip(request)
     db.add(
         UserEvent(
