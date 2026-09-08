@@ -15,6 +15,9 @@ export interface ProductVariant {
   sku: string;
   image: string;
   inStock: boolean;
+  /** Optional low-stock/backorder copy shown next to the swatch label,
+   * e.g. "Only 2 left". Absent means no note is shown. */
+  stockNote?: string;
 }
 
 export interface ProductImage {

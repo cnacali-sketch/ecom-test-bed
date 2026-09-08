@@ -12,7 +12,7 @@ export function CrossSellRail({ title = "Complete Your Look", products }: CrossS
 
   return (
     <section aria-label={title} className="mt-16">
-      <h2 className="mb-6 text-lg font-semibold text-neutral-900">{title}</h2>
+      <h2 className="font-display mb-6 text-xl italic text-ink">{title}</h2>
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {products.map((product) => (
           <ProductCard key={product.id} product={product} />

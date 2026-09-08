@@ -16,6 +16,7 @@ interface FilterSidebarProps {
   priceCeiling: number;
   onToggleFilter: (facet: keyof FilterCounts, value: string) => void;
   onPriceChange: (maxPrice: number | null) => void;
+  onClearAll?: () => void;
 }
 
 interface FacetGroupProps {
@@ -43,9 +44,9 @@ function FacetGroup({ title, options, activeValues, onToggle, isColor }: FacetGr
   if (entries.length === 0) return null;
 
   return (
-    <fieldset className="border-b border-neutral-200 pb-4">
-      <legend className="mb-2 text-sm font-semibold text-neutral-900">{title}</legend>
-      <div className={isColor ? "flex flex-wrap gap-2" : "flex flex-col gap-2"}>
+    <fieldset className="border-b border-rule-soft py-[18px] first:pt-0">
+      <legend className="mb-3 text-[11px] uppercase tracking-[0.18em] text-ink-soft">{title}</legend>
+      <div className={isColor ? "flex flex-wrap gap-2" : "flex flex-col gap-2.5"}>
         {entries.map(([value, count]) => {
           const isActive = activeValues.includes(value);
 
@@ -57,8 +58,8 @@ function FacetGroup({ title, options, activeValues, onToggle, isColor }: FacetGr
                 onClick={() => onToggle(value)}
                 aria-pressed={isActive}
                 title={`${value} (${count})`}
-                className={`h-6 w-6 rounded-full border transition ${
-                  isActive ? "ring-2 ring-neutral-900 ring-offset-1" : "border-neutral-300"
+                className={`h-[26px] w-[26px] rounded-full border border-rule-soft outline outline-2 outline-offset-2 transition-colors ${
+                  isActive ? "outline-teal" : "outline-transparent"
                 }`}
                 style={{ backgroundColor: COLOR_HEX_MAP[value] ?? "#d4d4d4" }}
               />
@@ -66,17 +67,17 @@ function FacetGroup({ title, options, activeValues, onToggle, isColor }: FacetGr
           }
 
           return (
-            <label key={value} className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2">
+            <label key={value} className="flex cursor-pointer items-center justify-between gap-2.5 text-[13px] text-ink transition-colors hover:text-teal">
+              <span className="flex flex-1 items-center gap-2.5">
                 <input
                   type="checkbox"
                   checked={isActive}
                   onChange={() => onToggle(value)}
-                  className="h-4 w-4 rounded border-neutral-300"
+                  className="h-[15px] w-[15px] accent-teal"
                 />
                 {value}
               </span>
-              <span className="text-neutral-400">({count})</span>
+              <span className="text-xs tabular-nums text-ink-soft">({count})</span>
             </label>
           );
         })}
@@ -95,9 +96,10 @@ export function FilterSidebar({
   priceCeiling,
   onToggleFilter,
   onPriceChange,
+  onClearAll,
 }: FilterSidebarProps) {
   return (
-    <aside className="flex flex-col gap-4" aria-label="Product filters">
+    <aside className="flex flex-col" aria-label="Product filters">
       <FacetGroup
         title="Brand"
         options={counts.brand}
@@ -124,21 +126,34 @@ export function FilterSidebar({
         onToggle={(value) => onToggleFilter("material", value)}
       />
 
-      <fieldset className="pb-4">
-        <legend className="mb-2 text-sm font-semibold text-neutral-900">Price</legend>
-        <label className="flex flex-col gap-1 text-sm text-neutral-600">
-          Up to {activeFilters.maxPrice ?? priceCeiling}
-          <input
-            type="range"
-            min={0}
-            max={priceCeiling}
-            step={100}
-            value={activeFilters.maxPrice ?? priceCeiling}
-            onChange={(event) => onPriceChange(Number(event.target.value))}
-            className="w-full"
-          />
-        </label>
+      <fieldset className="border-b border-rule-soft py-[18px]">
+        <legend className="mb-3 text-[11px] uppercase tracking-[0.18em] text-ink-soft">Price</legend>
+        <input
+          type="range"
+          min={0}
+          max={priceCeiling}
+          step={100}
+          value={activeFilters.maxPrice ?? priceCeiling}
+          onChange={(event) => onPriceChange(Number(event.target.value))}
+          className="w-full accent-teal"
+        />
+        <div className="mt-1 flex justify-between text-xs text-ink-soft">
+          <span>₹0</span>
+          <span>
+            Up to <b className="text-ink">₹{(activeFilters.maxPrice ?? priceCeiling).toLocaleString("en-IN")}</b>
+          </span>
+        </div>
       </fieldset>
+
+      {onClearAll && (
+        <button
+          type="button"
+          onClick={onClearAll}
+          className="mt-[18px] w-full rounded-full border border-ink/25 py-3 text-center text-xs uppercase tracking-[0.14em] text-ink transition-colors hover:border-teal hover:text-teal"
+        >
+          Clear all
+        </button>
+      )}
     </aside>
   );
 }

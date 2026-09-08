@@ -108,7 +108,7 @@ export function ProductGrid({ products }: ProductGridProps) {
     (filters.maxPrice !== null ? 1 : 0);
 
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[240px_1fr]">
+    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[232px_1fr]">
       {/* Desktop: persistent sidebar. Mobile: filters live in a bottom sheet. */}
       <div className="hidden lg:block">
         <FilterSidebar
@@ -117,29 +117,30 @@ export function ProductGrid({ products }: ProductGridProps) {
           priceCeiling={priceCeiling}
           onToggleFilter={toggleFilter}
           onPriceChange={handlePriceChange}
+          onClearAll={() => setFilters(EMPTY_FILTERS)}
         />
       </div>
 
       <div>
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-[18px] flex flex-wrap items-center gap-3.5 border-b border-rule-soft pb-[18px]">
           <button
             type="button"
             onClick={() => setMobileFiltersOpen(true)}
-            className="flex items-center gap-2 border border-ink/20 px-4 py-2.5 text-xs uppercase tracking-[0.14em] text-ink lg:hidden"
+            className="flex items-center gap-2 rounded-full border border-rule-soft px-4 py-2 text-xs uppercase tracking-[0.14em] text-ink lg:hidden"
           >
-            Filter
+            Filters
             {activeFilterCount > 0 && (
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal text-[10px] text-white">
                 {activeFilterCount}
               </span>
             )}
           </button>
-          <p className="hidden text-sm text-ink-soft lg:block">{visibleProducts.length} products</p>
+          <p className="text-xs tracking-[0.04em] text-ink-soft">{visibleProducts.length} products</p>
           <SortDropdown value={sort} onChange={setSort} />
         </div>
 
         {visibleProducts.length === 0 ? (
-          <p className="py-16 text-center text-sm text-neutral-500">
+          <p className="py-16 text-center text-sm text-ink-soft">
             No products match the selected filters.
           </p>
         ) : (
@@ -160,9 +161,9 @@ export function ProductGrid({ products }: ProductGridProps) {
             onClick={() => setMobileFiltersOpen(false)}
             className="absolute inset-0 bg-ink/40"
           />
-          <div className="animate-rise absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col bg-paper">
-            <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
-              <span className="eyebrow">Filter</span>
+          <div className="animate-rise absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-[28px] bg-paper">
+            <div className="flex items-center justify-between border-b border-rule-soft px-5 py-4">
+              <span className="eyebrow">Filters</span>
               <button
                 type="button"
                 onClick={() => setFilters(EMPTY_FILTERS)}
@@ -180,11 +181,11 @@ export function ProductGrid({ products }: ProductGridProps) {
                 onPriceChange={handlePriceChange}
               />
             </div>
-            <div className="border-t border-ink/10 p-4">
+            <div className="border-t border-rule-soft p-4">
               <button
                 type="button"
                 onClick={() => setMobileFiltersOpen(false)}
-                className="w-full bg-teal py-3.5 text-xs uppercase tracking-[0.18em] text-white"
+                className="w-full rounded-full bg-teal py-3.5 text-xs uppercase tracking-[0.18em] text-white"
               >
                 Show {visibleProducts.length} products
               </button>

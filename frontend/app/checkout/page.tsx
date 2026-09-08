@@ -50,7 +50,7 @@ export default function CheckoutPage() {
         <p className="mt-3 text-sm text-ink-soft">Add something you love, then come back to check out.</p>
         <Link
           href="/"
-          className="mt-8 inline-block border border-teal px-8 py-3 text-xs uppercase tracking-[0.18em] text-teal transition-colors hover:bg-teal hover:text-white"
+          className="mt-8 inline-block rounded-full border border-teal px-8 py-3 text-xs uppercase tracking-[0.18em] text-teal transition-colors hover:bg-teal hover:text-white"
         >
           Continue shopping
         </Link>
@@ -199,11 +199,11 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6">
       <h1 className="font-display text-3xl italic text-ink">Checkout</h1>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_320px]">
-        <form onSubmit={handlePlaceOrder} className="space-y-8">
+      <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_340px]">
+        <form onSubmit={handlePlaceOrder} className="space-y-9">
           {!user && (
             <section className="space-y-4">
               <h2 className="font-display text-xl italic text-ink">Your email</h2>
@@ -214,7 +214,7 @@ export default function CheckoutPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="mt-1 w-full border border-ink/15 bg-card px-3 py-2 text-ink outline-none focus:border-teal"
+                  className="mt-1.5 w-full rounded-xl border border-rule-soft bg-card px-3.5 py-2.5 text-ink outline-none focus:border-teal"
                 />
               </label>
               <p className="text-xs text-ink-soft">
@@ -228,12 +228,12 @@ export default function CheckoutPage() {
           <section className="space-y-3">
             <h2 className="font-display text-xl italic text-ink">Payment</h2>
             <label
-              className={`flex cursor-pointer items-center gap-3 border px-4 py-3 transition-colors ${
+              className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3.5 transition-colors ${
                 !codAvailable
                   ? "cursor-not-allowed opacity-50"
                   : paymentMethod === "cod"
                     ? "border-teal bg-teal/5"
-                    : "border-ink/10"
+                    : "border-rule-soft"
               }`}
             >
               <input
@@ -253,8 +253,8 @@ export default function CheckoutPage() {
               </span>
             </label>
             <label
-              className={`flex cursor-pointer items-center gap-3 border px-4 py-3 transition-colors ${
-                paymentMethod === "prepaid" ? "border-teal bg-teal/5" : "border-ink/10"
+              className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3.5 transition-colors ${
+                paymentMethod === "prepaid" ? "border-teal bg-teal/5" : "border-rule-soft"
               }`}
             >
               <input
@@ -300,7 +300,7 @@ export default function CheckoutPage() {
           </label>
 
           {error && (
-            <p role="alert" className="border-l-2 border-sale bg-sale/5 px-3 py-2 text-sm text-sale">
+            <p role="alert" className="rounded-lg border-l-2 border-sale bg-sale/5 px-3 py-2 text-sm text-sale">
               {error}
             </p>
           )}
@@ -308,7 +308,7 @@ export default function CheckoutPage() {
           <button
             type="submit"
             disabled={submitting || !termsAccepted}
-            className="w-full bg-teal py-3.5 text-xs uppercase tracking-[0.2em] text-white transition-colors hover:bg-teal-deep disabled:opacity-60 sm:w-auto sm:px-10"
+            className="w-full rounded-full bg-teal py-3.5 text-xs uppercase tracking-[0.2em] text-white transition-colors hover:bg-teal-deep disabled:opacity-60 sm:w-auto sm:px-10"
           >
             {submitting
               ? "Processing…"
@@ -318,7 +318,7 @@ export default function CheckoutPage() {
           </button>
         </form>
 
-        <aside className="h-fit border border-ink/10 bg-card p-5">
+        <aside className="h-fit rounded-[28px] border border-rule-soft bg-card p-6">
           <h2 className="font-display text-lg italic text-ink">Order summary</h2>
           <ul className="mt-4 space-y-3">
             {items.map((item) => (
@@ -333,9 +333,9 @@ export default function CheckoutPage() {
               </li>
             ))}
           </ul>
-          <div className="mt-5 border-t border-ink/10 pt-4">
+          <div className="mt-5 border-t border-rule-soft pt-4">
             <label className="block text-xs uppercase tracking-wide text-ink-soft">Coupon code</label>
-            <div className="mt-1 flex gap-2">
+            <div className="mt-1.5 flex gap-2">
               <input
                 value={couponCode}
                 onChange={(e) => {
@@ -344,13 +344,13 @@ export default function CheckoutPage() {
                   setCouponError(null);
                 }}
                 placeholder="Enter code"
-                className="w-full border border-ink/15 bg-card px-3 py-2 text-sm text-ink outline-none focus:border-teal"
+                className="w-full rounded-xl border border-rule-soft bg-card px-3.5 py-2.5 text-sm text-ink outline-none focus:border-teal"
               />
               <button
                 type="button"
                 onClick={handleApplyCoupon}
                 disabled={checkingCoupon || !couponCode.trim()}
-                className="shrink-0 border border-teal px-4 py-2 text-xs uppercase tracking-wide text-teal hover:bg-teal hover:text-white disabled:opacity-50"
+                className="shrink-0 rounded-full border border-teal px-4 py-2 text-xs uppercase tracking-wide text-teal hover:bg-teal hover:text-white disabled:opacity-50"
               >
                 {checkingCoupon ? "Checking…" : "Apply"}
               </button>
@@ -363,7 +363,7 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          <div className="mt-4 flex justify-between border-t border-ink/10 pt-4 text-sm text-ink">
+          <div className="mt-4 flex justify-between border-t border-rule-soft pt-4 text-sm text-ink">
             <span>Subtotal</span>
             <span>{formatPrice(subtotal)}</span>
           </div>

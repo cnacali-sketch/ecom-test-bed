@@ -3,6 +3,7 @@ import { EditorialTiles } from "@/components/home/EditorialTiles";
 import { HeroBanner } from "@/components/home/HeroBanner";
 import { QuickCtaRow } from "@/components/home/QuickCtaRow";
 import { SeoContentBlock } from "@/components/home/SeoContentBlock";
+import { SpecimenRanges } from "@/components/home/SpecimenRanges";
 import { ProductCard } from "@/components/product/ProductCard";
 import { Reveal } from "@/components/ui/Reveal";
 import { siteConfig } from "@/content/site.config";
@@ -33,6 +34,7 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <SpecimenRanges products={products} />
       <CampaignBand />
       <EditorialTiles />
       <SeoContentBlock />

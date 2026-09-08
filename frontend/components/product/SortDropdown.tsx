@@ -19,12 +19,12 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 
 export function SortDropdown({ value, onChange }: SortDropdownProps) {
   return (
-    <label className="flex items-center gap-2 text-sm text-neutral-700">
-      Sort by
+    <label className="inline-flex items-center gap-2 text-xs text-ink-soft">
+      Sort
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as SortOption)}
-        className="rounded border border-neutral-300 bg-white px-2 py-1.5 text-sm"
+        className="cursor-pointer rounded-full border border-rule-soft bg-warm-linen px-3.5 py-2 text-[13px] text-ink"
       >
         {SORT_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>

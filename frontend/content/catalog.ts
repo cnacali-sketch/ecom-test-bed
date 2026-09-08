@@ -102,7 +102,7 @@ export const products: Product[] = [
       { url: px(20166053, 800, 1000), alt: "Close-up of claw clip teeth and finish" },
     ],
     variants: [
-      { id: "var-claw-tortoise", color: "Tortoise", colorHex: "#6b4423", sku: "SIT-CLAW-TOR-01", image: px(33343186, 800, 1000), inStock: true },
+      { id: "var-claw-tortoise", color: "Tortoise", colorHex: "#6b4423", sku: "SIT-CLAW-TOR-01", image: px(33343186, 800, 1000), inStock: true, stockNote: "Only 3 left" },
       { id: "var-claw-black", color: "Black", colorHex: "#1a1a1a", sku: "SIT-CLAW-BLK-01", image: px(20166053, 800, 1000), inStock: true },
       { id: "var-claw-champagne", color: "Champagne", colorHex: "#e8d9b5", sku: "SIT-CLAW-CHM-01", image: px(20166056, 800, 1000), inStock: false },
     ],

@@ -36,7 +36,11 @@ describe("adaptProduct", () => {
     const result = adaptProduct(makeBackendProduct());
 
     expect(result).toMatchObject({
-      id: "prod-test-01",
+      // id must be the backend UUID, not the SKU — see the comment on
+      // adaptProduct: checkout sends this straight through as
+      // OrderItemCreate.product_id, which the backend requires to be a
+      // valid UUID.
+      id: "11111111-1111-1111-1111-111111111111",
       slug: "test-product",
       name: "Test Product",
       brand: "Savvy",

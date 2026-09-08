@@ -34,14 +34,14 @@ export function CartDrawer() {
         className="animate-fade absolute inset-0 bg-ink/40"
       />
 
-      <div className="animate-rise fixed inset-x-0 bottom-0 z-[101] flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-3xl bg-paper shadow-xl sm:inset-x-auto sm:inset-y-auto sm:bottom-auto sm:left-auto sm:right-6 sm:top-6 sm:h-auto sm:max-h-[calc(100vh-3rem)] sm:w-full sm:max-w-md sm:rounded-2xl sm:shadow-2xl">
-        <div className="flex items-center justify-between border-b border-ink/10 px-6 py-4">
+      <div className="animate-rise fixed inset-x-0 bottom-0 z-[101] flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-[28px] bg-paper shadow-xl sm:inset-x-auto sm:inset-y-auto sm:bottom-auto sm:left-auto sm:right-6 sm:top-6 sm:h-auto sm:max-h-[calc(100vh-3rem)] sm:w-full sm:max-w-md sm:rounded-[28px] sm:shadow-2xl">
+        <div className="flex items-center justify-between border-b border-rule-soft px-6 py-4">
           <h2 className="font-display text-xl italic text-ink">Your cart</h2>
           <button
             type="button"
             aria-label="Close cart"
             onClick={closeCart}
-            className="grid h-9 w-9 place-items-center text-ink-soft transition-colors hover:text-ink"
+            className="grid h-9 w-9 place-items-center rounded-full text-ink-soft transition-colors hover:bg-warm-linen hover:text-ink"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
               <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -58,7 +58,7 @@ export function CartDrawer() {
                   key={shortcut.label}
                   href={shortcut.href}
                   onClick={closeCart}
-                  className="rounded-full border border-ink/20 px-4 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:border-teal hover:text-teal"
+                  className="rounded-full border border-rule-soft px-4 py-1.5 text-xs font-medium text-ink-soft transition-colors hover:border-teal hover:text-teal"
                 >
                   {shortcut.label}
                 </Link>
@@ -69,8 +69,8 @@ export function CartDrawer() {
           <>
             <ul className="flex-1 overflow-y-auto overscroll-contain px-6 py-4">
               {items.map((item) => (
-                <li key={item.variantId} className="flex gap-4 border-b border-ink/10 py-4">
-                  <div className="relative h-24 w-20 shrink-0 overflow-hidden bg-paper-tint">
+                <li key={item.variantId} className="flex gap-4 border-b border-rule-soft py-4">
+                  <div className="relative h-24 w-20 shrink-0 overflow-hidden rounded-2xl bg-warm-linen">
                     <Image src={item.image} alt={item.name} fill sizes="80px" className="object-cover" />
                   </div>
                   <div className="flex flex-1 flex-col justify-between">
@@ -83,7 +83,7 @@ export function CartDrawer() {
                     </div>
                     <div className="flex items-center justify-between">
                       {/* Thumb-friendly stepper — matches the product-grid control. */}
-                      <div className="flex items-center border border-ink/20 text-ink" aria-label={`${item.name} quantity`}>
+                      <div className="flex items-center overflow-hidden rounded-full border border-rule-soft text-ink" aria-label={`${item.name} quantity`}>
                         <button
                           type="button"
                           aria-label="Decrease quantity"
@@ -120,7 +120,7 @@ export function CartDrawer() {
               ))}
             </ul>
 
-            <div className="border-t border-ink/10 px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            <div className="border-t border-rule-soft px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
               {remainingForFreeShipping > 0 ? (
                 <p className="mb-3 text-xs text-ink-soft">
                   Add {formatPrice(remainingForFreeShipping)} more for free shipping
@@ -132,16 +132,13 @@ export function CartDrawer() {
                 <span>Subtotal</span>
                 <span>{formatPrice(subtotal)}</span>
               </div>
-              {/* Leads to the /checkout placeholder until the payment gateway
-                  (Razorpay) is wired — real destination, not a dead button. */}
               <Link
                 href="/checkout"
                 onClick={closeCart}
-                className="block w-full bg-teal py-3 text-center text-sm font-medium uppercase tracking-wide text-white transition-colors hover:bg-teal-deep"
+                className="block w-full rounded-full bg-teal py-3 text-center text-sm font-medium uppercase tracking-wide text-white transition-colors hover:bg-teal-deep"
               >
                 Checkout
               </Link>
-              <p className="mt-2 text-center text-[11px] text-ink-soft">Online payments coming soon</p>
             </div>
           </>
         )}

@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import "@fontsource-variable/fraunces";
+// The base import above ships font-style:normal only, so every italic
+// display heading up to now has been browser-synthesized (skewed) oblique.
+// The new design uses real italic Fraunces for headings throughout.
+import "@fontsource-variable/fraunces/wght-italic.css";
 import "@fontsource-variable/archivo";
 import { ConsentBanner } from "@/components/analytics/ConsentBanner";
 import { PageViewTracker } from "@/components/analytics/PageViewTracker";

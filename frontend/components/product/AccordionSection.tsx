@@ -16,19 +16,19 @@ export function AccordionSection({ title, children, defaultOpen = false }: Accor
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-neutral-200">
+    <div className="border-b border-rule-soft">
       <button
         type="button"
         onClick={() => setIsOpen((current) => !current)}
         aria-expanded={isOpen}
-        className="flex w-full items-center justify-between py-4 text-left text-sm font-medium text-neutral-900"
+        className="flex w-full items-center justify-between py-4 text-left text-sm font-medium text-ink"
       >
         {title}
         <span aria-hidden="true" className={`transition-transform ${isOpen ? "rotate-45" : ""}`}>
           +
         </span>
       </button>
-      {isOpen && <div className="pb-4 text-sm text-neutral-600">{children}</div>}
+      {isOpen && <div className="pb-4 text-sm leading-relaxed text-ink-soft">{children}</div>}
     </div>
   );
 }

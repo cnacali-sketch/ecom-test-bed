@@ -41,6 +41,16 @@ export const px = (id: number, w = 800, h = 1000) =>
   `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=${w}&h=${h}&fit=crop`;
 
 export const siteConfig = {
+  // ---------- Trust badges (PDP) ----------
+  // Was hardcoded in components/product/TrustBadges.tsx — moved here per the
+  // content-layer rule (copy never lives in components).
+  trustBadges: [
+    { icon: "✓", label: "100% Guaranteed", description: "Quality checked" },
+    { icon: "🔒", label: "Secure Checkout", description: "Encrypted payments" },
+    { icon: "↺", label: "Easy Returns", description: "15-day return window" },
+    { icon: "🚚", label: "Fast Shipping", description: "Dispatched in 2 days" },
+  ],
+
   // ---------- Brand ----------
   brand: {
     name: "Savvy In Teal",
@@ -201,18 +211,25 @@ export const siteConfig = {
   // ---------- Homepage ----------
   home: {
     hero: {
-      /** The oversized italic word — the page's signature moment. */
+      /** Small italic kicker above the headline. Admin-editable via
+       * hero_accent_word (GET/PATCH /api/sections) — was orphaned for a
+       * while when the hero was rebuilt as a diptych; restored a render
+       * spot for it above the headline rather than leaving the admin
+       * field editing a dead value. */
       accentWord: "Held",
       headline: "in place, beautifully.",
       subline:
         "Claw clips, barrettes and silk that treat a Tuesday like an occasion. The new drop is here.",
       ctaLabel: "Shop the drop",
       ctaHref: "/collections/hair-accessories",
-      image: px(22469099, 1400, 1750),
+      /** Left image of the two-image hero diptych. Admin-editable via
+       * hero_image / hero_image_alt (unchanged field names/paths). */
+      image: px(22469099, 1000, 1330),
       imageAlt: "Sunlight on long hair held with a clip",
-      /** Small stacked image peeking behind the hero portrait. */
-      secondaryImage: px(31854724, 700, 875),
-      secondaryImageAlt: "Hair clips arranged in a shell dish",
+      /** Right image of the diptych — hidden below the lg breakpoint.
+       * Config-only, not yet wired to the admin editor. */
+      imageRight: px(33617637, 1000, 1330),
+      imageRightAlt: "Back view of a woman with hair clips against greenery",
     },
     quickCtas: [
       { label: "Claw Clips", href: "/collections/hair-accessories", image: px(33343186, 640, 640) },
@@ -220,6 +237,40 @@ export const siteConfig = {
       { label: "Barrettes", href: "/collections/hair-accessories", image: px(20166056, 640, 640) },
       { label: "Jewellery", href: "/collections/jewellery", image: px(12144990, 640, 640) },
     ],
+    /** "Specimen range" showcase — dark card with a big italic word, a spec
+     * line, two CTAs, and two preview images, per product. Deliberately
+     * carries only `productId` + editorial copy: name/type/material/price/
+     * images are read live from the matching catalog.ts product at render
+     * time (components/home/SpecimenRanges.tsx), so the price shown here
+     * can never drift from the real product record. */
+    specimenExploreLabel: "Explore",
+    specimenSectionEyebrow: "Considered Accessories to Hold the Day Together",
+    specimenSectionSub:
+      "Three materials we trust — cellulose acetate for grip, mulberry silk for gentleness, brass and steel for pieces that outlast trends.",
+    specimenRanges: [
+      {
+        word: "Tortoise",
+        productId: "prod-claw-tortoise",
+        exploreHref: "/collections/hair-accessories",
+        badge: "Bestseller",
+        caption: "A wide steel spring and long interlocking teeth, for thick or curly hair",
+      },
+      {
+        word: "Mulberry",
+        productId: "prod-scrunchie-silk",
+        exploreHref: "/collections/hair-accessories",
+        badge: "Restocked",
+        caption: "Silk glides instead of gripping — overnight buns come down crease-free",
+      },
+      {
+        word: "Heritage",
+        productId: "prod-drops-heritage",
+        exploreHref: "/collections/jewellery",
+        badge: "Wedding season",
+        caption: "Waterproof plating and hypoallergenic posts — made for stacking, not storing",
+      },
+    ],
+
     newInHeading: "New In",
     newInSub: "Fresh from the studio — restocked weekly.",
     /** Full-bleed teal campaign band mid-page. */
@@ -293,6 +344,17 @@ export const siteConfig = {
 
   // ---------- Footer ----------
   footer: {
+    /** Dark "specimen" panel per the new design — was a plain light footer.
+     * returnToTop/brandMark/headline/actions/socials/legal are new fields;
+     * newsletter/columns/fineprint are the pre-existing ones, restyled in
+     * place rather than removed (NewsletterForm keeps its logic/state). */
+    returnToTop: "Return to top",
+    brandMark: { src: "/brand/logo-lg.webp", alt: "Savvy In Teal" },
+    headline: "Made for real days, shipped from Bengaluru.",
+    actions: [
+      { label: "Shop the drop", href: "/collections/hair-accessories", style: "filled" as const },
+      { label: "The Teal Edit", href: "/collections/hair-accessories", style: "outline" as const },
+    ],
     newsletter: {
       heading: "First dibs on drops",
       copy: "One email a week. New pieces, restocks, and the occasional studio note.",
@@ -326,7 +388,18 @@ export const siteConfig = {
         ],
       },
     ],
-    fineprint: "",
+    socials: [
+      { label: "Instagram", href: "https://instagram.com" },
+      { label: "Facebook", href: "https://facebook.com" },
+      { label: "WhatsApp", href: "https://wa.me/" },
+    ],
+    legal: [
+      { label: "Terms", href: "/policies/terms" },
+      { label: "Privacy", href: "/policies/privacy" },
+      { label: "Refund & Cancellation", href: "/policies/refund" },
+      { label: "Returns", href: "/policies/returns" },
+    ],
+    fineprint: "Free shipping over ₹1,499",
   },
 
   // ---------- Legal / policy pages ----------

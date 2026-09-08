@@ -39,7 +39,7 @@ export function ImageGallery({ images }: ImageGalleryProps) {
           aria-label="Product images, swipe to browse"
         >
           {images.map((image) => (
-            <div key={image.url} className="relative aspect-[4/5] w-full shrink-0 snap-center bg-paper-tint">
+            <div key={image.url} className="relative aspect-[4/5] w-full shrink-0 snap-center bg-warm-linen">
               <Image
                 src={image.url}
                 alt={image.alt}
@@ -65,9 +65,12 @@ export function ImageGallery({ images }: ImageGalleryProps) {
         )}
       </div>
 
-      {/* Desktop: active image + thumbnails */}
-      <div className="hidden flex-col gap-3 lg:flex">
-        <div className="relative aspect-[4/5] w-full overflow-hidden bg-paper-tint">
+      {/* Desktop: active image + thumbnails. Gallery degrades gracefully for
+          products with only 1-2 shots (30 catalog products, none yet have
+          the full 4-image set the design was drawn with) — the thumb rail
+          simply doesn't render below 2 images. */}
+      <div className="hidden flex-col gap-2.5 lg:flex">
+        <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[28px] bg-warm-linen">
           <Image
             src={activeImage.url}
             alt={activeImage.alt}
@@ -78,7 +81,7 @@ export function ImageGallery({ images }: ImageGalleryProps) {
           />
         </div>
         {images.length > 1 && (
-          <div className="flex gap-2" role="tablist" aria-label="Product images">
+          <div className="flex gap-2.5" role="tablist" aria-label="Product images">
             {images.map((image, index) => (
               <button
                 key={image.url + index}
@@ -86,11 +89,11 @@ export function ImageGallery({ images }: ImageGalleryProps) {
                 role="tab"
                 aria-selected={index === activeIndex}
                 onClick={() => setActiveIndex(index)}
-                className={`relative h-20 w-16 shrink-0 overflow-hidden border transition-colors ${
-                  index === activeIndex ? "border-teal" : "border-ink/15 hover:border-ink/40"
+                className={`relative aspect-[4/5] w-[84px] shrink-0 overflow-hidden rounded-2xl border transition-colors ${
+                  index === activeIndex ? "border-teal" : "border-transparent hover:border-ink/25"
                 }`}
               >
-                <Image src={image.url} alt={image.alt} fill sizes="64px" className="object-cover" />
+                <Image src={image.url} alt={image.alt} fill sizes="84px" className="object-cover" />
               </button>
             ))}
           </div>

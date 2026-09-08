@@ -1,22 +1,18 @@
-const BADGES = [
-  { icon: "✓", label: "100% Guaranteed", description: "Quality checked" },
-  { icon: "🔒", label: "Secure Checkout", description: "Encrypted payments" },
-  { icon: "↺", label: "Easy Returns", description: "15-day return window" },
-  { icon: "🚚", label: "Fast Shipping", description: "Dispatched in 2 days" },
-];
+import { siteConfig } from "@/content/site.config";
 
-/** Shared spine component: small badge row shown on PDP and near filters. */
+/** Shared spine component: small badge row shown on PDP and near filters.
+ * Badge copy lives in content/site.config.ts (was hardcoded here). */
 export function TrustBadges() {
   return (
-    <ul className="grid grid-cols-2 gap-4 border-y border-neutral-200 py-4 sm:grid-cols-4">
-      {BADGES.map((badge) => (
+    <ul className="grid grid-cols-2 gap-4 border-y border-rule-soft py-4 sm:grid-cols-4">
+      {siteConfig.trustBadges.map((badge) => (
         <li key={badge.label} className="flex items-start gap-2 text-sm">
           <span aria-hidden="true" className="text-lg leading-none">
             {badge.icon}
           </span>
           <div>
-            <p className="font-medium text-neutral-900">{badge.label}</p>
-            <p className="text-xs text-neutral-500">{badge.description}</p>
+            <p className="font-medium text-ink">{badge.label}</p>
+            <p className="text-xs text-ink-soft">{badge.description}</p>
           </div>
         </li>
       ))}

@@ -52,7 +52,8 @@ describe("fetchProducts", () => {
     const result = await fetchProducts();
 
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ id: "live-sku-01", slug: "live-product" });
+    // id is the backend UUID (adaptProduct's contract), not the SKU.
+    expect(result[0]).toMatchObject({ id: "11111111-1111-1111-1111-111111111111", slug: "live-product" });
   });
 
   test("a live 200 response with an empty array returns [] rather than falling back to mock", async () => {
@@ -102,14 +103,23 @@ describe("fetchProductsByCollectionSlug", () => {
       ok: true,
       json: () =>
         Promise.resolve([
-          backendProduct({ sku: "in-bags", attrs: { collectionSlugs: ["hair-accessories"] } }),
-          backendProduct({ sku: "in-jewellery", attrs: { collectionSlugs: ["jewellery"] } }),
+          backendProduct({
+            id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            sku: "in-bags",
+            attrs: { collectionSlugs: ["hair-accessories"] },
+          }),
+          backendProduct({
+            id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            sku: "in-jewellery",
+            attrs: { collectionSlugs: ["jewellery"] },
+          }),
         ]),
     });
 
     const result = await fetchProductsByCollectionSlug("hair-accessories");
 
-    expect(result.map((p) => p.id)).toEqual(["in-bags"]);
+    // id is the backend UUID (adaptProduct's contract), not the SKU.
+    expect(result.map((p) => p.id)).toEqual(["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]);
   });
 
   test("falls back to mock filtering when the backend is unreachable", async () => {

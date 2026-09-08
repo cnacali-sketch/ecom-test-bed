@@ -12,10 +12,21 @@
   --paper: #fbf7f2;        /* warm porcelain page background */
   --paper-tint: #f4e9e2;   /* blush-tinted section background */
   --card: #ffffff;
+  /* New surface from the approved redesign — a neutral warm beige, distinct
+     from --paper-tint's blush. Added rather than reusing paper-tint so
+     existing sections keep their current tint untouched. */
+  --warm-linen: #ede7e0;
+  /* Deep teal-black for dark "specimen" cards in the new design. */
+  --specimen: #04211d;
 
   /* Text */
-  --ink: #22302e;          /* deep teal-leaning near-black */
+  /* Darkened to the value the new design was approved against (was
+     #22302e). This is the one intentional value change in this pass —
+     everything else here is additive. */
+  --ink: #0d1615;          /* deep teal-leaning near-black */
   --ink-soft: #5f6f6b;     /* muted sage-grey for secondary text */
+  --rule: #1a2e2b;         /* hairline borders in the new design */
+  --rule-soft: rgba(31, 111, 107, 0.22);
 
   /* Brand */
   --teal: #1f6f6b;         /* signature — links, CTAs, focus */
@@ -23,21 +34,44 @@
   --gold: #b08d3f;         /* logo-foil gold, used sparingly */
   --blush: #e8b9b4;        /* floral blush, badges + tints */
   --sale: #9c3d33;         /* madder red for sale price/badges */
+  /* Accent from the new design — badges and specimen-card CTAs only,
+     never a background or body text color. */
+  --acid: #2ee6cf;
 
-  --radius: 2px;           /* near-square corners: quiet, editorial */
+  --radius: 2px;           /* near-square corners: quiet, editorial (unused; see --r-* below) */
+
+  /* Radius vocabulary from the new design. Coexists with --radius rather
+     than replacing it — nothing currently reads --radius, so introducing
+     these does not change any existing surface. */
+  --r-pill: 100px;
+  --r-card: 28px;
+  --r-arch: 900px;
+  --r-hero: 40px;
+
+  /* Layout from the new design. Existing pages use max-w-6xl (1152px) and
+     px-4/sm:px-6; these are additive tokens for pages being ported to the
+     wider 1400px measure, not a global change to max-w-6xl usage. */
+  --page: 1400px;
+  --gutter: 42px;
+  --section: 96px;
 }
 
 @theme inline {
   --color-paper: var(--paper);
   --color-paper-tint: var(--paper-tint);
   --color-card: var(--card);
+  --color-warm-linen: var(--warm-linen);
+  --color-specimen: var(--specimen);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
+  --color-rule: var(--rule);
+  --color-rule-soft: var(--rule-soft);
   --color-teal: var(--teal);
   --color-teal-deep: var(--teal-deep);
   --color-gold: var(--gold);
   --color-blush: var(--blush);
   --color-sale: var(--sale);
+  --color-acid: var(--acid);
   --font-display: "Fraunces Variable", Georgia, serif;
   --font-sans: "Archivo Variable", system-ui, sans-serif;
 }
@@ -46,6 +80,136 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: "Archivo Variable", system-ui, sans-serif;
+}
+
+/* ============================================================
+   HOMEPAGE NAV — bare bar over the hero morphing into a frosted
+   pill on scroll.
+   ============================================================
+   --nav-p is a 0→1 scroll progress written to <html> by
+   Header.tsx inside a rAF callback (a style mutation, never
+   React state, so this interpolates every frame without
+   re-rendering). Everything below is a pure function of it, so
+   scrolling up replays the same interpolation in reverse.
+
+   Ported from the design prototype's two-layer crossfade
+   (chrome.js: #nav-zara ⇄ #nav-pill). Rebuilt as ONE layer that
+   morphs rather than two stacked clones: two layers meant two
+   copies of every control — two carts, two search triggers —
+   which duplicates focus stops and interactive state. Same
+   motion, one set of controls.
+
+   Defaults to 0 so first paint (and SSR) is the bare-bar state.
+   ============================================================ */
+:root {
+  --nav-p: 0;
+}
+
+/* Pill inset + frosting. All of it scales with --nav-p, so at 0 this
+   is a flush, edge-to-edge, fully transparent bar. */
+.nav-morph {
+  padding-top: calc(var(--nav-p) * 10px);
+  padding-inline: calc(var(--nav-p) * 16px);
+}
+
+.nav-morph-inner {
+  border-radius: calc(var(--nav-p) * var(--r-pill));
+  background: rgb(251 247 242 / calc(var(--nav-p) * 0.82));
+  backdrop-filter: blur(calc(var(--nav-p) * 20px)) saturate(calc(100% + var(--nav-p) * 60%));
+  box-shadow: 0 calc(var(--nav-p) * 14px) calc(var(--nav-p) * 34px)
+    rgb(4 33 29 / calc(var(--nav-p) * 0.1));
+  border: 1px solid rgb(13 22 21 / calc(var(--nav-p) * 0.08));
+}
+
+/* White over the hero photo → ink once the pill is solid. color-mix
+   interpolates continuously, so the text tracks the pill's opacity
+   instead of snapping at a threshold. */
+.nav-morph-ink {
+  color: color-mix(in srgb, #fff, var(--ink) calc(var(--nav-p) * 100%));
+}
+
+/* The announcement marquee belongs to the full-width bar, not the pill —
+   it collapses as the pill closes in. */
+.nav-morph-announce {
+  max-height: calc((1 - var(--nav-p)) * 44px);
+  opacity: calc(1 - var(--nav-p));
+  overflow: hidden;
+}
+
+/* The logo hand-off. The oversized hero mark shrinks and fades out while
+   the header's own logo grows and fades in — one mark appearing to fly
+   from the hero into the pill. Width is interpolated too, so the
+   invisible logo doesn't reserve 128px of flow width at the top (that
+   was pushing the cart icon off-screen at 320px). */
+.nav-morph-logo {
+  /* Matches the logo img's own rendered width at each breakpoint
+     (h-10/h-12/h-16 × the asset's 3.2 aspect ratio), so the wrapper
+     reaches exactly the image's size at --nav-p: 1 and never clips it. */
+  --nav-logo-w: 128px;
+  width: calc(var(--nav-p) * var(--nav-logo-w));
+  opacity: var(--nav-p);
+  transform: scale(calc(0.6 + 0.4 * var(--nav-p)));
+  transform-origin: center;
+  overflow: hidden;
+}
+
+@media (min-width: 640px) {
+  .nav-morph-logo { --nav-logo-w: 154px; }
+}
+@media (min-width: 1024px) {
+  .nav-morph-logo { --nav-logo-w: 205px; }
+}
+
+.hero-masthead {
+  opacity: calc(1 - var(--nav-p));
+  transform: translate(-50%, -50%) scale(calc(1 - 0.45 * var(--nav-p)))
+    translateY(calc(-16px * var(--nav-p)));
+}
+
+/* "Sale" has to stay visibly the sale colour, but --sale (#9c3d33) is a
+   dark madder that disappears against the hero photograph. Interpolate it
+   from a light coral over the hero to the real sale red once the pill is
+   solid, so it reads as the same accent in both states. */
+.nav-morph-sale {
+  color: color-mix(in srgb, #ffb3a7, var(--sale) calc(var(--nav-p) * 100%));
+}
+
+/* Phones drive --nav-p as a snap (0 or 1) from scroll direction, so the
+   swap needs a transition here to avoid popping. Desktop deliberately has
+   none: there the value updates every frame and a transition would smear
+   the interpolation behind the scroll. */
+@media (max-width: 680px) {
+  .nav-morph,
+  .nav-morph-inner,
+  .nav-morph-ink,
+  .nav-morph-sale,
+  .nav-morph-logo,
+  .nav-morph-announce,
+  .hero-masthead {
+    transition:
+      background-color 280ms ease,
+      backdrop-filter 280ms ease,
+      border-radius 280ms ease,
+      box-shadow 280ms ease,
+      color 280ms ease,
+      opacity 280ms ease,
+      transform 280ms ease,
+      width 280ms ease,
+      max-height 280ms ease,
+      padding 280ms ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-morph,
+  .nav-morph-inner,
+  .nav-morph-ink,
+  .nav-morph-sale,
+  .nav-morph-logo,
+  .nav-morph-announce,
+  .hero-masthead {
+    transition: none;
+  }
 }
 
 /* Display serif for headings + the italic accent word */
