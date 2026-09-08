@@ -3,9 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { products } from "@/content/catalog";
+import { products as bundledProducts } from "@/content/catalog";
 import { trackEvent } from "@/lib/analytics";
+import { apiBaseUrl } from "@/lib/api-client";
+import { adaptProduct, type BackendProduct } from "@/lib/backend-adapter";
 import { formatPrice } from "@/lib/format";
+import type { Product } from "@/lib/types";
 
 interface SearchOverlayProps {
   onClose: () => void;
@@ -13,12 +16,38 @@ interface SearchOverlayProps {
 
 /**
  * Modal search over the catalog (name, type, material, tags).
- * Client-side for now; swap the `results` memo for a backend call
- * when server search ships.
+ *
+ * Searches the LIVE catalogue, falling back to the bundled one. It used to
+ * search only `content/catalog.ts`, which meant search results were a
+ * hardcoded snapshot: anything created, renamed, repriced or deleted through
+ * the admin stayed invisible to search until someone edited that file and
+ * redeployed. The bundled list is still the initial value so typing works
+ * instantly and still works if the backend is unreachable.
  */
 export function SearchOverlay({ onClose }: SearchOverlayProps) {
   const [query, setQuery] = useState("");
+  const [catalog, setCatalog] = useState<Product[]>(bundledProducts);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Public endpoint -- no credentials, same data the PLP renders from.
+  useEffect(() => {
+    const baseUrl = apiBaseUrl();
+    if (!baseUrl) return;
+    let cancelled = false;
+    fetch(`${baseUrl}/api/products?limit=200`, { headers: { Accept: "application/json" } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !Array.isArray(data)) return;
+        setCatalog((data as BackendProduct[]).map(adaptProduct));
+      })
+      .catch(() => {
+        // Keep the bundled catalogue -- stale beats a search box that
+        // silently returns nothing.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -32,15 +61,19 @@ export function SearchOverlay({ onClose }: SearchOverlayProps) {
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q.length < 2) return [];
-    return products
-      .filter((product) =>
-        [product.name, product.type, product.material, ...product.tags]
+    // Every word must appear, in any order. A single `includes(q)` made the
+    // whole query one contiguous substring, so "1 rs" missed "... Rs 1" and
+    // "gold clip" missed "Clip, Gold" -- word order silently decided the hit.
+    const terms = q.split(/\s+/);
+    return catalog
+      .filter((product) => {
+        const haystack = [product.name, product.type, product.material, ...product.tags]
           .join(" ")
-          .toLowerCase()
-          .includes(q)
-      )
+          .toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      })
       .slice(0, 6);
-  }, [query]);
+  }, [query, catalog]);
 
   // Debounced: track the settled query (including zero-result ones — those
   // are the most useful signal for catalog/copy gaps), not every keystroke.
@@ -87,8 +120,13 @@ export function SearchOverlay({ onClose }: SearchOverlayProps) {
                   onClick={onClose}
                   className="flex items-center gap-4 py-3 transition-colors hover:bg-paper-tint"
                 >
+                  {/* A live product can have no images at all (the bundled
+                      catalogue always had one, so this used to be safe to
+                      index blindly -- it would now throw). */}
                   <span className="relative block h-14 w-11 shrink-0 overflow-hidden bg-paper-tint">
-                    <Image src={product.images[0].url} alt="" fill sizes="44px" className="object-cover" />
+                    {product.images[0] && (
+                      <Image src={product.images[0].url} alt="" fill sizes="44px" className="object-cover" />
+                    )}
                   </span>
                   <span className="flex-1">
                     <span className="block text-sm uppercase tracking-wide text-ink">{product.name}</span>
