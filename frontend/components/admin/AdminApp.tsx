@@ -21,6 +21,7 @@ import {
   Package,
   ShieldAlert,
   Sparkles,
+  Wrench,
   ShoppingBag,
   Ticket,
   TrendingUp,
@@ -58,6 +59,7 @@ import { Coupons } from "./screens/Coupons";
 import { Fraud } from "./screens/Fraud";
 import { ErrorLogs } from "./screens/ErrorLogs";
 import { Messages } from "./screens/Messages";
+import { Tools } from "./screens/Tools";
 
 // An order still "pending" (no status change at all) past this age is
 // flagged as unattended — long enough to not fire on normal same-day
@@ -90,6 +92,40 @@ function loadFailureMessage(res: Response | null): string {
   if (res.status === 401 || res.status === 403)
     return "Your admin session has expired. Please log out and log back in.";
   return `The server returned an error (HTTP ${res.status}). This screen may be incomplete.`;
+}
+
+/** Sidebar entry. Defined at module scope, not inside AdminApp: a component
+ * created during render is a brand-new type every render, so React unmounts
+ * and remounts the whole subtree instead of updating it. */
+function NavBtn({
+  id,
+  icon: Icon,
+  label,
+  badge,
+  active,
+  onSelect,
+}: {
+  id: AdminView;
+  icon: typeof Package;
+  label: string;
+  badge?: number;
+  active: boolean;
+  onSelect: (id: AdminView) => void;
+}) {
+  return (
+    <button
+      onClick={() => onSelect(id)}
+      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${active ? "bg-teal text-white shadow-sm" : "text-ink-soft hover:bg-ink/5"}`}
+    >
+      <Icon className="h-4 w-4" />
+      <span className="flex-1 text-left">{label}</span>
+      {badge != null && badge > 0 && (
+        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${active ? "bg-white/20 text-white" : "bg-gold/15 text-gold"}`}>
+          {badge}
+        </span>
+      )}
+    </button>
+  );
 }
 
 function newDraft(): AdminProduct {
@@ -336,49 +372,37 @@ export function AdminApp() {
   const lowCount = lowStockProducts.length;
   const notifCount = lowCount + flaggedOrders.length + pendingReturns.length + staleOrders.length;
 
-  const NavBtn = ({
-    id,
-    icon: Icon,
-    label,
-    badge,
-  }: {
-    id: AdminView;
-    icon: typeof Package;
-    label: string;
-    badge?: number;
-  }) => (
-    <button
-      onClick={() => {
-        setView(id);
+  const navBtn = (id: AdminView, icon: typeof Package, label: string, badge?: number) => (
+    <NavBtn
+      key={id}
+      id={id}
+      icon={icon}
+      label={label}
+      badge={badge}
+      active={view === id}
+      onSelect={(next) => {
+        setView(next);
         setSidebarOpen(false);
       }}
-      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${view === id ? "bg-teal text-white shadow-sm" : "text-ink-soft hover:bg-ink/5"}`}
-    >
-      <Icon className="h-4 w-4" />
-      <span className="flex-1 text-left">{label}</span>
-      {badge != null && badge > 0 && (
-        <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${view === id ? "bg-white/20 text-white" : "bg-gold/15 text-gold"}`}>
-          {badge}
-        </span>
-      )}
-    </button>
+    />
   );
 
   const nav = (
     <nav className="space-y-1">
-      <NavBtn id="dashboard" icon={BarChart3} label="Dashboard" />
-      <NavBtn id="home" icon={Home} label="Homepage editor" />
-      <NavBtn id="products" icon={Package} label="Products" />
-      <NavBtn id="inventory" icon={Boxes} label="Inventory" badge={lowCount} />
-      <NavBtn id="orders" icon={ShoppingBag} label="Orders" />
-      <NavBtn id="customers" icon={Users} label="Customers" />
-      <NavBtn id="coupons" icon={Ticket} label="Coupons" />
-      <NavBtn id="categories" icon={FolderTree} label="Categories" />
-      <NavBtn id="media" icon={Images} label="Media library" />
-      <NavBtn id="analytics" icon={TrendingUp} label="Analytics" />
-      <NavBtn id="fraud" icon={ShieldAlert} label="Fraud & abuse" />
-      <NavBtn id="errorLogs" icon={AlertTriangle} label="Error logs" />
-      <NavBtn id="messages" icon={Mail} label="Messages" />
+      {navBtn("dashboard", BarChart3, "Dashboard")}
+      {navBtn("home", Home, "Homepage editor")}
+      {navBtn("products", Package, "Products")}
+      {navBtn("inventory", Boxes, "Inventory", lowCount)}
+      {navBtn("orders", ShoppingBag, "Orders")}
+      {navBtn("customers", Users, "Customers")}
+      {navBtn("coupons", Ticket, "Coupons")}
+      {navBtn("categories", FolderTree, "Categories")}
+      {navBtn("media", Images, "Media library")}
+      {navBtn("analytics", TrendingUp, "Analytics")}
+      {navBtn("fraud", ShieldAlert, "Fraud & abuse")}
+      {navBtn("errorLogs", AlertTriangle, "Error logs")}
+      {navBtn("messages", Mail, "Messages")}
+      {navBtn("tools", Wrench, "Tools")}
     </nav>
   );
 
@@ -397,6 +421,7 @@ export function AdminApp() {
     fraud: "Fraud & abuse",
     errorLogs: "Error logs",
     messages: "Messages",
+    tools: "Tools",
   };
 
   return (
@@ -620,6 +645,7 @@ export function AdminApp() {
           {view === "fraud" && <Fraud />}
           {view === "errorLogs" && <ErrorLogs />}
           {view === "messages" && <Messages />}
+          {view === "tools" && <Tools />}
         </main>
       </div>
 
