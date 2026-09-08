@@ -1,33 +1,115 @@
 "use client";
 
-// Overview screen. Product-derived numbers (products live, inventory value,
-// low-stock list) are real, computed from the loaded products. Revenue / orders
-// / the 7-day trend are illustrative placeholders until the orders API is wired.
+// Overview screen. Every number here is real: product-derived figures come
+// from the loaded catalogue, and revenue / orders / the 7-day trend come from
+// GET /api/orders/all (fetched once by AdminApp and shared, not re-requested).
+//
+// Revenue counts paid orders only — an order sitting unpaid is not money in
+// the bank, and showing it as revenue would overstate the month.
 
 import { AlertTriangle, Boxes, DollarSign, Package, ShoppingBag } from "lucide-react";
 
 import { hexToRgba, rupee } from "@/lib/admin/helpers";
 import { LOW_STOCK, type AdminProduct } from "@/lib/admin/types";
+import type { AdminOrderSummary, LoadState } from "../AdminApp";
 
 const TEAL = "#1f6f6b";
 const GOLD = "#b08d3f";
 
-export function Dashboard({ products }: { products: AdminProduct[] }) {
-  const orders = 24;
-  const revenue = 32450;
+const TREND_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Payment states that count as money actually received. */
+const PAID = new Set(["paid"]);
+
+function startOfDay(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Paid revenue per day for the last TREND_DAYS days, oldest first. */
+function dailyRevenue(orders: AdminOrderSummary[]): { label: string; value: number }[] {
+  const today = startOfDay(Date.now());
+  const buckets = Array.from({ length: TREND_DAYS }, (_, i) => ({
+    day: today - (TREND_DAYS - 1 - i) * DAY_MS,
+    value: 0,
+  }));
+  for (const o of orders) {
+    if (!PAID.has(o.payment_status)) continue;
+    const day = startOfDay(new Date(o.created_at).getTime());
+    const bucket = buckets.find((b) => b.day === day);
+    if (bucket) bucket.value += Number(o.total_amount) || 0;
+  }
+  return buckets.map((b) => ({
+    label: new Date(b.day).toLocaleDateString("en-IN", { weekday: "short" }),
+    value: b.value,
+  }));
+}
+
+export function Dashboard({
+  products,
+  orders,
+  ordersState = "ready",
+}: {
+  products: AdminProduct[];
+  orders: AdminOrderSummary[];
+  /** Whether the order fetch succeeded. A failed fetch must not render as
+   * "₹0 revenue, 0 orders" — that reads as a real (terrible) trading day. */
+  ordersState?: LoadState;
+}) {
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthCutoff = monthStart.getTime();
+
+  const thisMonth = orders.filter((o) => new Date(o.created_at).getTime() >= monthCutoff);
+  const revenue = thisMonth
+    .filter((o) => PAID.has(o.payment_status))
+    .reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0);
+  const orderCount = thisMonth.length;
+  const unpaidCount = thisMonth.filter((o) => !PAID.has(o.payment_status)).length;
+
   const lowStock = products.filter((p) => p.stock <= LOW_STOCK && p.published);
   const totalValue = products.reduce((s, p) => s + p.cost * p.stock, 0);
   const live = products.filter((p) => p.published).length;
 
+  const ordersFailed = ordersState === "error";
+  const ordersLoading = ordersState === "loading";
+  const orderFigure = (value: string) => (ordersFailed ? "—" : ordersLoading ? "…" : value);
+  const orderNote = ordersFailed ? "unavailable" : ordersLoading ? "loading" : null;
+
   const stats = [
-    { label: "Revenue this month", value: rupee(revenue), delta: "demo", icon: DollarSign, color: TEAL },
-    { label: "Orders", value: orders, delta: "demo", icon: ShoppingBag, color: "#7c3aed" },
+    {
+      label: "Revenue this month",
+      value: orderFigure(rupee(revenue)),
+      delta: orderNote ?? "paid orders only",
+      icon: DollarSign,
+      color: TEAL,
+    },
+    {
+      label: "Orders this month",
+      value: orderFigure(String(orderCount)),
+      delta: orderNote ?? (unpaidCount > 0 ? `${unpaidCount} unpaid` : "all paid"),
+      icon: ShoppingBag,
+      color: "#7c3aed",
+    },
     { label: "Products live", value: live, delta: `${products.length} total`, icon: Package, color: GOLD },
     { label: "Inventory value", value: rupee(totalValue), delta: "cost basis", icon: Boxes, color: "#059669" },
   ];
 
+  const trend = dailyRevenue(orders);
+  const trendMax = Math.max(...trend.map((d) => d.value));
+
   return (
     <div className="space-y-6">
+      {ordersFailed && (
+        <p className="rounded-xl border border-sale/30 bg-sale/5 px-4 py-3 text-xs text-sale">
+          Order data couldn&apos;t be loaded, so revenue, order count and the sales trend are blank
+          rather than wrong. Product figures below are unaffected.
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
@@ -70,20 +152,31 @@ export function Dashboard({ products }: { products: AdminProduct[] }) {
       )}
 
       <div className="rounded-2xl border border-ink/10 bg-card p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-bold text-ink">Sales trend (illustrative)</h3>
-        <div className="flex h-40 items-end gap-2">
-          {[45, 62, 51, 78, 84, 71, 92].map((h, i) => (
-            <div key={i} className="flex-1">
-              <div
-                className="w-full rounded-t-lg transition-all hover:opacity-80"
-                style={{ height: `${h}%`, background: `linear-gradient(180deg, ${GOLD}, ${TEAL})` }}
-              />
-            </div>
-          ))}
-        </div>
+        <h3 className="mb-4 text-sm font-bold text-ink">Paid revenue, last {TREND_DAYS} days</h3>
+        {ordersFailed ? (
+          <p className="py-10 text-center text-sm text-ink-soft/70">No order data to chart.</p>
+        ) : trendMax === 0 ? (
+          <p className="py-10 text-center text-sm text-ink-soft/70">
+            No paid orders in the last {TREND_DAYS} days.
+          </p>
+        ) : (
+          <div className="flex h-40 items-end gap-2">
+            {trend.map((d) => (
+              <div key={d.label} className="flex-1" title={`${d.label}: ${rupee(d.value)}`}>
+                <div
+                  className="w-full rounded-t-lg transition-all hover:opacity-80"
+                  style={{
+                    height: `${Math.max(2, (d.value / trendMax) * 100)}%`,
+                    background: `linear-gradient(180deg, ${GOLD}, ${TEAL})`,
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         <div className="mt-2 flex justify-between text-[10px] text-ink-soft/60">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-            <span key={d}>{d}</span>
+          {trend.map((d, i) => (
+            <span key={`${d.label}-${i}`}>{d.label}</span>
           ))}
         </div>
       </div>

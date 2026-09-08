@@ -36,8 +36,19 @@ export function MediaLibrary() {
   useEffect(() => {
     apiFetch("/api/media")
       .then(async (res) => {
-        if (res?.ok) setMedia((await res.json()) as MediaItem[]);
+        // A failed load used to fall through to the same empty grid an actually
+        // empty library shows -- silently, with no way to tell them apart.
+        if (!res?.ok) {
+          setErr(
+            res && (res.status === 401 || res.status === 403)
+              ? "Your admin session has expired. Please log out and log back in."
+              : "Couldn't load the media library. It may not be empty — try reloading.",
+          );
+          return;
+        }
+        setMedia((await res.json()) as MediaItem[]);
       })
+      .catch(() => setErr("Couldn't reach the server to load the media library."))
       .finally(() => setLoading(false));
   }, []);
 

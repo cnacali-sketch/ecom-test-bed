@@ -7,16 +7,21 @@ import { useState } from "react";
 
 import { rupee } from "@/lib/admin/helpers";
 import type { AdminProduct } from "@/lib/admin/types";
+import type { LoadState } from "../AdminApp";
 import { inputCls } from "../atoms";
 
 export function ProductList({
   products,
   onOpen,
   onNew,
+  loadState = "ready",
 }: {
   products: AdminProduct[];
   onOpen: (id: string) => void;
   onNew: () => void;
+  /** Whether the catalogue actually loaded. Without it an unreachable backend
+   * renders as "No products match" — blaming the search box for an outage. */
+  loadState?: LoadState;
 }) {
   const [q, setQ] = useState("");
   const filtered = products.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
@@ -67,8 +72,22 @@ export function ProductList({
           </button>
         ))}
         {filtered.length === 0 && (
-          <div className="col-span-full py-10 text-center text-sm text-ink-soft/70">
-            No products match “{q}”.
+          <div className="col-span-full py-10 text-center text-sm">
+            {loadState === "loading" && <span className="text-ink-soft/70">Loading products…</span>}
+            {loadState === "error" && (
+              <span className="text-sale">
+                Couldn&apos;t load the catalogue. This is a connection or sign-in problem, not an
+                empty shop — reload once you&apos;re back online.
+              </span>
+            )}
+            {loadState === "ready" &&
+              (products.length === 0 ? (
+                <span className="text-ink-soft/70">
+                  No products yet. Use “+ New product” to add your first one.
+                </span>
+              ) : (
+                <span className="text-ink-soft/70">No products match “{q}”.</span>
+              ))}
           </div>
         )}
       </div>

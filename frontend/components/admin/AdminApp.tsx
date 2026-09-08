@@ -19,7 +19,6 @@ import {
   LogOut,
   Mail,
   Package,
-  Settings,
   ShieldAlert,
   Sparkles,
   ShoppingBag,
@@ -65,6 +64,34 @@ import { Messages } from "./screens/Messages";
 // processing, short enough that a genuinely missed order gets caught.
 const STALE_ORDER_HOURS = 24;
 
+/** Where a mount-time fetch got to. "error" is distinct from "ready with zero
+ * rows": an empty catalogue and an unreachable backend look identical in the
+ * UI otherwise, and the screens below say very different things about each. */
+export type LoadState = "loading" | "ready" | "error";
+
+/** The slice of GET /api/orders/all this shell reads. The Orders screen
+ * fetches the full shape separately for its own interactivity; this is only
+ * what the notification bell and the Dashboard stats need. */
+export interface AdminOrderSummary {
+  id: string;
+  user_id: string;
+  status: string;
+  payment_status: string;
+  total_amount: string;
+  flagged: boolean;
+  flag_reason: string | null;
+  created_at: string;
+}
+
+/** One phrasing for every failed admin load, so a dead backend, an expired
+ * session and a 500 each read as themselves instead of as "no results". */
+function loadFailureMessage(res: Response | null): string {
+  if (!res) return "Couldn't reach the server — showing whatever loaded before it went away.";
+  if (res.status === 401 || res.status === 403)
+    return "Your admin session has expired. Please log out and log back in.";
+  return `The server returned an error (HTTP ${res.status}). This screen may be incomplete.`;
+}
+
 function newDraft(): AdminProduct {
   return {
     id: `local-${uid()}`,
@@ -107,6 +134,21 @@ export function AdminApp() {
   // screen (which owns its own order list + expand state) opens that exact
   // order instead of just landing on the unfiltered list.
   const [ordersDeepLinkId, setOrdersDeepLinkId] = useState<string | null>(null);
+  // Mount-load health. Without these a dead backend renders an admin that
+  // looks like an empty shop: no products, no categories, a zero notification
+  // badge, and not one word saying anything went wrong.
+  const [productsState, setProductsState] = useState<LoadState>("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notifError, setNotifError] = useState(false);
+  // Real orders behind the Dashboard's revenue/orders tiles. Same single
+  // fetch as the notification bell -- no extra request.
+  const [ordersForStats, setOrdersForStats] = useState<AdminOrderSummary[]>([]);
+  const [ordersState, setOrdersState] = useState<LoadState>("loading");
+
+  // First failure wins: the follow-on messages from the same dead backend are
+  // the same message, and stacking them adds noise, not information.
+  const reportLoadFailure = (res: Response | null) =>
+    setLoadError((cur) => cur ?? loadFailureMessage(res));
 
   // Seed from the live catalogue once. limit=200 (the backend's max) --
   // without it the default limit=48 silently truncates the admin's product
@@ -116,11 +158,21 @@ export function AdminApp() {
     let cancelled = false;
     apiFetch("/api/products?limit=200")
       .then(async (res) => {
-        if (cancelled || !res?.ok) return;
+        if (cancelled) return;
+        if (!res?.ok) {
+          setProductsState("error");
+          reportLoadFailure(res);
+          return;
+        }
         const data = (await res.json()) as BackendProduct[];
         if (Array.isArray(data)) setProducts(data.map(toAdmin));
+        setProductsState("ready");
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        setProductsState("error");
+        reportLoadFailure(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -130,11 +182,12 @@ export function AdminApp() {
     let cancelled = false;
     apiFetch("/api/categories")
       .then(async (res) => {
-        if (cancelled || !res?.ok) return;
+        if (cancelled) return;
+        if (!res?.ok) return reportLoadFailure(res);
         const data = (await res.json()) as AdminCategory[];
         if (Array.isArray(data)) setCategories(data);
       })
-      .catch(() => {});
+      .catch(() => !cancelled && reportLoadFailure(null));
     return () => {
       cancelled = true;
     };
@@ -147,16 +200,18 @@ export function AdminApp() {
     let cancelled = false;
     apiFetch("/api/orders/all")
       .then(async (res) => {
-        if (cancelled || !res?.ok) return;
-        const data = (await res.json()) as {
-          id: string;
-          user_id: string;
-          status: string;
-          flagged: boolean;
-          flag_reason: string | null;
-          created_at: string;
-        }[];
-        if (!Array.isArray(data)) return;
+        if (cancelled) return;
+        if (!res?.ok) {
+          setOrdersState("error");
+          return setNotifError(true);
+        }
+        const data = (await res.json()) as AdminOrderSummary[];
+        if (!Array.isArray(data)) {
+          setOrdersState("error");
+          return setNotifError(true);
+        }
+        setOrdersForStats(data);
+        setOrdersState("ready");
         setFlaggedOrders(data.filter((o) => o.flagged));
         // "Unattended": still pending (no status change since it came in)
         // and older than the threshold — an order sitting untouched this
@@ -166,14 +221,19 @@ export function AdminApp() {
           data.filter((o) => o.status === "pending" && new Date(o.created_at).getTime() < staleCutoff),
         );
       })
-      .catch(() => {});
+      .catch(() => {
+        if (cancelled) return;
+        setOrdersState("error");
+        setNotifError(true);
+      });
     apiFetch("/api/returns")
       .then(async (res) => {
-        if (cancelled || !res?.ok) return;
+        if (cancelled) return;
+        if (!res?.ok) return setNotifError(true);
         const data = (await res.json()) as { id: string; order_id: string; reason: string; status: string }[];
         if (Array.isArray(data)) setPendingReturns(data.filter((r) => r.status === "pending"));
       })
-      .catch(() => {});
+      .catch(() => !cancelled && setNotifError(true));
     return () => {
       cancelled = true;
     };
@@ -235,6 +295,38 @@ export function AdminApp() {
       body: JSON.stringify(toBackendPayload(p)),
     });
     flash(res?.ok ? "Saved" : "Could not save that change");
+  };
+
+  // Remove a product for good. A draft that was never saved has no backend row
+  // to delete -- dropping it locally is the whole operation, and previously
+  // there was no way to get rid of one at all.
+  const deleteProduct = async (p: AdminProduct) => {
+    const label = p.name?.trim() || "this product";
+    if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
+
+    const forget = () => {
+      setProducts((cur) => cur.filter((x) => x.id !== p.id));
+      setSelectedId(null);
+      setDraft(null);
+      setView("products");
+    };
+
+    if (p.isLocalOnly) {
+      forget();
+      flash("Draft discarded");
+      return;
+    }
+    const res = await apiFetch(`/api/products/${p.id}`, { method: "DELETE" });
+    if (res?.ok || res?.status === 204) {
+      forget();
+      flash("Deleted");
+      return;
+    }
+    flash(
+      res?.status === 401 || res?.status === 403
+        ? "Your admin session has expired — sign in again"
+        : "Could not delete that product",
+    );
   };
 
   const lowStockProducts = useMemo(
@@ -349,8 +441,15 @@ export function AdminApp() {
                     <div className="border-b border-ink/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wide text-ink-soft">
                       Notifications
                     </div>
+                    {notifError && (
+                      <p className="border-b border-ink/10 bg-sale/5 px-4 py-2.5 text-xs text-sale">
+                        Some alerts couldn&apos;t be loaded — order and return notifications may be missing.
+                      </p>
+                    )}
                     {notifCount === 0 ? (
-                      <p className="p-4 text-sm text-ink-soft">Nothing needs attention.</p>
+                      <p className="p-4 text-sm text-ink-soft">
+                        {notifError ? "No alerts could be loaded." : "Nothing needs attention."}
+                      </p>
                     ) : (
                       <div className="divide-y divide-ink/5">
                         {staleOrders.map((o) => (
@@ -422,9 +521,6 @@ export function AdminApp() {
                 </>
               )}
             </div>
-            <button className="grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5">
-              <Settings className="h-4 w-4" />
-            </button>
             <div className="ml-1 flex items-center gap-2 rounded-full bg-teal/10 pl-1 pr-3">
               <div className="grid h-7 w-7 place-items-center rounded-full bg-teal text-xs font-bold text-white">
                 {(user?.email?.[0] ?? "A").toUpperCase()}
@@ -464,14 +560,37 @@ export function AdminApp() {
             <h1 className="font-display text-xl font-bold text-ink sm:text-2xl">{titles[view]}</h1>
           </header>
 
-          {view === "dashboard" && <Dashboard products={products} />}
+          {loadError && (
+            <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-sale/30 bg-sale/5 px-4 py-3 text-xs text-sale">
+              <span>{loadError}</span>
+              <button
+                type="button"
+                onClick={() => setLoadError(null)}
+                className="shrink-0 font-semibold uppercase tracking-wide hover:underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {view === "dashboard" && (
+            <Dashboard products={products} orders={ordersForStats} ordersState={ordersState} />
+          )}
           {view === "home" && <SectionEditor />}
-          {view === "products" && <ProductList products={products} onOpen={openProduct} onNew={newProduct} />}
+          {view === "products" && (
+            <ProductList
+              products={products}
+              onOpen={openProduct}
+              onNew={newProduct}
+              loadState={productsState}
+            />
+          )}
           {view === "editor" && draft && (
             <ProductEditor
               draft={draft}
               setDraft={setDraft}
               onSave={save}
+              onDelete={() => deleteProduct(draft)}
               onReset={() => original && setDraft(original)}
               dirty={dirty}
               products={products}
@@ -485,6 +604,7 @@ export function AdminApp() {
               onPersist={persistProduct}
               onOpen={openProduct}
               categories={categories}
+              loadState={productsState}
             />
           )}
           {view === "categories" && (

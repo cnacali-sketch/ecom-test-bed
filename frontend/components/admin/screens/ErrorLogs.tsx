@@ -30,6 +30,7 @@ export function ErrorLogs() {
   const [logs, setLogs] = useState<ErrorLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function load() {
@@ -49,7 +50,17 @@ export function ErrorLogs() {
   async function clearAll() {
     if (!confirm("Clear all error log entries?")) return;
     const res = await apiFetch("/api/error-logs", { method: "DELETE" });
-    if (res?.ok || res?.status === 204) setLogs([]);
+    if (res?.ok || res?.status === 204) {
+      setLogs([]);
+      setActionError(null);
+      return;
+    }
+    // Without this the button just does nothing and the list stays put.
+    setActionError(
+      res && (res.status === 401 || res.status === 403)
+        ? "Your admin session has expired. Please log out and log back in."
+        : "Couldn't clear the error log. Please try again.",
+    );
   }
 
   if (loading) return <p className="p-8 text-sm text-ink-soft">Loading error logs…</p>;
@@ -58,6 +69,14 @@ export function ErrorLogs() {
 
   return (
     <div className="rounded-2xl border border-ink/10 bg-card shadow-sm">
+      {actionError && (
+        <div className="flex items-center justify-between gap-3 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError(null)} className="font-semibold uppercase tracking-wide hover:underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
         <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
           <AlertTriangle className="h-4 w-4 text-sale" /> Error logs ({logs.length})

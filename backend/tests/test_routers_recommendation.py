@@ -1,9 +1,29 @@
-from fastapi.testclient import TestClient
-"""Integration tests for /api/recommendation/* endpoints."""
+"""Integration tests for /api/recommendation/* endpoints.
+
+Internal back-office tooling -- admin-gated (see recommendation.py's
+router-level require_admin dependency), so these use admin_client/client/
+customer_client (async, DB-backed) rather than the plain sync_client other
+no-DB routers use.
+"""
+import pytest
+from httpx import AsyncClient
+
+
+@pytest.mark.asyncio
+async def test_recommendation_requires_admin(client: AsyncClient) -> None:
+    resp = await client.post("/api/recommendation/schema-inspector", json={"product": {}})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_recommendation_rejects_non_admin(customer_client: AsyncClient) -> None:
+    resp = await customer_client.post("/api/recommendation/schema-inspector", json={"product": {}})
+    assert resp.status_code == 403
 
 
 class TestSchemaInspectorEndpoint:
-    def test_returns_valid_true_for_complete_product(self, sync_client: TestClient):
+    @pytest.mark.asyncio
+    async def test_returns_valid_true_for_complete_product(self, admin_client: AsyncClient) -> None:
         product = {
             "name": "Wireless Headphones",
             "image": "https://example.com/headphones.jpg",
@@ -11,12 +31,19 @@ class TestSchemaInspectorEndpoint:
             "sku": "AUDIO-HP-001",
             "offers": {"price": "199.99"},
         }
-        response = sync_client.post("/api/recommendation/schema-inspector", json={"product": product})
+        response = await admin_client.post(
+            "/api/recommendation/schema-inspector", json={"product": product}
+        )
         assert response.status_code == 200
         assert response.json()["valid"] is True
 
-    def test_returns_missing_required_for_incomplete_product(self, sync_client: TestClient):
-        response = sync_client.post("/api/recommendation/schema-inspector", json={"product": {}})
+    @pytest.mark.asyncio
+    async def test_returns_missing_required_for_incomplete_product(
+        self, admin_client: AsyncClient
+    ) -> None:
+        response = await admin_client.post(
+            "/api/recommendation/schema-inspector", json={"product": {}}
+        )
         assert response.status_code == 200
         body = response.json()
         assert body["valid"] is False
@@ -24,14 +51,18 @@ class TestSchemaInspectorEndpoint:
 
 
 class TestDescriptionAnalyzerEndpoint:
-    def test_returns_score_for_valid_description(self, sync_client: TestClient):
-        response = sync_client.post(
+    @pytest.mark.asyncio
+    async def test_returns_score_for_valid_description(self, admin_client: AsyncClient) -> None:
+        response = await admin_client.post(
             "/api/recommendation/description-analyzer",
             json={"description": "A well made product with great features and long-lasting quality."},
         )
         assert response.status_code == 200
         assert 0 <= response.json()["score"] <= 100
 
-    def test_returns_422_on_empty_description(self, sync_client: TestClient):
-        response = sync_client.post("/api/recommendation/description-analyzer", json={"description": ""})
+    @pytest.mark.asyncio
+    async def test_returns_422_on_empty_description(self, admin_client: AsyncClient) -> None:
+        response = await admin_client.post(
+            "/api/recommendation/description-analyzer", json={"description": ""}
+        )
         assert response.status_code == 422

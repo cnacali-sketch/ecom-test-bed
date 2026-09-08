@@ -39,6 +39,7 @@ export function Messages() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   function load() {
@@ -55,12 +56,24 @@ export function Messages() {
 
   useEffect(load, []);
 
+  function reportFailure(res: Response | null, fallback: string) {
+    setActionError(
+      res && (res.status === 401 || res.status === 403)
+        ? "Your admin session has expired. Please log out and log back in."
+        : fallback,
+    );
+  }
+
   async function setRead(id: string, isRead: boolean) {
     const res = await apiFetch(`/api/contact/${id}?is_read=${isRead}`, { method: "PATCH" });
     if (res?.ok) {
       const updated = (await res.json()) as ContactMessage;
       setMessages((cur) => cur.map((m) => (m.id === id ? updated : m)));
+      setActionError(null);
+      return;
     }
+    // Silently failing here leaves the unread badge stuck with no explanation.
+    reportFailure(res, "Couldn't update that message's read state.");
   }
 
   function toggleExpand(m: ContactMessage) {
@@ -75,7 +88,10 @@ export function Messages() {
     if (res?.ok || res?.status === 204) {
       setMessages((cur) => cur.filter((m) => m.id !== id));
       if (expandedId === id) setExpandedId(null);
+      setActionError(null);
+      return;
     }
+    reportFailure(res, "Couldn't delete that message. Please try again.");
   }
 
   const unreadCount = messages.filter((m) => !m.is_read).length;
@@ -86,6 +102,14 @@ export function Messages() {
 
   return (
     <div className="rounded-2xl border border-ink/10 bg-card shadow-sm">
+      {actionError && (
+        <div className="flex items-center justify-between gap-3 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">
+          <span>{actionError}</span>
+          <button type="button" onClick={() => setActionError(null)} className="font-semibold uppercase tracking-wide hover:underline">
+            Dismiss
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-ink/10 px-5 py-4">
         <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
           <Mail className="h-4 w-4 text-teal" /> Messages ({messages.length})

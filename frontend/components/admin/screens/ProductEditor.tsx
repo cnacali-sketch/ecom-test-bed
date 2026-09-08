@@ -8,7 +8,7 @@
 // publish gate, duplicate-name warning, badge styling, backend-only cost/stock,
 // stock-visibility modes, dimensions, and the featured toggle.
 
-import { AlertTriangle, Copy, EyeOff, Info, Percent, RotateCcw, Save, Tag, Zap } from "lucide-react";
+import { AlertTriangle, Copy, EyeOff, Info, Percent, RotateCcw, Save, Tag, Trash2, Zap } from "lucide-react";
 
 import { discount, marginPct, dimStr, rupee, similarity } from "@/lib/admin/helpers";
 import {
@@ -39,6 +39,7 @@ export function ProductEditor({
   draft,
   setDraft,
   onSave,
+  onDelete,
   onReset,
   dirty,
   products,
@@ -47,6 +48,9 @@ export function ProductEditor({
   draft: AdminProduct;
   setDraft: (p: AdminProduct) => void;
   onSave: () => void;
+  /** Remove this product for good (DELETE /api/products/{id}), or discard it
+   * locally if it was never saved. */
+  onDelete: () => void;
   onReset: () => void;
   dirty: boolean;
   products: AdminProduct[];
@@ -416,6 +420,12 @@ export function ProductEditor({
             <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-soft/60">
               <Info className="h-3.5 w-3.5" /> Nothing goes live until you Save
             </span>
+            <button
+              onClick={onDelete}
+              className="flex items-center gap-2 rounded-xl border border-sale/30 px-4 py-2.5 text-sm font-semibold text-sale transition hover:bg-sale/5"
+            >
+              <Trash2 className="h-4 w-4" /> {draft.isLocalOnly ? "Discard draft" : "Delete"}
+            </button>
           </div>
         </div>
       </div>

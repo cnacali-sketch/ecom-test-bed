@@ -147,10 +147,27 @@ export function CategoryManager({
               <div className="h-12 w-12 shrink-0">
                 <ImageDrop value={c.image} onChange={(v) => update(c.id, { image: v })} compact spec={IMG_SPECS.tile} />
               </div>
+              {/* Uncontrolled + commit on blur, same idiom as Inventory's cells.
+                  Bound straight to `update`, this fired one PATCH per character
+                  typed — a dozen racing writes to rename a category, with the
+                  value coming back from the server so typing fought the
+                  round-trip. `key` re-seeds it once the server confirms. */}
               <input
+                key={c.name}
                 className={inputCls + " max-w-xs"}
-                value={c.name}
-                onChange={(e) => update(c.id, { name: e.target.value })}
+                defaultValue={c.name}
+                onBlur={(e) => {
+                  const next = e.target.value.trim();
+                  if (next && next !== c.name) update(c.id, { name: next });
+                  else e.target.value = c.name;
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") {
+                    e.currentTarget.value = c.name;
+                    e.currentTarget.blur();
+                  }
+                }}
               />
               <select
                 className={inputCls + " max-w-[160px]"}

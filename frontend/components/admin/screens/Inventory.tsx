@@ -2,15 +2,16 @@
 
 // Inventory table with click-to-edit numeric cells.
 //
-// Inline edits mutate local state and are NOT yet persisted — the backend has
-// no product-update endpoint. Wire a PUT /api/products/{id} before relying on
-// these edits sticking.
+// Each committed edit is persisted immediately: `patch` updates local state
+// optimistically and calls `onPersist`, which PUTs the whole product to
+// /api/products/{id} and toasts the result (see AdminApp.persistProduct).
 
 import { AlertTriangle, Pencil, Search, Sparkles, HelpCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { marginPct } from "@/lib/admin/helpers";
 import { LOW_STOCK, type AdminCategory, type AdminProduct } from "@/lib/admin/types";
+import type { LoadState } from "../AdminApp";
 import { inputCls } from "../atoms";
 
 type EditCell = { id: string; field: keyof AdminProduct } | null;
@@ -27,6 +28,7 @@ export function Inventory({
   onPersist,
   onOpen,
   categories,
+  loadState = "ready",
 }: {
   products: AdminProduct[];
   setProducts: (next: AdminProduct[]) => void;
@@ -34,6 +36,8 @@ export function Inventory({
   onPersist: (p: AdminProduct) => void;
   onOpen: (id: string) => void;
   categories: AdminCategory[];
+  /** Whether the catalogue actually loaded — same reason as ProductList. */
+  loadState?: LoadState;
 }) {
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
@@ -233,8 +237,21 @@ export function Inventory({
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={10} className="py-10 text-center text-ink-soft/70">
-                  No products match “{search}”.
+                <td colSpan={10} className="py-10 text-center">
+                  {loadState === "loading" && <span className="text-ink-soft/70">Loading inventory…</span>}
+                  {loadState === "error" && (
+                    <span className="text-sale">
+                      Couldn&apos;t load the catalogue. This is a connection or sign-in problem, not
+                      an empty shop — reload once you&apos;re back online.
+                    </span>
+                  )}
+                  {loadState === "ready" && (
+                    <span className="text-ink-soft/70">
+                      {products.length === 0
+                        ? "No products yet."
+                        : `No products match “${search}”.`}
+                    </span>
+                  )}
                 </td>
               </tr>
             )}

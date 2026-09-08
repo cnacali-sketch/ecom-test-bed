@@ -92,9 +92,13 @@ export function Orders({
       .finally(() => !cancelled && setLoading(false));
     apiFetch("/api/returns")
       .then(async (res) => {
-        if (!cancelled && res?.ok) setReturnRequests((await res.json()) as ReturnRequest[]);
+        if (cancelled) return;
+        // Swallowed, a failed load hid the whole Returns section as though
+        // there were none pending -- the one case an admin must not miss.
+        if (!res?.ok) return setPatchError("Return requests couldn't be loaded. Reload to try again.");
+        setReturnRequests((await res.json()) as ReturnRequest[]);
       })
-      .catch(() => {});
+      .catch(() => !cancelled && setPatchError("Return requests couldn't be loaded. Reload to try again."));
     return () => {
       cancelled = true;
     };
@@ -171,14 +175,30 @@ export function Orders({
   if (error)
     return <p className="p-8 text-sm text-sale">Couldn&apos;t load orders. Check you&apos;re signed in as an admin.</p>;
 
+  // Hoisted so the zero-orders branch below can show it too — a failed
+  // returns fetch on a shop with no orders yet would otherwise be invisible.
+  const errorBanner = patchError && (
+    <div className="flex items-center justify-between gap-3 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">
+      <span className="flex items-center gap-2">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {patchError}
+      </span>
+      <button type="button" onClick={() => setPatchError(null)} className="font-semibold uppercase tracking-wide hover:underline">
+        Dismiss
+      </button>
+    </div>
+  );
+
   if (orders.length === 0)
     return (
-      <div className="rounded-2xl border border-dashed border-ink/20 bg-card p-16 text-center">
+      <div className="overflow-hidden rounded-2xl border border-dashed border-ink/20 bg-card text-center">
+        {errorBanner}
+        <div className="p-16">
         <ShoppingBag className="mx-auto h-8 w-8 text-ink-soft/40" />
         <p className="mt-3 text-sm text-ink-soft">No orders yet.</p>
         <p className="mt-1 text-xs text-ink-soft/60">
           Orders appear here once customers check out.
         </p>
+        </div>
       </div>
     );
 
@@ -194,16 +214,7 @@ export function Orders({
           )}
         </h3>
       </div>
-      {patchError && (
-        <div className="flex items-center justify-between gap-3 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">
-          <span className="flex items-center gap-2">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {patchError}
-          </span>
-          <button type="button" onClick={() => setPatchError(null)} className="font-semibold uppercase tracking-wide hover:underline">
-            Dismiss
-          </button>
-        </div>
-      )}
+      {errorBanner}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[820px] text-sm">
           <thead>
