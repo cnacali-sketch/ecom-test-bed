@@ -1,7 +1,7 @@
 # Graph Report - ecom-test-bed  (2026-09-08)
 
 ## Corpus Check
-- 43 files · ~169,205 words
+- 0 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -11,17 +11,7 @@
 
 ## Community Hubs (Navigation)
 - Auth Tokens & Tests
-- Order API Tests
-- Account & Admin Pages
-- Caveman Skill (agents)
-- Caveman Skill (claude)
-- Orders & Razorpay Payments
-- Backend Config & Celery
-- Security & Token Service
-- Admin UI Screens
-- Pricing Calculations
 - Analytics & Fraud Events
-- Frontend Dependencies
 - Database Models
 - Storefront Product UI
 - Inventory & SKUs
@@ -30,95 +20,105 @@
 - User Model
 - Coupons API
 - Barcode Generation
-- Auth Login Flow
-- TypeScript Config
+- Account & Admin Pages
 - Order Models
 - Media Uploads
 - Auth Profile Endpoints
-- Product API Tests
 - Root Layout & Chrome
 - Products API
-- Coupon API Tests
 - Categories
-- Community 30
-- Community 31
-- Community 32
-- Community 33
-- Community 34
-- Community 35
-- Community 36
-- Community 37
-- Community 38
-- Community 39
-- Community 40
-- Community 41
-- Community 42
-- Community 43
-- Community 44
-- Community 45
-- Community 46
-- Community 47
-- Community 48
-- Community 49
-- Community 50
-- Community 51
-- Community 52
-- Community 53
-- Community 54
-- Community 55
-- Community 56
-- Community 57
-- Community 58
-- Community 59
-- Community 60
-- Community 61
-- Community 62
-- Community 63
-- Community 64
-- Community 65
-- Community 66
-- Community 67
-- Community 68
-- Community 69
-- Community 70
-- Community 71
-- Community 72
-- Community 73
-- Community 74
-- Community 75
-- Community 76
-- Community 77
-- Community 78
-- Community 79
-- Community 80
-- Community 81
-- Community 82
-- Community 83
-- Community 84
-- Community 85
-- Community 86
-- Community 87
-- Community 88
-- Community 89
-- Community 90
-- Community 91
-- Community 92
-- Community 93
-- Community 94
-- Community 118
-- Community 119
-- Community 120
-- Community 121
-- Community 122
-- Community 123
-- Community 124
-- Community 125
-- Community 129
-- Community 131
-- Community 136
-- Community 137
-- Community 138
-- Community 139
+- Caveman Skill (agents)
+- Homepage Content Schema
+- Contact Messages API
+- Customer Admin API
+- Hero & Homepage Sections
+- Policy Pages & Nav Config
+- Description Analyzer Tests
+- Faceted Filtering & Sort
+- Refresh Token Rotation
+- Caveman Skill (claude)
+- Collection & Product Pages
+- Admin Analytics Dashboard
+- Product Schema Inspector Tests
+- Header Nav & Mega Menu
+- Product & Collection Schemas
+- Pricing API Tests
+- Orders & Razorpay Payments
+- API Client & Coupon Admin
+- Analytics Consent & Search
+- Homepage Content API
+- Catalog Content
+- Analyzer Schemas
+- Backend Config & Celery
+- Inventory API Tests
+- Returns & Order Admin UI
+- Security & Token Service
+- Admin Messages Screen
+- Coupon Discount Service
+- Pricing Schemas
+- Recommendation API Tests
+- Admin UI Screens
+- Fraud Signal Admin UI
+- Backend Product Adapter
+- Order Tracking Page
+- Customer Edit Form
+- Inventory Schemas
+- Admin Error Logs
+- Pricing Calculations
+- Health Endpoint Tests
+- Order API Tests
+- Coming Soon Page
+- Auth Login Flow
+- Product API Tests
+- Coupon API Tests
+- Description Readability Service
+- Returns API Tests
+- Contact API Tests
+- Transactional Email Service
+- Collections API Tests
+- Razorpay Verify Binding Tests
+- Alembic Migration Env
+- Customer API Tests
+- Auth Dependencies
+- Health Endpoint
+- Celery Tasks
+- Frontend Dependencies
+- Caveman Compress Init (agents)
+- Caveman Compress Init (claude)
+- ESLint Config
+- PostCSS Config
+- Tailwind Config
+- Coupon Reference
+- Background Tasks Ref
+- TypeScript Config
+- Brand Concept Image A
+- Brand Concept Image B
+- Brand Concept Image C
+- Brand Image Asset
+- Brand Identity Assets
+- Ponytail Skill (claude)
+- Storefront Editing Skill
+- Cavecrew Skill
+- Caveman Skill Definition
+- Accessorize Research
+- Ponytail Skill (agents)
+- Brand Style Guide
+- Content Editing Docs
+- Docker Compose Stack
+- Zara Research
+- Backend Requirements
+- France Luxe Research
+- Project README
+- Caveman Stats (claude)
+- Caveman Stats (agents)
+- Graphify Clustering
+- Graphify Incremental Cache
+- Graphify Analysis Concepts
+- Graphify Edge Relations
+- Graphify Tooling Features
+- Graphify Corpus Detection
+- Graphify Query Traversal
+- Graphify Node Explain
 
 ## God Nodes (most connected - your core abstractions)
 1. `apiFetch()` - 54 edges
@@ -127,10 +127,10 @@
 4. `Base` - 38 edges
 5. `SiteConfig` - 23 edges
 6. `analyze_description()` - 21 edges
-7. `decode_token()` - 20 edges
-8. `useAuth()` - 20 edges
+7. `useAuth()` - 20 edges
+8. `decode_token()` - 20 edges
 9. `hash_password()` - 19 edges
-10. `TokenError` - 18 edges
+10. `Product` - 18 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Podman Desktop chosen over Docker Desktop for local infra (OSI-open-source license requirement)` --rationale_for--> `docker-compose.yml (Postgres/Redis/RabbitMQ/backend/frontend/Caddy)`  [EXTRACTED]
@@ -170,413 +170,413 @@
 
 ### Community 0 - "Auth Tokens & Tests"
 Cohesion: 0.07
-Nodes (70): One issued refresh token. Rotated on every use., RefreshToken, _no_real_email(), AsyncClient, asyncio, fixture, Tests for /api/auth endpoints, the JWT cookie gate, and refresh rotation., A signup attempt must not overwrite the real owner's password. (+62 more)
-
-### Community 1 - "Order API Tests"
-Cohesion: 0.08
-Nodes (64): _make_coupon(), _make_tracked_product(), product_id(), AsyncClient, asyncio, AsyncSession, fixture, Tests for /api/orders endpoints. (+56 more)
-
-### Community 2 - "Account & Admin Pages"
-Cohesion: 0.06
-Nodes (36): AccountView(), AdminLoginPage(), handleLogin(), CheckoutPage(), ForgotPasswordPage(), LoginPage(), handleLogin(), RegisterPage() (+28 more)
-
-### Community 3 - "Caveman Skill (agents)"
-Cohesion: 0.06
-Nodes (49): benchmark_pair(), count_tokens(), main(), print_table(), Path, main(), print_usage(), backup_dir_for() (+41 more)
-
-### Community 4 - "Caveman Skill (claude)"
-Cohesion: 0.06
-Nodes (49): benchmark_pair(), count_tokens(), main(), print_table(), Path, main(), print_usage(), backup_dir_for() (+41 more)
-
-### Community 5 - "Orders & Razorpay Payments"
-Cohesion: 0.08
-Nodes (54): _authoritative_pricing(), create_order(), flag_order(), get_order(), init_razorpay_payment(), list_all_orders(), list_orders(), OrderAdminRead (+46 more)
-
-### Community 6 - "Backend Config & Celery"
-Cohesion: 0.06
-Nodes (45): Celery application wiring. This only proves the task queue is wired up…, get_settings(), Application configuration loaded from environment variables. Uses pydantic-…, Return CORS origins as a list, split on commas., Return a cached Settings instance (avoids re-parsing env on every call)., Central application settings. All values have safe local-dev defaults so the…, Settings, create_app() (+37 more)
-
-### Community 7 - "Security & Token Service"
-Cohesion: 0.09
-Nodes (46): create_access_token(), create_refresh_token(), create_reset_token(), _create_token(), create_verify_token(), decode_token(), dummy_verify(), hash_password() (+38 more)
-
-### Community 8 - "Admin UI Screens"
-Cohesion: 0.11
-Nodes (35): DiscountBadge(), Field(), ShowToggle(), Toggle(), ProductCardPreview(), Dashboard(), EditCell, Inventory() (+27 more)
-
-### Community 9 - "Pricing Calculations"
-Cohesion: 0.07
-Nodes (25): calculate_break_even(), calculate_markup(), calculate_profit_margin(), post, Pricing calculator endpoints (Pricing Agent tools)., Compute the retail price from cost and desired margin percentage., Compute the profit margin percentage from cost and selling price., Compute the number of units needed to break even on fixed costs. (+17 more)
+Nodes (70): RefreshToken, _no_real_email(), test_billing_same_true_clears_billing(), test_each_login_opens_its_own_family(), test_get_request_does_not_require_csrf_header(), test_live_token_is_dead_after_a_replay_elsewhere(), test_login_does_not_leak_whether_email_exists(), test_login_succeeds_and_sets_cookies() (+62 more)
 
 ### Community 10 - "Analytics & Fraud Events"
 Cohesion: 0.10
-Nodes (40): AdClickFlag, CheckoutVelocityFlag, _classify_browser(), _classify_device(), CouponAbuseFlag, EventCreate, events_summary(), EventSummary (+32 more)
-
-### Community 11 - "Frontend Dependencies"
-Cohesion: 0.05
-Nodes (41): eslint, eslint-config-next, @fontsource-variable/archivo, @fontsource-variable/fraunces, dependencies, @fontsource-variable/archivo, @fontsource-variable/fraunces, lucide-react (+33 more)
+Nodes (40): AdClickFlag, CheckoutVelocityFlag, CouponAbuseFlag, EventCreate, EventSummary, FraudSummary, LocationCount, TopProduct (+32 more)
 
 ### Community 12 - "Database Models"
 Cohesion: 0.08
-Nodes (31): Base, Shared declarative base for all ORM models., AgentDecision, AgentDecision ORM model -- audit log of agent input/output pairs., Records what an agent decided, given a specific input, for auditing/eval., Collection, Collection ORM model — the core navigation unit for the storefront. A…, A named grouping of products (e.g. Hair Accessories, Jewellery). (+23 more)
+Nodes (31): Base, AgentDecision, Collection, ContactMessage, InventorySnapshot, ProductVariant, Recommendation, UserEvent (+23 more)
 
 ### Community 13 - "Storefront Product UI"
 Cohesion: 0.11
-Nodes (26): SpecimenRanges(), SpecimenRangesProps, AccordionSection(), AccordionSectionProps, CrossSellRail(), CrossSellRailProps, ImageGallery(), ImageGalleryProps (+18 more)
+Nodes (26): SpecimenRangesProps, AccordionSectionProps, CrossSellRailProps, ImageGalleryProps, PriceBlockProps, ProductCardProps, ProductDetailProps, VariantSelectorProps (+18 more)
 
 ### Community 14 - "Inventory & SKUs"
 Cohesion: 0.08
-Nodes (20): generate_barcode(), generate_skus(), post, Response, Inventory generator endpoints (Inventory Agent tools)., Bulk-generate SKUs from a brand/category/size spec., Generate a UPC-A or EAN-13 barcode image, returned as raw PNG or SVG bytes., bulk_generate() (+12 more)
+Nodes (20): TestBulkGenerate, TestGenerateSku, generate_barcode(), generate_skus(), bulk_generate(), generate_sku(), _validate_segment(), post (+12 more)
 
 ### Community 15 - "Account & Verification UI"
 Cohesion: 0.10
-Nodes (32): Status, VerifyEmail(), Order, OrderHistory(), submitReturn(), STATUS_LABEL, CategoryManager(), add() (+24 more)
+Nodes (32): Status, Order, VerifyEmail(), OrderHistory(), submitReturn(), CategoryManager(), add(), authError() (+24 more)
 
 ### Community 16 - "Async DB Engine"
 Cohesion: 0.09
-Nodes (27): AsyncEngine, create_engine(), get_db_session(), AsyncSession, Async SQLAlchemy engine/session setup. The engine is created lazily and is…, Create (but do not connect) the async SQLAlchemy engine., FastAPI dependency yielding an AsyncSession, closed after the request., Authentication dependencies. JWT in an httpOnly cookie is the gate (P1) — it… (+19 more)
+Nodes (27): ErrorLoggingMiddleware, ErrorLog, ErrorLogRead, create_engine(), get_db_session(), require_admin(), _write_log(), clear_error_logs() (+19 more)
 
 ### Community 17 - "User Model"
 Cohesion: 0.12
-Nodes (28): normalize_email(), User ORM model — customers and admins share one table, split by `role`. Two…, An authenticated account. Email is the login identity., Lowercase + strip so `A@B.com ` and `a@b.com` are the same account., User, create_admin(), Create or promote an admin account. Self-registration always creates a customer…, admin_client() (+20 more)
+Nodes (28): User, normalize_email(), create_admin(), admin_client(), admin_user(), _clear_login_throttle(), client(), customer_client() (+20 more)
 
 ### Community 18 - "Coupons API"
 Cohesion: 0.14
-Nodes (31): coupon_qr(), CouponCreate, CouponEdit, CouponRead, CouponValidate, CouponValidateResponse, create_coupon(), delete_coupon() (+23 more)
+Nodes (31): CouponCreate, CouponEdit, CouponRead, CouponValidate, CouponValidateResponse, coupon_qr(), create_coupon(), delete_coupon() (+23 more)
 
 ### Community 19 - "Barcode Generation"
 Cohesion: 0.11
-Nodes (15): compute_ean13_checksum(), generate_ean13(), generate_upca(), UPC-A / EAN-13 barcode generation with PNG + SVG export. Uses the open-source…, Validate that `code` is exactly `expected_length` numeric digits. Raises:…, Compute the EAN-13 checksum digit for a 12-digit code. Odd positions (1st, 3rd,…, Render a `python-barcode` instance to PNG and SVG bytes., Generate an EAN-13 barcode (PNG + SVG) from a 12-digit code. Returns: dict with… (+7 more)
+Nodes (15): TestComputeEan13Checksum, TestGenerateEan13, TestGenerateUpca, compute_ean13_checksum(), generate_ean13(), generate_upca(), _render_barcode(), _validate_numeric_code() (+7 more)
+
+### Community 2 - "Account & Admin Pages"
+Cohesion: 0.06
+Nodes (36): AuthFormProps, RequireAuthProps, Address, AuthContextValue, AuthError, AuthUser, ProfileUpdate, RazorpayConstructor (+28 more)
+
+### Community 22 - "Order Models"
+Cohesion: 0.11
+Nodes (25): Order, OrderItem, ReturnRequest, ReturnRequestCreate, ReturnRequestRead, create_return_request(), list_return_requests(), _restock_items() (+17 more)
+
+### Community 23 - "Media Uploads"
+Cohesion: 0.11
+Nodes (26): MediaItem, delete_media(), list_media(), _to_item(), upload_media(), _cleanup_uploaded_files(), _png_bytes(), test_upload_accepts_a_real_image_and_derives_its_own_extension() (+18 more)
+
+### Community 24 - "Auth Profile Endpoints"
+Cohesion: 0.12
+Nodes (24): Address, ForgotPasswordRequest, LoginRequest, MessageResponse, ProfileUpdate, RegisterRequest, ResetPasswordRequest, UserRead (+16 more)
+
+### Community 26 - "Root Layout & Chrome"
+Cohesion: 0.12
+Nodes (18): NewsletterFormProps, CartContextValue, CartItem, WishlistContextValue, RootLayout(), AddedToast(), CartDrawer(), Footer() (+10 more)
+
+### Community 27 - "Products API"
+Cohesion: 0.15
+Nodes (24): Product, create_product(), delete_product(), get_product(), get_product_by_slug(), list_products(), _q(), update_product() (+16 more)
+
+### Community 29 - "Categories"
+Cohesion: 0.16
+Nodes (22): Category, CategoryCreate, CategoryRead, CategoryUpdate, ReorderPayload, create_category(), delete_category(), list_categories() (+14 more)
+
+### Community 3 - "Caveman Skill (agents)"
+Cohesion: 0.06
+Nodes (49): ValidationResult, benchmark_pair(), count_tokens(), main(), print_table(), main(), print_usage(), backup_dir_for() (+41 more)
+
+### Community 30 - "Homepage Content Schema"
+Cohesion: 0.12
+Nodes (19): Meta, EditorialTile, FieldSpec, HomepageContent, QuickCta, SeoCategory, SeoFaq, ImageSpec (+11 more)
+
+### Community 31 - "Contact Messages API"
+Cohesion: 0.16
+Nodes (20): ContactAdminRead, ContactCreate, ContactRead, create_contact_message(), delete_contact_message(), _get_message_or_404(), list_contact_messages(), update_contact_message() (+12 more)
+
+### Community 32 - "Customer Admin API"
+Cohesion: 0.16
+Nodes (21): BlockRequest, CustomerEdit, CustomerRead, block_customer(), delete_customer(), _get_customer_or_404(), list_customers(), update_customer() (+13 more)
+
+### Community 34 - "Hero & Homepage Sections"
+Cohesion: 0.26
+Nodes (14): RevealProps, SiteConfig, BackendCollection, HomepageContentOverride, HomePage(), CampaignBand(), EditorialTiles(), HeroBanner() (+6 more)
+
+### Community 35 - "Policy Pages & Nav Config"
+Cohesion: 0.13
+Nodes (11): PolicyPageProps, PolicySection, NavItem, NavLink, StudioAddress, PolicyPage(), metadata, metadata (+3 more)
+
+### Community 36 - "Description Analyzer Tests"
+Cohesion: 0.16
+Nodes (6): TestAnalyzeDescription, TestFallbackReadabilityWithoutTextstat, analyze_description(), Heuristically score a product description's LLM/recommendation readiness.…, Unit tests for app.services.description_analyzer (pure functions, no LLM call)., Covers the self-contained Flesch approximation used when `textstat` (or its…
+
+### Community 38 - "Faceted Filtering & Sort"
+Cohesion: 0.15
+Nodes (16): ActiveFilters, FacetGroupProps, FilterSidebarProps, ProductGridProps, SortDropdownProps, FilterCounts, SortOption, FilterSidebar() (+8 more)
+
+### Community 39 - "Refresh Token Rotation"
+Cohesion: 0.18
+Nodes (18): TokenReuseError, IssuedRefreshToken, issue(), purge_expired(), revoke_all_for_user(), revoke_family(), rotate(), AsyncSession (+10 more)
+
+### Community 4 - "Caveman Skill (claude)"
+Cohesion: 0.06
+Nodes (49): ValidationResult, benchmark_pair(), count_tokens(), main(), print_table(), main(), print_usage(), backup_dir_for() (+41 more)
+
+### Community 41 - "Collection & Product Pages"
+Cohesion: 0.15
+Nodes (13): CollectionPageProps, ProductPageProps, SeoDescriptionProps, CollectionPage(), ProductPage(), ProductDetail(), SeoDescription(), adaptCollection() (+5 more)
+
+### Community 42 - "Admin Analytics Dashboard"
+Cohesion: 0.20
+Nodes (15): EventSummary, LocationCount, TopProduct, AdminApp(), newDraft(), Analytics(), attrNum(), attrStr() (+7 more)
+
+### Community 43 - "Product Schema Inspector Tests"
+Cohesion: 0.18
+Nodes (9): TestInspectProductSchema, _find_missing(), _get_nested(), inspect_product_schema(), Validates a product dict against schema.org Product JSON-LD guidance. Fields…, Look up a possibly-nested field (e.g. "offers.price") in `product`. Returns…, Return the subset of `fields` that are missing or falsy in `product`., Validate `product` against schema.org Product required/recommended fields.… (+1 more)
+
+### Community 46 - "Header Nav & Mega Menu"
+Cohesion: 0.14
+Nodes (11): HeaderProps, MegaMenuColumn, MegaMenuProps, MobileNavProps, Header(), commit(), onBreakpoint(), onScroll() (+3 more)
+
+### Community 47 - "Product & Collection Schemas"
+Cohesion: 0.19
+Nodes (15): CollectionDetail, CollectionRead, ProductCreate, ProductRead, VariantCreate, VariantRead, get_collection(), list_collections() (+7 more)
+
+### Community 49 - "Pricing API Tests"
+Cohesion: 0.26
+Nodes (8): TestBreakEvenEndpoint, TestMarginEndpoint, TestMarkupEndpoint, test_pricing_rejects_non_admin(), test_pricing_requires_admin(), AsyncClient, asyncio, Integration tests for /api/pricing/* endpoints. Internal back-office tooling --…
+
+### Community 5 - "Orders & Razorpay Payments"
+Cohesion: 0.08
+Nodes (54): OrderAdminRead, OrderCreate, OrderItemCreate, OrderItemRead, OrderRead, RazorpayVerifyRequest, _authoritative_pricing(), create_order() (+46 more)
+
+### Community 51 - "API Client & Coupon Admin"
+Cohesion: 0.16
+Nodes (12): Coupon, ContactPage(), handleSubmit(), EditCouponRow(), apiBaseUrl(), postRefresh(), readCookie(), refreshOnce() (+4 more)
+
+### Community 52 - "Analytics Consent & Search"
+Cohesion: 0.21
+Nodes (12): SearchOverlayProps, ConsentState, EventType, TrackExtra, ConsentBanner(), choose(), PageViewTracker(), SearchOverlay() (+4 more)
+
+### Community 55 - "Homepage Content API"
+Cohesion: 0.23
+Nodes (13): HomepageContent, HomepageContentRead, HomepageContentWrite, get_homepage_content(), _get_or_create(), update_homepage_content(), AsyncSession, BaseModel (+5 more)
+
+### Community 57 - "Catalog Content"
+Cohesion: 0.20
+Nodes (11): Collection, getCollectionBySlug(), getProductBySlug(), getProductsByCollectionSlug(), px(), collections, products, nextConfig (+3 more)
+
+### Community 58 - "Analyzer Schemas"
+Cohesion: 0.27
+Nodes (12): DescriptionAnalyzerRequest, DescriptionAnalyzerResponse, SchemaInspectorRequest, SchemaInspectorResponse, analyze_product_description(), inspect_schema(), post, BaseModel (+4 more)
+
+### Community 6 - "Backend Config & Celery"
+Cohesion: 0.06
+Nodes (45): Settings, get_settings(), create_app(), _basic_auth(), create_razorpay_order(), razorpay_enabled(), verify_payment_signature(), verify_webhook_signature() (+37 more)
+
+### Community 60 - "Inventory API Tests"
+Cohesion: 0.30
+Nodes (7): TestBarcodeEndpoint, TestSkuEndpoint, test_inventory_rejects_non_admin(), test_inventory_requires_admin(), AsyncClient, asyncio, Integration tests for /api/inventory/* endpoints. Internal back-office tooling…
+
+### Community 62 - "Returns & Order Admin UI"
+Cohesion: 0.17
+Nodes (9): Order, OrderItem, ReturnRequest, addressLine(), ShippingDetail(), PAYMENT, PAYMENT_STYLE, STATUS (+1 more)
+
+### Community 7 - "Security & Token Service"
+Cohesion: 0.09
+Nodes (46): TokenError, create_access_token(), create_refresh_token(), create_reset_token(), _create_token(), create_verify_token(), decode_token(), dummy_verify() (+38 more)
+
+### Community 72 - "Admin Messages Screen"
+Cohesion: 0.25
+Nodes (8): ContactMessage, Messages(), deleteMessage(), load(), setRead(), toggleExpand(), CATEGORY_LABEL, CATEGORY_STYLE
+
+### Community 73 - "Coupon Discount Service"
+Cohesion: 0.36
+Nodes (6): Coupon, compute_discount(), Decimal, A discount code, redeemable once per order at checkout., Coupon discount math — shared between the live validate-as-you-type endpoint…, Validate `coupon` against `subtotal` and return the discount amount. Raises:…
+
+### Community 74 - "Pricing Schemas"
+Cohesion: 0.43
+Nodes (7): BreakEvenRequest, BreakEvenResponse, MarginRequest, MarginResponse, MarkupRequest, MarkupResponse, BaseModel
+
+### Community 77 - "Recommendation API Tests"
+Cohesion: 0.36
+Nodes (3): TestDescriptionAnalyzerEndpoint, TestSchemaInspectorEndpoint, TestClient
+
+### Community 8 - "Admin UI Screens"
+Cohesion: 0.11
+Nodes (35): EditCell, AdminBadge, AdminCategory, AdminDims, AdminProduct, AdminShow, AdminView, MediaItem (+27 more)
+
+### Community 80 - "Fraud Signal Admin UI"
+Cohesion: 0.25
+Nodes (6): AdClickFlag, CheckoutVelocityFlag, CouponAbuseFlag, FraudSummary, CouponAbuseTable(), Fraud()
+
+### Community 81 - "Backend Product Adapter"
+Cohesion: 0.39
+Nodes (5): BackendProduct, BackendProductVariant, adaptProduct(), adaptVariant(), asStringArray()
+
+### Community 83 - "Order Tracking Page"
+Cohesion: 0.29
+Nodes (4): Order, OrderItem, TrackOrderView(), STATUS_LABEL
+
+### Community 84 - "Customer Edit Form"
+Cohesion: 0.29
+Nodes (5): Address, Customer, EditCustomerForm(), oneLine(), inputCls
+
+### Community 86 - "Inventory Schemas"
+Cohesion: 0.47
+Nodes (5): BarcodeRequest, SkuBulkRequest, SkuBulkResponse, BaseModel, Request/response schemas for the inventory router.
+
+### Community 87 - "Admin Error Logs"
+Cohesion: 0.40
+Nodes (5): ErrorLogEntry, ErrorLogs(), clearAll(), load(), statusStyle()
+
+### Community 9 - "Pricing Calculations"
+Cohesion: 0.07
+Nodes (25): TestBreakEven, TestMarkup, TestProfitMargin, calculate_break_even(), calculate_markup(), calculate_profit_margin(), break_even(), markup() (+17 more)
+
+### Community 1 - "Order API Tests"
+Cohesion: 0.08
+Nodes (64): _make_coupon(), _make_tracked_product(), product_id(), _seed_order_payload_products(), test_admin_all_orders_still_includes_fraud_fields(), test_admin_order_bypasses_terms_requirement(), test_admin_order_creation_bypasses_throttle(), test_admin_order_creation_keeps_payload_user_id() (+56 more)
 
 ### Community 20 - "Auth Login Flow"
 Cohesion: 0.14
-Nodes (28): _clear_auth_cookies(), forgot_password(), login(), logout(), AsyncSession, BackgroundTasks, post, Request (+20 more)
+Nodes (28): _clear_auth_cookies(), forgot_password(), login(), logout(), refresh(), register(), _set_auth_cookies(), verify_email() (+20 more)
+
+### Community 25 - "Product API Tests"
+Cohesion: 0.19
+Nodes (26): _create(), test_collection_filter(), test_create_product(), test_create_product_as_customer_returns_403(), test_create_product_unauthenticated_returns_401(), test_delete_product(), test_delete_product_unauthenticated_returns_401(), test_duplicate_slug_returns_409() (+18 more)
+
+### Community 28 - "Coupon API Tests"
+Cohesion: 0.25
+Nodes (24): _coupon_payload(), test_coupon_qr_requires_admin(), test_coupon_qr_returns_png(), test_create_coupon_as_admin(), test_create_coupon_as_customer_403(), test_create_coupon_duplicate_code_409(), test_create_coupon_invalid_discount_type_422(), test_create_coupon_percent_over_100_rejected() (+16 more)
+
+### Community 33 - "Description Readability Service"
+Cohesion: 0.12
+Nodes (18): _readability_score(), _split_words(), check_keyword_density(), check_length(), check_readability(), count_syllables(), flesch_reading_ease_approx(), Heuristic scoring of product description text for LLM/recommendation readiness.… (+10 more)
+
+### Community 44 - "Returns API Tests"
+Cohesion: 0.32
+Nodes (17): _make_delivered_order(), _make_tracked_product(), _make_untracked_product(), test_approve_paid_return_refunds_and_restocks(), test_approve_unpaid_cod_return_restocks_but_does_not_mark_refunded(), test_create_return_request_duplicate_pending_409(), test_create_return_request_on_delivered_order(), test_create_return_request_requires_delivered() (+9 more)
+
+### Community 48 - "Contact API Tests"
+Cohesion: 0.34
+Nodes (16): _contact_payload(), test_admin_list_still_includes_ip_address(), test_delete_message_as_admin(), test_delete_message_as_customer_403(), test_list_contact_messages_as_admin(), test_list_contact_messages_requires_admin(), test_mark_message_read_as_admin(), test_submit_contact_message_invalid_category_422() (+8 more)
+
+### Community 59 - "Transactional Email Service"
+Cohesion: 0.20
+Nodes (13): _send(), send_account_exists_email(), send_order_confirmation_email(), send_order_shipped_email(), send_password_reset_email(), send_verification_email(), Outbound email, provider-abstracted. EMAIL_DEV_STUB=true (the default) logs…, Order moved to 'shipped' with a courier/tracking number attached. (+5 more)
+
+### Community 64 - "Collections API Tests"
+Cohesion: 0.36
+Nodes (10): _create_collection(), test_get_collection_404(), test_get_collection_by_slug(), test_list_collections(), test_list_collections_empty(), AsyncClient, asyncio, AsyncSession (+2 more)
+
+### Community 66 - "Razorpay Verify Binding Tests"
+Cohesion: 0.51
+Nodes (9): _init_payment(), _make_prepaid_order(), test_verify_rejects_a_signature_replayed_from_a_different_order(), test_verify_rejects_when_init_was_never_called(), test_verify_succeeds_with_the_matching_razorpay_order_id(), AsyncClient, asyncio, AsyncSession (+1 more)
+
+### Community 69 - "Alembic Migration Env"
+Cohesion: 0.28
+Nodes (8): do_run_migrations(), run_async_migrations(), run_migrations_offline(), run_migrations_online(), Connection, Run migrations in 'offline' mode. This configures the context with just a URL…, In this scenario we need to create an Engine and associate a connection with…, Run migrations in 'online' mode.
+
+### Community 76 - "Customer API Tests"
+Cohesion: 0.46
+Nodes (7): test_list_customers_as_admin(), test_list_customers_as_customer_403(), test_list_customers_never_leaks_password_hash(), test_list_customers_unauthenticated_401(), AsyncClient, asyncio, Tests for /api/customers (admin-only customer directory).
+
+### Community 85 - "Auth Dependencies"
+Cohesion: 0.47
+Nodes (6): optional_current_user(), require_current_user(), AsyncSession, Request, Resolve the signed-in user from the access-token cookie, or 401. The user is…, Same resolution as require_current_user, but returns None instead of 401. For…
+
+### Community 88 - "Health Endpoint"
+Cohesion: 0.40
+Nodes (4): health_check(), get, Health check endpoint., Return a simple liveness signal for load balancers / uptime checks.
+
+### Community 89 - "Celery Tasks"
+Cohesion: 0.40
+Nodes (4): ping(), task, Stub Celery tasks proving the task queue wiring works. Real agent tasks…, Trivial task used to prove Celery task registration works end-to-end.
+
+### Community 11 - "Frontend Dependencies"
+Cohesion: 0.05
+Nodes (41): dependencies, @fontsource-variable/archivo, @fontsource-variable/fraunces, lucide-react, next, react, react-dom, devDependencies (+33 more)
 
 ### Community 21 - "TypeScript Config"
 Cohesion: 0.07
 Nodes (28): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+20 more)
 
-### Community 22 - "Order Models"
-Cohesion: 0.11
-Nodes (25): Order, OrderItem, Order and OrderItem ORM models., A customer order, composed of one or more `OrderItem` rows., A single line item within an `Order`., ReturnRequest ORM model., A customer-initiated request to return a delivered order., ReturnRequest (+17 more)
-
-### Community 23 - "Media Uploads"
-Cohesion: 0.11
-Nodes (26): delete_media(), list_media(), MediaItem, BaseModel, delete, get, Path, post (+18 more)
-
-### Community 24 - "Auth Profile Endpoints"
-Cohesion: 0.12
-Nodes (24): me(), get, patch, Authentication endpoints: register, login, refresh, logout, verify-email, me.…, Consume a reset token and set a new password. Revokes every refresh-token…, Return the signed-in account — drives frontend auth state., Customer edits their own profile (name, phone, addresses). Only the fields…, reset_password() (+16 more)
-
-### Community 25 - "Product API Tests"
-Cohesion: 0.19
-Nodes (26): _create(), AsyncClient, asyncio, Tests for /api/products endpoints. Uses an in-memory SQLite DB via conftest.…, The admin UI sends no variants; the PUT must not wipe them., A caller that only edits price/stock must not wipe attrs it doesn't model., sku is an identity key (used as the storefront product id) — immutable via PUT., test_collection_filter() (+18 more)
-
-### Community 26 - "Root Layout & Chrome"
-Cohesion: 0.12
-Nodes (18): metadata, RootLayout(), viewport, AddedToast(), CartDrawer(), EMPTY_STATE_SHORTCUTS, Footer(), NewsletterForm() (+10 more)
-
-### Community 27 - "Products API"
-Cohesion: 0.15
-Nodes (24): Product, A sellable product, grouping one or more `ProductVariant` rows., create_product(), delete_product(), get_product(), get_product_by_slug(), list_products(), AsyncSession (+16 more)
-
-### Community 28 - "Coupon API Tests"
-Cohesion: 0.25
-Nodes (24): _coupon_payload(), AsyncClient, asyncio, Tests for /api/coupons endpoints., Public and unauthenticated -- without this cap it's a free oracle for brute-…, test_coupon_qr_requires_admin(), test_coupon_qr_returns_png(), test_create_coupon_as_admin() (+16 more)
-
-### Community 29 - "Categories"
-Cohesion: 0.16
-Nodes (22): Category, Product category ORM model. Distinct from `Collection` (Hair Accessories /…, CategoryCreate, CategoryRead, CategoryUpdate, create_category(), delete_category(), list_categories() (+14 more)
-
-### Community 30 - "Community 30"
-Cohesion: 0.12
-Nodes (19): HelpTip(), useDnd(), ImageDrop(), upload(), Meta, PARENTS, DEFAULTS, EditorialTile (+11 more)
-
-### Community 31 - "Community 31"
-Cohesion: 0.16
-Nodes (20): ContactAdminRead, ContactCreate, ContactRead, create_contact_message(), delete_contact_message(), _get_message_or_404(), list_contact_messages(), AsyncSession (+12 more)
-
-### Community 32 - "Community 32"
-Cohesion: 0.16
-Nodes (21): block_customer(), BlockRequest, CustomerEdit, CustomerRead, delete_customer(), _get_customer_or_404(), list_customers(), AsyncSession (+13 more)
-
-### Community 33 - "Community 33"
-Cohesion: 0.12
-Nodes (18): Heuristic scoring of product description text for LLM/recommendation readiness.…, Return lowercase word tokens from `text`., Return the Flesch reading ease score, preferring `textstat` if available., _readability_score(), _split_words(), check_keyword_density(), Keyword-density scoring (most-frequent-word ratio)., Score keyword density; return (points_out_of_30, issues, suggestions). (+10 more)
-
-### Community 34 - "Community 34"
-Cohesion: 0.26
-Nodes (14): HomePage(), CampaignBand(), EditorialTiles(), HeroBanner(), QuickCtaRow(), SeoContentBlock(), Reveal(), RevealProps (+6 more)
-
-### Community 35 - "Community 35"
-Cohesion: 0.13
-Nodes (11): metadata, metadata, metadata, metadata, NAV_ITEMS, PolicyPage(), PolicyPageProps, PolicySection (+3 more)
-
-### Community 36 - "Community 36"
-Cohesion: 0.16
-Nodes (6): analyze_description(), Heuristically score a product description's LLM/recommendation readiness.…, Unit tests for app.services.description_analyzer (pure functions, no LLM call)., Covers the self-contained Flesch approximation used when `textstat` (or its…, TestAnalyzeDescription, TestFallbackReadabilityWithoutTextstat
-
-### Community 37 - "Community 37"
-Cohesion: 0.11
-Nodes (20): Cross-Repo Merge, Directed Graph, FalkorDB Export, GraphML Export, HTML Export, JSON Export, Neo4j Export, SVG Export (+12 more)
-
-### Community 38 - "Community 38"
-Cohesion: 0.15
-Nodes (16): ActiveFilters, COLOR_HEX_MAP, FacetGroupProps, FilterSidebar(), FilterSidebarProps, buildFacetCounts(), EMPTY_FILTERS, matchesFilters() (+8 more)
-
-### Community 39 - "Community 39"
-Cohesion: 0.18
-Nodes (18): issue(), purge_expired(), AsyncSession, Exception, UUID, Refresh Token Rotation (RTR) with reuse detection. The rule: a refresh token is…, A refresh token was presented that was already spent, or has no record. Both…, Mint a refresh token and record it. Omit `family_id` to start a session. (+10 more)
-
-### Community 40 - "Community 40"
+### Community 40 - "Brand Identity Assets"
 Cohesion: 0.14
-Nodes (19): Blush Pink & Gold Botanical Color Palette, Savvy In Teal brand identity: feminine, romantic, boutique hair-accessories & jewellery aesthetic, Watercolor-style floral bouquet motif (pink peonies, blush roses, white roses, green foliage) overlaid on the wordmark, Logo color palette: gold/black script, blush-pink & white florals, muted green foliage on transparent ground - notably no teal hue despite the brand name, Large ('-lg') logo variant, likely intended for header/hero/high-resolution storefront placements, "Savvy In Teal" gold cursive script wordmark with black outline/drop-shadow, Savvy In Teal logo (large) - gold cursive wordmark with pink/white floral bouquet, Savvy In Teal Logo (Large, WebP) (+11 more)
+Nodes (19): Blush Pink & Gold Botanical Color Palette, Savvy In Teal brand identity: feminine, romantic, boutique hair-accessories & jewellery aesthetic, Watercolor-style floral bouquet motif (pink peonies, blush roses, white roses, green foliage) overlaid on the wordmark, Logo color palette: gold/black script, blush-pink & white florals, muted green foliage on transparent ground - notably no teal hue despite the brand name, Large ('-lg') logo variant, likely intended for header/hero/high-resolution storefront placements, "Savvy In Teal" gold cursive script wordmark with black outline/drop-shadow, Logo color palette (gold, blush/dusty pink, sage green, white), Small-variant usage as favicon / compact nav-bar logo (+11 more)
 
-### Community 41 - "Community 41"
-Cohesion: 0.15
-Nodes (13): CollectionPage(), CollectionPageProps, ProductPage(), ProductPageProps, ProductDetail(), SeoDescription(), SeoDescriptionProps, adaptCollection() (+5 more)
-
-### Community 42 - "Community 42"
-Cohesion: 0.20
-Nodes (15): AdminApp(), newDraft(), Analytics(), EventSummary, FUNNEL_STEPS, LocationCount, TopProduct, attrNum() (+7 more)
-
-### Community 43 - "Community 43"
-Cohesion: 0.18
-Nodes (9): _find_missing(), _get_nested(), inspect_product_schema(), Validates a product dict against schema.org Product JSON-LD guidance. Fields…, Look up a possibly-nested field (e.g. "offers.price") in `product`. Returns…, Return the subset of `fields` that are missing or falsy in `product`., Validate `product` against schema.org Product required/recommended fields.…, Unit tests for app.services.product_schema_inspector (pure functions, no I/O). (+1 more)
-
-### Community 44 - "Community 44"
-Cohesion: 0.32
-Nodes (17): _make_delivered_order(), _make_tracked_product(), _make_untracked_product(), AsyncClient, asyncio, Tests for /api/returns endpoints., A real product with no stock tracking (attrs.stock unset) — order_items now has…, test_approve_paid_return_refunds_and_restocks() (+9 more)
-
-### Community 45 - "Community 45"
+### Community 45 - "Ponytail Skill (claude)"
 Cohesion: 0.12
-Nodes (18): Auto-clarity (inherited from caveman), caveman-commit (terse Conventional Commits generator), Auto-Clarity (always body for breaking changes/security/migrations/reverts), caveman-commit skill instructions, caveman-compress (compress memory files to save tokens), Snyk High Risk rating is a false positive: fixed-arg subprocess (no shell interpolation), file I/O confined to user-specified path with .original.md backup, CLI fallback only without ANTHROPIC_API_KEY, files >500KB rejected pre-API-call, caveman-compress skill instructions (compression rules, process, boundaries), caveman-help skill instructions (modes, skills table, config) (+10 more)
+Nodes (18): Auto-clarity (inherited from caveman), caveman-commit (terse Conventional Commits generator), Auto-Clarity (always body for breaking changes/security/migrations/reverts), caveman-commit skill instructions, caveman-compress (compress memory files to save tokens), caveman-compress skill instructions (compression rules, process, boundaries), caveman-help skill instructions (modes, skills table, config), caveman (talk like smart caveman, terse response mode) (+10 more)
 
-### Community 46 - "Community 46"
-Cohesion: 0.14
-Nodes (11): Header(), commit(), onBreakpoint(), onScroll(), setP(), HeaderProps, MegaMenu(), MegaMenuColumn (+3 more)
-
-### Community 47 - "Community 47"
-Cohesion: 0.19
-Nodes (15): CollectionDetail, CollectionRead, get_collection(), list_collections(), AsyncSession, BaseModel, get, List all collections (nav/marketing metadata). (+7 more)
-
-### Community 48 - "Community 48"
-Cohesion: 0.34
-Nodes (16): _contact_payload(), AsyncClient, asyncio, Tests for /api/contact endpoints., The submitter's own confirmation must not echo back their recorded IP., test_admin_list_still_includes_ip_address(), test_delete_message_as_admin(), test_delete_message_as_customer_403() (+8 more)
-
-### Community 49 - "Community 49"
-Cohesion: 0.26
-Nodes (8): AsyncClient, asyncio, Integration tests for /api/pricing/* endpoints. Internal back-office tooling --…, test_pricing_rejects_non_admin(), test_pricing_requires_admin(), TestBreakEvenEndpoint, TestMarginEndpoint, TestMarkupEndpoint
-
-### Community 50 - "Community 50"
+### Community 50 - "Storefront Editing Skill"
 Cohesion: 0.13
-Nodes (16): Delete dead code immediately (rule 7: no commented-out blocks, no _old files), Karpathy code-style skill (ruthless simplicity, no speculative abstraction), No speculative generality (rule 3: no plugin system/theme engine/i18n until 2nd real use case), content/site.config.ts (ceiling of abstraction for config), delete: tag (dead code, unused flexibility, speculative feature), native: tag (dependency doing what the platform already does), ponytail-review (over-engineering-focused code review), shrink: tag (same logic, fewer lines) (+8 more)
+Nodes (16): content/site.config.ts (ceiling of abstraction for config), frontend/content/catalog.ts (products, prices, images, collections), frontend/app/globals.css (:root color/theme tokens), frontend/app/layout.tsx (fonts), next.config.ts images.remotePatterns (new remote image hosts), frontend/content/site.config.ts (brand, announcement, nav, home, footer), Delete dead code immediately (rule 7: no commented-out blocks, no _old files), Karpathy code-style skill (ruthless simplicity, no speculative abstraction) (+8 more)
 
-### Community 51 - "Community 51"
-Cohesion: 0.16
-Nodes (12): CATEGORIES, ContactPage(), handleSubmit(), Coupon, EditCouponRow(), emptyForm, apiBaseUrl(), NO_REFRESH (+4 more)
-
-### Community 52 - "Community 52"
-Cohesion: 0.21
-Nodes (12): ConsentBanner(), choose(), PageViewTracker(), SearchOverlay(), SearchOverlayProps, ConsentState, EventType, getConsent() (+4 more)
-
-### Community 53 - "Community 53"
+### Community 53 - "Cavecrew Skill"
 Cohesion: 0.25
-Nodes (15): cavecrew-builder Agent, cavecrew-investigator Agent, cavecrew-reviewer Agent, Cavecrew README, Cavecrew Decision Guide, cavecrew-builder subagent (surgical 1-2 file edit), cavecrew-investigator subagent (locate code, read-only), cavecrew-reviewer subagent (diff/file review) (+7 more)
+Nodes (15): cavecrew-builder Agent, cavecrew-investigator Agent, cavecrew-reviewer Agent, Cavecrew Decision Guide, cavecrew-builder subagent (surgical 1-2 file edit), cavecrew-investigator subagent (locate code, read-only), cavecrew-reviewer subagent (diff/file review), Cavecrew (decision guide, full instructions) (+7 more)
 
-### Community 54 - "Community 54"
+### Community 54 - "Caveman Skill Definition"
 Cohesion: 0.20
-Nodes (15): Caveman Toolkit Repo README, Caveman Commit README, Caveman Commit — Terse Conventional Commits, Caveman Compress README, Caveman Compress Security Notes, Caveman Compress — Memory File Compression, Caveman Help README, Caveman Help — Quick Reference Card (+7 more)
+Nodes (15): Caveman Commit — Terse Conventional Commits, Caveman Compress — Memory File Compression, Caveman Help — Quick Reference Card, Caveman Review — One-Line PR Comments, Caveman — Terse Response Mode, Terse Mode, caveman-review skill instructions (format, severity tags), Caveman Toolkit Repo README (+7 more)
 
-### Community 55 - "Community 55"
-Cohesion: 0.23
-Nodes (13): HomepageContent, Homepage content overrides — a singleton row (id is always 1). Every field is…, get_homepage_content(), _get_or_create(), HomepageContentRead, HomepageContentWrite, AsyncSession, BaseModel (+5 more)
-
-### Community 56 - "Community 56"
+### Community 56 - "Accessorize Research"
 Cohesion: 0.13
-Nodes (15): Accessorize London — About Us page scrape, Accessorize brand story: est. 1984, affordable stackable accessories, sustainability & charity commitments, Build Prompt: Fashion Accessories E-Commerce Site (Accessorize-style), Accessorize-style storefront structural/functional blueprint (headless commerce + Next.js/Remix or Shopify Liquid), Accessorize homepage section order: hero, promo tiles, New In grid, lifestyle tiles, promo banners, SEO/FAQ block, footer, Accessorize information architecture: 6 mega-menu nav sections (New In/Bags/Jewellery/Accessories/Kids/Sale), Accessorize PDP pattern: gallery, price+MRP, Add to cart/Buy it now, accordions, customer care block, Accessorize London — Contact Us page scrape (+7 more)
+Nodes (15): Accessorize brand story: est. 1984, affordable stackable accessories, sustainability & charity commitments, Accessorize-style storefront structural/functional blueprint (headless commerce + Next.js/Remix or Shopify Liquid), Accessorize homepage section order: hero, promo tiles, New In grid, lifestyle tiles, promo banners, SEO/FAQ block, footer, Accessorize information architecture: 6 mega-menu nav sections (New In/Bags/Jewellery/Accessories/Kids/Sale), Accessorize PDP pattern: gallery, price+MRP, Add to cart/Buy it now, accordions, customer care block, Accessorize customer support channel (contact form, support email, phone, hCaptcha), Accessorize policies: 15-day refund/exchange, India-only delivery, no gift wrap, order cancellation rules, Accessorize homepage layout: hero banner, New In grid, lifestyle tiles, long-form SEO/brand content, FAQ, internal-link footer (+7 more)
 
-### Community 57 - "Community 57"
-Cohesion: 0.20
-Nodes (11): Storefront Content-Layer Editing, globals.css, collections, getCollectionBySlug(), getProductBySlug(), getProductsByCollectionSlug(), products, px() (+3 more)
-
-### Community 58 - "Community 58"
+### Community 61 - "Ponytail Skill (agents)"
 Cohesion: 0.27
-Nodes (12): analyze_product_description(), inspect_schema(), post, Recommendation-quality checker endpoints (Recommendation Agent tools)., Validate a product dict against schema.org Product JSON-LD guidance., Heuristically score a product description's LLM/recommendation readiness., DescriptionAnalyzerRequest, DescriptionAnalyzerResponse (+4 more)
+Nodes (13): Ponytail Audit — Repo-Wide Over-Engineering Scan, Ponytail Debt — Shortcut Ledger, Ponytail Gain — Impact Scoreboard, Ponytail Help — Quick Reference Card, Ponytail Review — Over-Engineering Diff Review, Ponytail Tag Taxonomy (delete/stdlib/native/yagni/shrink), The Ladder (YAGNI → stdlib → native → dependency → one-line → minimum), ponytail-audit (whole-repo over-engineering audit) (+5 more)
 
-### Community 59 - "Community 59"
+### Community 63 - "Brand Style Guide"
 Cohesion: 0.20
-Nodes (13): Outbound email, provider-abstracted. EMAIL_DEV_STUB=true (the default) logs…, Order moved to 'shipped' with a courier/tracking number attached., Signup attempt on an address that already has an account. The API told the…, Deliver one message, or log it when the dev stub is on., New signup: prove control of the address., Forgot-password request: prove control of the inbox before letting a new…, Order placed — sent right after checkout (COD or, once wired, prepaid)., _send() (+5 more)
+Nodes (12): Feminine, elegant, romantic/boutique visual brand style (wedding/gift-shop aesthetic), Logo color palette: metallic gold script, blush/dusty pink florals, white/cream florals, muted sage-green foliage, on a transparent/white background, Watercolor-style floral bouquet illustration (pink peonies/roses, white roses, green foliage) overlaid on the wordmark, Ambiguity: brand name includes the word "Teal" but no teal/turquoise color is visually present in the logo artwork itself, Gold cursive/calligraphic script wordmark reading "Savvy In Teal", Savvy In Teal (hair accessories & jewellery e-commerce brand), Soft, romantic color palette: blush/dusty pink florals, white accents, sage/muted green foliage, and metallic gold script text, on a transparent background, Watercolor-style floral illustration cluster of large pink peonies/roses, smaller white roses, and green leafy foliage/sprigs, positioned behind and around the wordmark (+4 more)
 
-### Community 60 - "Community 60"
-Cohesion: 0.30
-Nodes (7): AsyncClient, asyncio, Integration tests for /api/inventory/* endpoints. Internal back-office tooling…, test_inventory_rejects_non_admin(), test_inventory_requires_admin(), TestBarcodeEndpoint, TestSkuEndpoint
-
-### Community 61 - "Community 61"
-Cohesion: 0.27
-Nodes (13): Karpathy Simplicity Principles, Ponytail Audit — Repo-Wide Over-Engineering Scan, Ponytail Debt — Shortcut Ledger, Ponytail Gain — Impact Scoreboard, Ponytail Help — Quick Reference Card, Ponytail Review — Over-Engineering Diff Review, Ponytail Tag Taxonomy (delete/stdlib/native/yagni/shrink), Ponytail — Laziest Working Solution (+5 more)
-
-### Community 62 - "Community 62"
-Cohesion: 0.17
-Nodes (9): addressLine(), Order, OrderItem, PAYMENT, PAYMENT_STYLE, ReturnRequest, ShippingDetail(), STATUS (+1 more)
-
-### Community 63 - "Community 63"
+### Community 67 - "Content Editing Docs"
 Cohesion: 0.20
-Nodes (12): Feminine, elegant, romantic/boutique visual brand style (wedding/gift-shop aesthetic), Logo color palette: metallic gold script, blush/dusty pink florals, white/cream florals, muted sage-green foliage, on a transparent/white background, Watercolor-style floral bouquet illustration (pink peonies/roses, white roses, green foliage) overlaid on the wordmark, Ambiguity: brand name includes the word "Teal" but no teal/turquoise color is visually present in the logo artwork itself, Gold cursive/calligraphic script wordmark reading "Savvy In Teal", Savvy In Teal (hair accessories & jewellery e-commerce brand), Savvy In Teal brand logo (gold script wordmark with pink/white floral bouquet), Soft, romantic color palette: blush/dusty pink florals, white accents, sage/muted green foliage, and metallic gold script text, on a transparent background (+4 more)
+Nodes (9): Rules the AI follows: edits go in content/ never hardcoded in components, alt text required, must run npm run build/test, keep diffs small, Three editable content files: site.config.ts, catalog.ts, globals.css palette, Copy-paste owner prompts (change price, add product, change homepage, rebrand, seasonal campaign), Image handling: Pexels CDN via px() helper in site.config.ts or public/, new hosts added to next.config.ts remotePatterns, Embedded suspicious instruction block ("read node_modules/next/dist/docs") — prompt-injection-like, flagged and not followed, Agent rules: read storefront-editing/karpathy skills first, verify with npm run build/test, content in content/ not components/, CLAUDE.md consists solely of an @AGENTS.md include directive, Editing this store with AI (docs/EDITING.md) (+1 more)
 
-### Community 64 - "Community 64"
-Cohesion: 0.36
-Nodes (10): _create_collection(), AsyncClient, asyncio, AsyncSession, Collection, Tests for /api/collections endpoints., test_get_collection_404(), test_get_collection_by_slug() (+2 more)
-
-### Community 65 - "Community 65"
-Cohesion: 0.20
-Nodes (10): AMBIGUOUS Confidence Level, Deep Mode Extraction, EXTRACTED Confidence Level, Graph Edge, INFERRED Confidence Level, calls Relation, cites Relation, implements Relation (+2 more)
-
-### Community 66 - "Community 66"
-Cohesion: 0.51
-Nodes (9): _init_payment(), _make_prepaid_order(), AsyncClient, asyncio, AsyncSession, Regression tests: /razorpay/verify must bind to the razorpay_order_id issued…, test_verify_rejects_a_signature_replayed_from_a_different_order(), test_verify_rejects_when_init_was_never_called() (+1 more)
-
-### Community 67 - "Community 67"
-Cohesion: 0.20
-Nodes (9): Editing this store with AI (docs/EDITING.md), Rules the AI follows: edits go in content/ never hardcoded in components, alt text required, must run npm run build/test, keep diffs small, Three editable content files: site.config.ts, catalog.ts, globals.css palette, Copy-paste owner prompts (change price, add product, change homepage, rebrand, seasonal campaign), Savvy In Teal storefront agent rules (frontend/AGENTS.md), Image handling: Pexels CDN via px() helper in site.config.ts or public/, new hosts added to next.config.ts remotePatterns, Embedded suspicious instruction block ("read node_modules/next/dist/docs") — prompt-injection-like, flagged and not followed, Agent rules: read storefront-editing/karpathy skills first, verify with npm run build/test, content in content/ not components/ (+1 more)
-
-### Community 68 - "Community 68"
-Cohesion: 0.22
-Nodes (9): AST Extraction, CLAUDE.md Integration, Code Files, Cost Tracking, graphify, Post-Commit Hook, Token Reduction Benchmark, URL Ingest (+1 more)
-
-### Community 69 - "Community 69"
-Cohesion: 0.28
-Nodes (8): do_run_migrations(), Run migrations in 'offline' mode. This configures the context with just a URL…, In this scenario we need to create an Engine and associate a connection with…, Run migrations in 'online' mode., run_async_migrations(), run_migrations_offline(), run_migrations_online(), Connection
-
-### Community 70 - "Community 70"
+### Community 70 - "Docker Compose Stack"
 Cohesion: 0.44
-Nodes (9): docker-compose.yml (Postgres/Redis/RabbitMQ/backend/frontend/Caddy), backend service (built from ./backend), caddy service (caddy:2-alpine, sole publisher of ports 80/443), frontend service (built from ./frontend), NEXT_PUBLIC_API_URL must be set as a build arg — NEXT_PUBLIC_* vars are inlined into the client bundle at build time, Only Caddy publishes ports to host — Docker port publishing bypasses ufw via iptables, so publishing DB/queue ports directly is a security hole, postgres service (postgres:16-alpine), rabbitmq service (rabbitmq:3-management-alpine) (+1 more)
+Nodes (9): docker-compose.yml (Postgres/Redis/RabbitMQ/backend/frontend/Caddy), backend service (built from ./backend), caddy service (caddy:2-alpine, sole publisher of ports 80/443), frontend service (built from ./frontend), postgres service (postgres:16-alpine), rabbitmq service (rabbitmq:3-management-alpine), redis service (redis:7-alpine), NEXT_PUBLIC_API_URL must be set as a build arg — NEXT_PUBLIC_* vars are inlined into the client bundle at build time (+1 more)
 
-### Community 71 - "Community 71"
+### Community 71 - "Zara Research"
 Cohesion: 0.22
-Nodes (9): Accessorize PDP scrape — Black Fringe Shoulder Bag, PDP pattern: image gallery, price+discount%, quantity, Add to cart/Buy it now, Description/Details/More Info accordions, Build Prompt: Fast-Fashion Accessories E-Commerce Site (Zara-style), Zara-style minimalist editorial storefront blueprint (bespoke React/Next.js SPA, region/locale routing), Zara bot protection: interstitial iframe on plain HTTP GET, requires headless-Chromium stealth fetch, Zara PDP scrape — 100% Leather Long Gloves, Zara PDP pattern: hero editorial photo, price+discount, color swatches, minimal description, Complete your look rail, accordions, Zara — Women's Accessories SALE listing page scrape (stealth-fetch) (+1 more)
+Nodes (9): PDP pattern: image gallery, price+discount%, quantity, Add to cart/Buy it now, Description/Details/More Info accordions, Zara-style minimalist editorial storefront blueprint (bespoke React/Next.js SPA, region/locale routing), Zara bot protection: interstitial iframe on plain HTTP GET, requires headless-Chromium stealth fetch, Zara PDP pattern: hero editorial photo, price+discount, color swatches, minimal description, Complete your look rail, accordions, Zara listing page pattern: masonry editorial grid, storewide ~40% flash-sale discount, minimal card (image+title+price), Accessorize PDP scrape — Black Fringe Shoulder Bag, Build Prompt: Fast-Fashion Accessories E-Commerce Site (Zara-style), Zara PDP scrape — 100% Leather Long Gloves (+1 more)
 
-### Community 72 - "Community 72"
-Cohesion: 0.25
-Nodes (8): CATEGORY_LABEL, CATEGORY_STYLE, ContactMessage, Messages(), deleteMessage(), load(), setRead(), toggleExpand()
-
-### Community 73 - "Community 73"
-Cohesion: 0.36
-Nodes (6): Coupon, A discount code, redeemable once per order at checkout., compute_discount(), Decimal, Coupon discount math — shared between the live validate-as-you-type endpoint…, Validate `coupon` against `subtotal` and return the discount amount. Raises:…
-
-### Community 74 - "Community 74"
-Cohesion: 0.43
-Nodes (7): BreakEvenRequest, BreakEvenResponse, MarginRequest, MarginResponse, MarkupRequest, MarkupResponse, BaseModel
-
-### Community 75 - "Community 75"
+### Community 75 - "Backend Requirements"
 Cohesion: 0.32
-Nodes (8): Backend Python dependency manifest (requirements.txt), bcrypt used directly (not via passlib) — security primitives must never be hand-rolled, app.services.description_analyzer module (textstat consumer), FastAPI/SQLAlchemy/asyncpg/Celery core backend stack, python-multipart pinned — required at runtime for Starlette UploadFile/Form parsing on media-library upload endpoint, qrcode added for alphanumeric coupon codes (python-barcode is EAN13/UPCA numeric-only), setuptools pinned <81 so optional textstat path works; Flesch approximation fallback if unavailable, Media-library uploads volume (app/routers/media.py) persisted outside Postgres
+Nodes (8): Backend Python dependency manifest (requirements.txt), app.services.description_analyzer module (textstat consumer), FastAPI/SQLAlchemy/asyncpg/Celery core backend stack, Media-library uploads volume (app/routers/media.py) persisted outside Postgres, bcrypt used directly (not via passlib) — security primitives must never be hand-rolled, python-multipart pinned — required at runtime for Starlette UploadFile/Form parsing on media-library upload endpoint, qrcode added for alphanumeric coupon codes (python-barcode is EAN13/UPCA numeric-only), setuptools pinned <81 so optional textstat path works; Flesch approximation fallback if unavailable
 
-### Community 76 - "Community 76"
-Cohesion: 0.46
-Nodes (7): AsyncClient, asyncio, Tests for /api/customers (admin-only customer directory)., test_list_customers_as_admin(), test_list_customers_as_customer_403(), test_list_customers_never_leaks_password_hash(), test_list_customers_unauthenticated_401()
+### Community 79 - "France Luxe Research"
+Cohesion: 0.25
+Nodes (8): Accessorize faceted filters: Colour, Price, Occasion, Product type + sort dropdown + pagination, FranceLuxe-style multi-brand hair-accessories storefront blueprint (Shopify native or headless + faceted search), FranceLuxe faceted filters: Brand, Product type, Color (80+), Price, Size, Material, FranceLuxe mega-menu nav: New/Bestsellers/Hair Accessories/Home & Body/Brands/Sale with promo image tiles, FranceLuxe product card: hover-swap image, toggle swatches, vendor name, price range, View full details CTA, Accessorize London — Bags category listing page scrape, Build Prompt: Luxury Hair Accessories E-Commerce Site (FranceLuxe-style), FranceLuxe — Hair Accessories collection page scrape
 
-### Community 77 - "Community 77"
+### Community 82 - "Project README"
+Cohesion: 0.25
+Nodes (8): Standard create-next-app boilerplate: npm run dev, next/font Geist, Vercel deploy links, Repository structure (frontend / backend / docker-compose.yml), Project roadmap (Phase 1 calculators, Phase 2 eval dashboard, Phase 3 ops tooling, Later: LLM agents/Celery), Savvy In Teal storefront (hair accessories & jewellery brand), savvyarchitect.md (project root roadmap notes, referenced but not in this chunk), frontend/README.md (create-next-app default), Savvy In Teal — E-Commerce Test Bed README, Podman Desktop chosen over Docker Desktop for local infra (OSI-open-source license requirement)
+
+### Community 91 - "Caveman Stats (claude)"
+Cohesion: 0.50
+Nodes (5): caveman-mode-tracker hook (intercepts /caveman-stats), hooks/caveman-mode-tracker.js, hooks/caveman-stats.js, caveman-stats (real session token receipts), caveman-stats skill (delivered by hook, no model computation)
+
+### Community 92 - "Caveman Stats (agents)"
+Cohesion: 0.67
+Nodes (4): caveman-mode-tracker.js hook, caveman-stats.js hook, Caveman Stats — Session Token Report, Caveman Stats README
+
+### Community 118 - "Graphify Clustering"
+Cohesion: 0.67
+Nodes (3): Cluster-Only Mode, Community Detection, Clustering
+
+### Community 119 - "Graphify Incremental Cache"
+Cohesion: 0.67
+Nodes (3): Manifest File, Extraction Caching, Incremental Update
+
+### Community 37 - "Graphify Analysis Concepts"
+Cohesion: 0.11
+Nodes (20): Surprising Connections, Suggested Questions, Hyperedge, Graph Health Check, God Nodes, Cross-Repo Merge, Monorepo Handling, Wiki Export (+12 more)
+
+### Community 65 - "Graphify Edge Relations"
+Cohesion: 0.20
+Nodes (10): semantically_similar_to Relation, Deep Mode Extraction, implements Relation, cites Relation, calls Relation, references Relation, EXTRACTED Confidence Level, AMBIGUOUS Confidence Level (+2 more)
+
+### Community 68 - "Graphify Tooling Features"
+Cohesion: 0.22
+Nodes (9): Token Reduction Benchmark, CLAUDE.md Integration, Watch Mode, Cost Tracking, URL Ingest, Post-Commit Hook, AST Extraction, Code Files (+1 more)
+
+### Community 78 - "Graphify Corpus Detection"
 Cohesion: 0.36
-Nodes (3): TestClient, TestDescriptionAnalyzerEndpoint, TestSchemaInspectorEndpoint
+Nodes (8): Paper Files, Video Transcription, Corpus Detection, Whisper Model, Video Files, Image Files, Document Files, Semantic Extraction
 
-### Community 78 - "Community 78"
-Cohesion: 0.36
-Nodes (8): Corpus Detection, Document Files, Image Files, Paper Files, Semantic Extraction, Video Files, Video Transcription, Whisper Model
-
-### Community 79 - "Community 79"
-Cohesion: 0.25
-Nodes (8): Accessorize London — Bags category listing page scrape, Accessorize faceted filters: Colour, Price, Occasion, Product type + sort dropdown + pagination, Build Prompt: Luxury Hair Accessories E-Commerce Site (FranceLuxe-style), FranceLuxe-style multi-brand hair-accessories storefront blueprint (Shopify native or headless + faceted search), FranceLuxe — Hair Accessories collection page scrape, FranceLuxe faceted filters: Brand, Product type, Color (80+), Price, Size, Material, FranceLuxe mega-menu nav: New/Bestsellers/Hair Accessories/Home & Body/Brands/Sale with promo image tiles, FranceLuxe product card: hover-swap image, toggle swatches, vendor name, price range, View full details CTA
-
-### Community 80 - "Community 80"
-Cohesion: 0.25
-Nodes (6): AdClickFlag, CheckoutVelocityFlag, CouponAbuseFlag, CouponAbuseTable(), Fraud(), FraudSummary
-
-### Community 81 - "Community 81"
-Cohesion: 0.39
-Nodes (5): adaptProduct(), adaptVariant(), asStringArray(), BackendProduct, BackendProductVariant
-
-### Community 82 - "Community 82"
-Cohesion: 0.25
-Nodes (8): frontend/README.md (create-next-app default), Standard create-next-app boilerplate: npm run dev, next/font Geist, Vercel deploy links, Savvy In Teal — E-Commerce Test Bed README, Podman Desktop chosen over Docker Desktop for local infra (OSI-open-source license requirement), Repository structure (frontend / backend / docker-compose.yml), Project roadmap (Phase 1 calculators, Phase 2 eval dashboard, Phase 3 ops tooling, Later: LLM agents/Celery), Savvy In Teal storefront (hair accessories & jewellery brand), savvyarchitect.md (project root roadmap notes, referenced but not in this chunk)
-
-### Community 83 - "Community 83"
-Cohesion: 0.29
-Nodes (4): Order, OrderItem, STATUS_LABEL, TrackOrderView()
-
-### Community 84 - "Community 84"
-Cohesion: 0.29
-Nodes (5): inputCls, Address, Customer, EditCustomerForm(), oneLine()
-
-### Community 85 - "Community 85"
-Cohesion: 0.47
-Nodes (6): optional_current_user(), AsyncSession, Request, Resolve the signed-in user from the access-token cookie, or 401. The user is…, Same resolution as require_current_user, but returns None instead of 401. For…, require_current_user()
-
-### Community 86 - "Community 86"
-Cohesion: 0.47
-Nodes (5): BarcodeRequest, BaseModel, Request/response schemas for the inventory router., SkuBulkRequest, SkuBulkResponse
-
-### Community 87 - "Community 87"
-Cohesion: 0.40
-Nodes (5): ErrorLogEntry, ErrorLogs(), clearAll(), load(), statusStyle()
-
-### Community 88 - "Community 88"
-Cohesion: 0.40
-Nodes (4): health_check(), get, Health check endpoint., Return a simple liveness signal for load balancers / uptime checks.
-
-### Community 89 - "Community 89"
-Cohesion: 0.40
-Nodes (4): ping(), Stub Celery tasks proving the task queue wiring works. Real agent tasks…, Trivial task used to prove Celery task registration works end-to-end., task
-
-### Community 91 - "Community 91"
+### Community 93 - "Graphify Query Traversal"
 Cohesion: 0.50
-Nodes (5): caveman-mode-tracker hook (intercepts /caveman-stats), caveman-stats (real session token receipts), hooks/caveman-mode-tracker.js, caveman-stats skill (delivered by hook, no model computation), hooks/caveman-stats.js
+Nodes (4): Token Budget, Vocabulary Expansion, Graph Query, BFS Traversal
 
-### Community 92 - "Community 92"
-Cohesion: 0.67
-Nodes (4): caveman-mode-tracker.js hook, caveman-stats.js hook, Caveman Stats README, Caveman Stats — Session Token Report
-
-### Community 93 - "Community 93"
+### Community 94 - "Graphify Node Explain"
 Cohesion: 0.50
-Nodes (4): BFS Traversal, Graph Query, Token Budget, Vocabulary Expansion
-
-### Community 94 - "Community 94"
-Cohesion: 0.50
-Nodes (4): Graph Explain, Graph Node, Node ID Format, Source Location
-
-### Community 118 - "Community 118"
-Cohesion: 0.67
-Nodes (3): Cluster-Only Mode, Clustering, Community Detection
-
-### Community 119 - "Community 119"
-Cohesion: 0.67
-Nodes (3): Extraction Caching, Incremental Update, Manifest File
+Nodes (4): Graph Explain, Source Location, Node ID Format, Graph Node
 
 ## Ambiguous Edges - Review These
-- `Notable ambiguity: the brand name 'Savvy In Teal' implies a teal color identity, but no teal/blue-green hue is actually visible anywhere in the logo artwork itself (palette is pink/white/green/gold) - teal may be used elsewhere in the site's UI theme instead of the logo mark` → `Savvy In Teal brand logo (WebP) - elegant gold script wordmark 'Savvy In Teal' overlaid on a pink, white and green watercolor floral bouquet, transparent background`  [AMBIGUOUS]
-  frontend/public/brand/logo.webp · relation: raises_question_about
 - `Transparent or white background field` → `Savvy In Teal logo (small variant)`  [AMBIGUOUS]
   frontend/public/brand/logo-sm.png · relation: references
+- `Notable ambiguity: the brand name 'Savvy In Teal' implies a teal color identity, but no teal/blue-green hue is actually visible anywhere in the logo artwork itself (palette is pink/white/green/gold) - teal may be used elsewhere in the site's UI theme instead of the logo mark` → `Savvy In Teal brand logo (WebP) - elegant gold script wordmark 'Savvy In Teal' overlaid on a pink, white and green watercolor floral bouquet, transparent background`  [AMBIGUOUS]
+  frontend/public/brand/logo.webp · relation: raises_question_about
 
 ## Knowledge Gaps
-- **202 isolated node(s):** `EditCell`, `Order`, `OrderItem`, `NewsletterFormProps`, `WishlistContextValue` (+197 more)
+- **202 isolated node(s):** `AccordionSectionProps`, `Money`, `Status`, `Order`, `AuthFormProps` (+197 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 724 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **What is the exact relationship between `Notable ambiguity: the brand name 'Savvy In Teal' implies a teal color identity, but no teal/blue-green hue is actually visible anywhere in the logo artwork itself (palette is pink/white/green/gold) - teal may be used elsewhere in the site's UI theme instead of the logo mark` and `Savvy In Teal brand logo (WebP) - elegant gold script wordmark 'Savvy In Teal' overlaid on a pink, white and green watercolor floral bouquet, transparent background`?**
-  _Edge tagged AMBIGUOUS (relation: raises_question_about) - confidence is low._
 - **What is the exact relationship between `Transparent or white background field` and `Savvy In Teal logo (small variant)`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **Why does `get_settings()` connect `Backend Config & Celery` to `Orders & Razorpay Payments`, `Community 69`, `Security & Token Service`, `Async DB Engine`, `User Model`, `Auth Login Flow`, `Auth Profile Endpoints`, `Community 59`?**
-  _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `Base` connect `Database Models` to `Auth Tokens & Tests`, `Community 69`, `Community 73`, `Async DB Engine`, `User Model`, `Order Models`, `Community 55`, `Products API`, `Categories`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
-- **Why does `User` connect `User Model` to `Community 32`, `Auth Tokens & Tests`, `Security & Token Service`, `Database Models`, `Async DB Engine`, `Auth Login Flow`, `Community 85`, `Auth Profile Endpoints`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
-- **What connects `EditCell`, `Order`, `OrderItem` to the rest of the system?**
+- **What is the exact relationship between `Notable ambiguity: the brand name 'Savvy In Teal' implies a teal color identity, but no teal/blue-green hue is actually visible anywhere in the logo artwork itself (palette is pink/white/green/gold) - teal may be used elsewhere in the site's UI theme instead of the logo mark` and `Savvy In Teal brand logo (WebP) - elegant gold script wordmark 'Savvy In Teal' overlaid on a pink, white and green watercolor floral bouquet, transparent background`?**
+  _Edge tagged AMBIGUOUS (relation: raises_question_about) - confidence is low._
+- **Why does `get_settings()` connect `Backend Config & Celery` to `Orders & Razorpay Payments`, `Alembic Migration Env`, `Security & Token Service`, `Async DB Engine`, `User Model`, `Auth Login Flow`, `Auth Profile Endpoints`, `Transactional Email Service`?**
+  _High betweenness centrality (0.043) - this node is a cross-community bridge._
+- **Why does `apiFetch()` connect `Account & Verification UI` to `Account & Admin Pages`, `Admin UI Screens`, `Admin Messages Screen`, `Admin Analytics Dashboard`, `Fraud Signal Admin UI`, `API Client & Coupon Admin`, `Order Tracking Page`, `Customer Edit Form`, `Admin Error Logs`, `Returns & Order Admin UI`, `Homepage Content Schema`?**
+  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+- **What connects `AccordionSectionProps`, `Money`, `Status` to the rest of the system?**
   _202 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Auth Tokens & Tests` be split into smaller, more focused modules?**
   _Cohesion score 0.0676056338028169 - nodes in this community are weakly interconnected._
+- **Should `Analytics & Fraud Events` be split into smaller, more focused modules?**
+  _Cohesion score 0.10104529616724739 - nodes in this community are weakly interconnected._
