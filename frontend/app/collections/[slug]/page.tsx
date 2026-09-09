@@ -1,12 +1,44 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { SeoDescription } from "@/components/product/SeoDescription";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { fetchCollectionBySlug, fetchProductsByCollectionSlug } from "@/lib/api";
+import { breadcrumbJsonLd, collectionJsonLd } from "@/lib/seo";
 
 interface CollectionPageProps {
   params: Promise<{ slug: string }>;
+}
+
+export async function generateMetadata({ params }: CollectionPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  const collection = await fetchCollectionBySlug(slug);
+  if (!collection) return { title: "Collection not found" };
+
+  const canonical = `/collections/${collection.slug}`;
+  const description = collection.description?.trim() || collection.seoDescription;
+  const images = collection.heroImage ? [collection.heroImage] : [];
+
+  return {
+    title: collection.name,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "website",
+      title: collection.name,
+      description,
+      url: canonical,
+      ...(images.length > 0 && { images }),
+    },
+    twitter: {
+      card: images.length > 0 ? "summary_large_image" : "summary",
+      title: collection.name,
+      description,
+      ...(images.length > 0 && { images }),
+    },
+  };
 }
 
 export default async function CollectionPage({ params }: CollectionPageProps) {
@@ -21,6 +53,13 @@ export default async function CollectionPage({ params }: CollectionPageProps) {
 
   return (
     <div>
+      <JsonLd data={collectionJsonLd(collection, products)} />
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Home", path: "/" },
+          { name: collection.name, path: `/collections/${collection.slug}` },
+        ])}
+      />
       {/* heroImage was defined end-to-end (types/catalog/api/tests) but never
           rendered by any component — this is its first real consumer. */}
       <div className="relative h-[240px] w-full sm:h-[300px]">

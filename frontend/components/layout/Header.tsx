@@ -5,8 +5,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { siteConfig } from "@/content/site.config";
+import { apiBaseUrl } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { adaptProduct, type BackendProduct } from "@/lib/backend-adapter";
 import { useCart } from "@/lib/cart-context";
+import type { Product } from "@/lib/types";
 import { MegaMenu } from "./MegaMenu";
 import { MobileNav } from "./MobileNav";
 import { SearchOverlay } from "./SearchOverlay";
@@ -27,6 +30,13 @@ export function Header({ announcementOverride }: HeaderProps = {}) {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // The searchable catalogue lives here, not in SearchOverlay, so it survives
+  // the overlay unmounting: fetched once on the first open and reused after,
+  // instead of re-downloading every product each time search is opened.
+  // Lazy rather than on mount -- a visitor who never searches never pays for it.
+  const [catalog, setCatalog] = useState<Product[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const catalogRequested = useRef(false);
   const { itemCount, openCart } = useCart();
   const { user } = useAuth();
   const { brand, nav } = siteConfig;
@@ -156,6 +166,26 @@ export function Header({ announcementOverride }: HeaderProps = {}) {
   // their account. Avoids the /account "Loading…" → redirect bounce.
   const accountHref = user ? "/account" : "/login";
 
+  // Public endpoint, no credentials -- the same data the product pages render.
+  function openSearch() {
+    setSearchOpen(true);
+    if (catalogRequested.current) return;
+    catalogRequested.current = true;
+    const baseUrl = apiBaseUrl();
+    if (!baseUrl) return;
+    setCatalogLoading(true);
+    fetch(`${baseUrl}/api/products?limit=200`, { headers: { Accept: "application/json" } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (Array.isArray(data)) setCatalog((data as BackendProduct[]).map(adaptProduct));
+      })
+      .catch(() => {
+        // Leave `catalog` null so the overlay keeps using the bundled
+        // catalogue -- stale beats a search box that returns nothing.
+      })
+      .finally(() => setCatalogLoading(false));
+  }
+
   // Mega-menu hover: keep it open while the cursor crosses the gap between the
   // nav link and the flyout. A short close delay (cancelled on re-enter) bridges
   // that dead zone instead of the menu vanishing mid-move.
@@ -266,7 +296,7 @@ export function Header({ announcementOverride }: HeaderProps = {}) {
           <button
             type="button"
             aria-label="Search"
-            onClick={() => setSearchOpen(true)}
+            onClick={openSearch}
             className={
               isHome
                 ? "nav-morph-ink transition-opacity hover:opacity-70"
@@ -307,7 +337,13 @@ export function Header({ announcementOverride }: HeaderProps = {}) {
       </div>
 
       {mobileOpen && <MobileNav onClose={() => setMobileOpen(false)} />}
-      {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} />}
+      {searchOpen && (
+        <SearchOverlay
+          catalog={catalog}
+          isCatalogLoading={catalogLoading}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
     </header>
   );
 }

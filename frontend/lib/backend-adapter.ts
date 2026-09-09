@@ -80,5 +80,6 @@ export function adaptProduct(product: BackendProduct): Product {
     stockMode: typeof attrs.stockMode === "string" ? (attrs.stockMode as StockMode) : undefined,
     badgeAnimation:
       typeof attrs.badgeAnimation === "string" ? (attrs.badgeAnimation as BadgeAnimation) : undefined,
+    isTestProduct: attrs.isTestProduct === true,
   };
 }

@@ -55,6 +55,11 @@ export interface Product {
   stockMode?: StockMode;
   /** Discount-badge attention style. Defaults to "shine" when on sale. */
   badgeAnimation?: BadgeAnimation;
+  /** Internal payment-verification product. Real rows in the live catalogue,
+   * but they must never be indexed by search engines or listed in the
+   * sitemap. Carried from the backend's attrs so this keeps working when the
+   * products are eventually deleted, rather than matching on slug. */
+  isTestProduct?: boolean;
 }
 
 export interface Collection {

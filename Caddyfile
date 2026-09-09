@@ -21,7 +21,16 @@
 	}
 }
 
-savvyinteal.com, www.savvyinteal.com {
+# Both hosts used to serve 200 with no redirect, so search engines saw two
+# complete copies of the store and split its ranking signals between them.
+# The apex is canonical (it is what every internal link, the sitemap and
+# metadataBase use); www permanently redirects to it.
+www.savvyinteal.com {
+	import security_headers
+	redir https://savvyinteal.com{uri} permanent
+}
+
+savvyinteal.com {
 	encode zstd gzip
 	import security_headers
 	reverse_proxy frontend:3000

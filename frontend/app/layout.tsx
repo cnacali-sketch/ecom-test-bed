@@ -12,8 +12,10 @@ import { AddedToast } from "@/components/layout/AddedToast";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { siteConfig } from "@/content/site.config";
 import { fetchHomepageContent } from "@/lib/api";
+import { organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { AuthProvider } from "@/lib/auth-context";
 import { CartProvider } from "@/lib/cart-context";
 import { WishlistProvider } from "@/lib/wishlist-context";
@@ -33,8 +35,29 @@ import "./globals.css";
 // imports above, and update --font-* in app/globals.css.
 
 export const metadata: Metadata = {
-  title: `${siteConfig.brand.name} — ${siteConfig.brand.tagline}`,
+  // metadataBase is what lets every child page hand Next a relative OG image
+  // path and still emit the absolute URL that crawlers require.
+  metadataBase: new URL(siteConfig.brand.url),
+  title: {
+    default: `${siteConfig.brand.name} — ${siteConfig.brand.tagline}`,
+    template: `%s — ${siteConfig.brand.name}`,
+  },
   description: siteConfig.brand.description,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: siteConfig.brand.name,
+    locale: siteConfig.brand.locale.replace("-", "_"),
+    url: siteConfig.brand.url,
+    title: `${siteConfig.brand.name} — ${siteConfig.brand.tagline}`,
+    description: siteConfig.brand.description,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${siteConfig.brand.name} — ${siteConfig.brand.tagline}`,
+    description: siteConfig.brand.description,
+  },
+  icons: { icon: siteConfig.brand.logo.src, apple: siteConfig.brand.logo.src },
 };
 
 // viewport-fit=cover lets the layout extend under the notch / gesture bar so
@@ -55,6 +78,10 @@ export default async function RootLayout({
       className="h-full antialiased"
     >
       <body className="flex min-h-full flex-col">
+        {/* Site-wide identity + the search action that lets Google offer a
+            sitelinks search box. Emitted once here, not per page. */}
+        <JsonLd data={organizationJsonLd()} />
+        <JsonLd data={websiteJsonLd()} />
         <AuthProvider>
           <WishlistProvider>
             <CartProvider>

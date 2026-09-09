@@ -54,6 +54,10 @@ export const siteConfig = {
   // ---------- Brand ----------
   brand: {
     name: "Savvy In Teal",
+    /** Canonical origin, no trailing slash. Drives metadataBase, canonical
+     * URLs, the sitemap and absolute Open Graph image URLs. The apex is
+     * canonical; www 301s to it in the Caddyfile. */
+    url: "https://savvyinteal.com",
     /** Header logo (gold script over watercolor florals). Swap these files in /public/brand to rebrand. */
     logo: {
       src: "/brand/logo.webp",

@@ -2,87 +2,101 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { products as bundledProducts } from "@/content/catalog";
 import { trackEvent } from "@/lib/analytics";
-import { apiBaseUrl } from "@/lib/api-client";
-import { adaptProduct, type BackendProduct } from "@/lib/backend-adapter";
 import { formatPrice } from "@/lib/format";
+import { MIN_QUERY_LENGTH, searchProducts } from "@/lib/search";
 import type { Product } from "@/lib/types";
 
+/** Results shown in the dropdown before it tells you to go to /search. */
+const PREVIEW_LIMIT = 6;
+
 interface SearchOverlayProps {
+  /** Live catalogue, fetched once by Header. `null` while it is still loading
+   * or if the backend was unreachable — the bundled catalogue covers both. */
+  catalog: Product[] | null;
+  isCatalogLoading: boolean;
   onClose: () => void;
 }
 
 /**
- * Modal search over the catalog (name, type, material, tags).
+ * Modal search over the catalogue (name, type, material, description, tags).
  *
- * Searches the LIVE catalogue, falling back to the bundled one. It used to
- * search only `content/catalog.ts`, which meant search results were a
- * hardcoded snapshot: anything created, renamed, repriced or deleted through
- * the admin stayed invisible to search until someone edited that file and
- * redeployed. The bundled list is still the initial value so typing works
- * instantly and still works if the backend is unreachable.
+ * Matching lives in `lib/search.ts`, shared with `/search`, so the dropdown and
+ * the full results page can never disagree about what matches.
  */
-export function SearchOverlay({ onClose }: SearchOverlayProps) {
+export function SearchOverlay({ catalog, isCatalogLoading, onClose }: SearchOverlayProps) {
   const [query, setQuery] = useState("");
-  const [catalog, setCatalog] = useState<Product[]>(bundledProducts);
+  const [highlight, setHighlight] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
 
-  // Public endpoint -- no credentials, same data the PLP renders from.
-  useEffect(() => {
-    const baseUrl = apiBaseUrl();
-    if (!baseUrl) return;
-    let cancelled = false;
-    fetch(`${baseUrl}/api/products?limit=200`, { headers: { Accept: "application/json" } })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !Array.isArray(data)) return;
-        setCatalog((data as BackendProduct[]).map(adaptProduct));
-      })
-      .catch(() => {
-        // Keep the bundled catalogue -- stale beats a search box that
-        // silently returns nothing.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const activeCatalog = catalog ?? bundledProducts;
+  const matches = useMemo(() => searchProducts(activeCatalog, query), [activeCatalog, query]);
+  const preview = matches.slice(0, PREVIEW_LIMIT);
+  const isSearching = query.trim().length >= MIN_QUERY_LENGTH;
+  const resultsUrl = `/search?q=${encodeURIComponent(query.trim())}`;
+
+  // Suggest terms the live catalogue actually contains. The old hardcoded
+  // "clip, silk, gold" could suggest a term that matches nothing.
+  const suggestions = useMemo(() => {
+    const types = new Set<string>();
+    for (const product of activeCatalog) {
+      if (product.type) types.add(product.type);
+      if (types.size >= 3) break;
+    }
+    return [...types];
+  }, [activeCatalog]);
 
   useEffect(() => {
     inputRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q.length < 2) return [];
-    // Every word must appear, in any order. A single `includes(q)` made the
-    // whole query one contiguous substring, so "1 rs" missed "... Rs 1" and
-    // "gold clip" missed "Clip, Gold" -- word order silently decided the hit.
-    const terms = q.split(/\s+/);
-    return catalog
-      .filter((product) => {
-        const haystack = [product.name, product.type, product.material, ...product.tags]
-          .join(" ")
-          .toLowerCase();
-        return terms.every((term) => haystack.includes(term));
-      })
-      .slice(0, 6);
-  }, [query, catalog]);
+  }, []);
 
   // Debounced: track the settled query (including zero-result ones — those
   // are the most useful signal for catalog/copy gaps), not every keystroke.
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) return;
+    if (q.length < MIN_QUERY_LENGTH) return;
     const id = setTimeout(() => trackEvent("search", { query: q }), 600);
     return () => clearTimeout(id);
   }, [query]);
+
+  function goToResults() {
+    if (!isSearching) return;
+    router.push(resultsUrl);
+    onClose();
+  }
+
+  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      onClose();
+      return;
+    }
+    if (event.key === "ArrowDown" && preview.length > 0) {
+      event.preventDefault();
+      setHighlight((current) => (current + 1) % preview.length);
+      return;
+    }
+    if (event.key === "ArrowUp" && preview.length > 0) {
+      event.preventDefault();
+      setHighlight((current) => (current <= 0 ? preview.length - 1 : current - 1));
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      // Enter on a highlighted row opens it; Enter with nothing highlighted
+      // means "show me everything", which is the results page.
+      const chosen = preview[highlight];
+      if (chosen) {
+        router.push(`/products/${chosen.slug}`);
+        onClose();
+        return;
+      }
+      goToResults();
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[95]">
@@ -96,9 +110,23 @@ export function SearchOverlay({ onClose }: SearchOverlayProps) {
           <input
             ref={inputRef}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search clips, silk, hoops…"
+            onChange={(event) => {
+              setQuery(event.target.value);
+              // Reset here rather than in an effect on `query`: this is the
+              // only thing that changes the query, so the old highlight index
+              // is stale the moment it does.
+              setHighlight(-1);
+            }}
+            onKeyDown={onKeyDown}
+            placeholder={
+              suggestions.length > 0 ? `Search ${suggestions.join(", ").toLowerCase()}…` : "Search products…"
+            }
             aria-label="Search products"
+            role="combobox"
+            aria-expanded={isSearching}
+            aria-controls="search-results"
+            aria-autocomplete="list"
+            aria-activedescendant={highlight >= 0 ? `search-result-${highlight}` : undefined}
             className="w-full bg-transparent text-base text-ink placeholder:text-ink-soft/60 focus:outline-none"
           />
           <button type="button" onClick={onClose} className="eyebrow hover:text-teal">
@@ -106,37 +134,61 @@ export function SearchOverlay({ onClose }: SearchOverlayProps) {
           </button>
         </div>
 
-        {query.trim().length >= 2 && (
-          <ul className="mt-4 flex flex-col divide-y divide-ink/10">
-            {results.length === 0 && (
-              <li className="py-6 text-sm text-ink-soft">
-                Nothing matches “{query}” yet — try “clip”, “silk”, or “gold”.
-              </li>
+        {isSearching && (
+          <>
+            <ul id="search-results" role="listbox" aria-label="Search results" className="mt-4 flex flex-col divide-y divide-ink/10">
+              {preview.length === 0 && (
+                <li className="py-6 text-sm text-ink-soft">
+                  {isCatalogLoading ? (
+                    "Searching…"
+                  ) : (
+                    <>
+                      Nothing matches “{query}” yet
+                      {suggestions.length > 0 && <> — try “{suggestions.join("”, “").toLowerCase()}”</>}.
+                    </>
+                  )}
+                </li>
+              )}
+              {preview.map((product, index) => (
+                <li key={product.id} id={`search-result-${index}`} role="option" aria-selected={index === highlight}>
+                  <Link
+                    href={`/products/${product.slug}`}
+                    onClick={onClose}
+                    onMouseEnter={() => setHighlight(index)}
+                    className={`flex items-center gap-4 py-3 transition-colors ${
+                      index === highlight ? "bg-paper-tint" : "hover:bg-paper-tint"
+                    }`}
+                  >
+                    {/* A live product can have no images at all (the bundled
+                        catalogue always had one, so this used to be safe to
+                        index blindly -- it would now throw). */}
+                    <span className="relative block h-14 w-11 shrink-0 overflow-hidden bg-paper-tint">
+                      {product.images[0] && (
+                        <Image src={product.images[0].url} alt="" fill sizes="44px" className="object-cover" />
+                      )}
+                    </span>
+                    <span className="flex-1">
+                      <span className="block text-sm uppercase tracking-wide text-ink">{product.name}</span>
+                      <span className="block text-xs text-ink-soft">{product.type}</span>
+                    </span>
+                    <span className="text-sm text-ink">{formatPrice(product.price, product.currency)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {matches.length > 0 && (
+              <Link
+                href={resultsUrl}
+                onClick={onClose}
+                className="mt-3 block border-t border-ink/10 pt-3 text-sm font-medium text-teal hover:underline"
+              >
+                {matches.length > PREVIEW_LIMIT
+                  ? `See all ${matches.length} results →`
+                  : "Open in full results →"}
+              </Link>
             )}
-            {results.map((product) => (
-              <li key={product.id}>
-                <Link
-                  href={`/products/${product.slug}`}
-                  onClick={onClose}
-                  className="flex items-center gap-4 py-3 transition-colors hover:bg-paper-tint"
-                >
-                  {/* A live product can have no images at all (the bundled
-                      catalogue always had one, so this used to be safe to
-                      index blindly -- it would now throw). */}
-                  <span className="relative block h-14 w-11 shrink-0 overflow-hidden bg-paper-tint">
-                    {product.images[0] && (
-                      <Image src={product.images[0].url} alt="" fill sizes="44px" className="object-cover" />
-                    )}
-                  </span>
-                  <span className="flex-1">
-                    <span className="block text-sm uppercase tracking-wide text-ink">{product.name}</span>
-                    <span className="block text-xs text-ink-soft">{product.type}</span>
-                  </span>
-                  <span className="text-sm text-ink">{formatPrice(product.price, product.currency)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          </>
         )}
       </div>
     </div>
