@@ -78,6 +78,46 @@ export const siteConfig = {
     taxLine: "MRP incl. of all taxes",
   },
 
+  // ---------- SEO / marketplace wiring ----------
+  //
+  // Everything here is inert until filled in. Blank values make the
+  // corresponding tag or schema block disappear entirely rather than emit a
+  // guess: Google suspends merchant listings when structured data disagrees
+  // with the real offer, so an absent field is always safer than a wrong one.
+  seo: {
+    /** Site-ownership tokens. Paste the value only (not the whole meta tag).
+     *  - google: Search Console → Settings → Ownership verification → HTML tag
+     *  - facebook: Meta Business Suite → Brand safety → Domains
+     *  - pinterest / bing: optional, same idea. */
+    verification: {
+      google: "",
+      facebook: "",
+      pinterest: "",
+      bing: "",
+    },
+    /** Real fulfilment terms, mirrored into Product schema and the product
+     *  feed. `shippingRate` is the cost BELOW freeShippingOver — left null
+     *  because it is not recorded anywhere in this repo. While it is null the
+     *  shippingDetails block is omitted rather than guessed. */
+    merchant: {
+      /** ISO-3166 country the store ships to. */
+      shipsToCountry: "IN",
+      /** Order value at or above which shipping is free (announcement bar). */
+      freeShippingOver: 1499,
+      /** Flat delivery charge under that threshold. Set to a number to enable. */
+      shippingRate: null as number | null,
+      /** Business days to dispatch — trust badge says "Dispatched in 2 days". */
+      handlingDays: { min: 1, max: 2 },
+      /** Business days in transit once dispatched. */
+      transitDays: { min: 2, max: 7 },
+      /** Return window in days — trust badge + Returns policy both say 15. */
+      returnDays: 15,
+      /** Google product taxonomy id. Optional but improves Shopping matching;
+       *  see https://www.google.com/basepages/producttype/taxonomy.en-US.txt */
+      googleProductCategory: "",
+    },
+  },
+
   // ---------- Contact (shown on /contact; keep in sync with Terms/Privacy copy) ----------
   contact: {
     address: {

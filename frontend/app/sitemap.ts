@@ -13,21 +13,23 @@ const STATIC_PATHS = [
   { path: "/policies/returns", priority: 0.3 },
 ];
 
+// Deliberately no `lastModified`. The backend does not expose an updated_at
+// on products or collections, so the only value available is "now" — which
+// would claim every page changed on every crawl. Google discounts a lastmod
+// it finds untrustworthy, so an absent one is worth more than a wrong one.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const [products, collections] = await Promise.all([fetchProducts(), fetchCollections()]);
-  const lastModified = new Date();
   const base = siteConfig.brand.url;
 
   return [
     ...STATIC_PATHS.map(({ path, priority }) => ({
       url: `${base}${path}`,
-      lastModified,
       priority,
     })),
     ...collections.map((collection) => ({
       url: `${base}/collections/${collection.slug}`,
-      lastModified,
       priority: 0.8,
+      ...(collection.heroImage && { images: [collection.heroImage] }),
     })),
     // Internal payment-verification products are live catalogue rows but must
     // never be submitted for indexing.
@@ -35,8 +37,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .filter((product) => !product.isTestProduct)
       .map((product) => ({
         url: `${base}/products/${product.slug}`,
-        lastModified,
         priority: 0.7,
+        // Declaring images here is how product photography becomes eligible
+        // for Google Images, which is a real traffic source for accessories.
+        ...(product.images.length > 0 && { images: product.images.map((image) => image.url) }),
       })),
   ];
 }

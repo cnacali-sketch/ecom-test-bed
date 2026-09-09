@@ -28,10 +28,81 @@ export function isPurchasable(product: Product): boolean {
   return product.inStock && product.variants.some((variant) => variant.inStock);
 }
 
+/** Stable @id anchors so Organization / WebSite / Product form one linked
+ * graph instead of four disconnected islands. Google follows these to
+ * attribute a product to the selling organisation. */
+export const ORG_ID = `${siteConfig.brand.url}/#organization`;
+export const SITE_ID = `${siteConfig.brand.url}/#website`;
+
+/** Google requires an explicit validity date on merchant offers; without one
+ * it may treat the price as indefinitely valid and flag a mismatch later.
+ * A rolling year is the conventional answer for a store with no scheduled
+ * price changes. */
+function priceValidUntil(): string {
+  const oneYearOut = new Date();
+  oneYearOut.setFullYear(oneYearOut.getFullYear() + 1);
+  return oneYearOut.toISOString().split("T")[0];
+}
+
+/** Return policy, from the same 15-day window the trust badges and the
+ * Returns page state. */
+function returnPolicy() {
+  const { merchant } = siteConfig.seo;
+  return {
+    "@type": "MerchantReturnPolicy",
+    applicableCountry: merchant.shipsToCountry,
+    returnPolicyCategory: "https://schema.org/MerchantReturnFiniteReturnWindow",
+    merchantReturnDays: merchant.returnDays,
+    returnMethod: "https://schema.org/ReturnByMail",
+    returnFees: "https://schema.org/FreeReturn",
+  };
+}
+
+/**
+ * Delivery terms — omitted entirely unless a real shipping rate is configured.
+ *
+ * Google suspends merchant listings when structured data disagrees with the
+ * actual offer, so publishing a guessed rate is strictly worse than
+ * publishing nothing. Set seo.merchant.shippingRate to switch this on.
+ */
+function shippingDetails() {
+  const { merchant } = siteConfig.seo;
+  if (merchant.shippingRate === null) return undefined;
+  return {
+    "@type": "OfferShippingDetails",
+    shippingRate: {
+      "@type": "MonetaryAmount",
+      value: merchant.shippingRate,
+      currency: siteConfig.brand.currency,
+    },
+    shippingDestination: {
+      "@type": "DefinedRegion",
+      addressCountry: merchant.shipsToCountry,
+    },
+    deliveryTime: {
+      "@type": "ShippingDeliveryTime",
+      handlingTime: {
+        "@type": "QuantitativeValue",
+        minValue: merchant.handlingDays.min,
+        maxValue: merchant.handlingDays.max,
+        unitCode: "DAY",
+      },
+      transitTime: {
+        "@type": "QuantitativeValue",
+        minValue: merchant.transitDays.min,
+        maxValue: merchant.transitDays.max,
+        unitCode: "DAY",
+      },
+    },
+  };
+}
+
 export function productJsonLd(product: Product) {
+  const shipping = shippingDetails();
   return {
     "@context": "https://schema.org",
     "@type": "Product",
+    "@id": absoluteUrl(`/products/${product.slug}#product`),
     name: product.name,
     description: product.description || siteConfig.brand.description,
     sku: product.variants[0]?.sku || product.slug,
@@ -43,10 +114,14 @@ export function productJsonLd(product: Product) {
       url: absoluteUrl(`/products/${product.slug}`),
       price: product.price.toFixed(2),
       priceCurrency: product.currency,
+      priceValidUntil: priceValidUntil(),
       availability: isPurchasable(product)
         ? "https://schema.org/InStock"
         : "https://schema.org/OutOfStock",
       itemCondition: "https://schema.org/NewCondition",
+      seller: { "@id": ORG_ID },
+      hasMerchantReturnPolicy: returnPolicy(),
+      ...(shipping && { shippingDetails: shipping }),
     },
   };
 }
@@ -101,13 +176,36 @@ export function organizationJsonLd() {
       }
     });
 
+  const { address, phone, email } = siteConfig.contact;
+
   return {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": ORG_ID,
     name: brand.name,
     url: brand.url,
     description: brand.description,
     logo: absoluteUrl(brand.logo.srcLarge),
+    email,
+    telephone: phone,
+    // The real studio address, already published on /contact and in the
+    // policies — it is what lets Google associate the store with a place.
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: [address.line1, address.line2].filter(Boolean).join(", "),
+      addressLocality: address.city,
+      addressRegion: address.state,
+      postalCode: address.postcode,
+      addressCountry: siteConfig.seo.merchant.shipsToCountry,
+    },
+    contactPoint: {
+      "@type": "ContactPoint",
+      contactType: "customer support",
+      email,
+      telephone: phone,
+      areaServed: siteConfig.seo.merchant.shipsToCountry,
+      availableLanguage: ["en"],
+    },
     ...(sameAs.length > 0 && { sameAs }),
   };
 }
@@ -116,8 +214,10 @@ export function websiteJsonLd() {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": SITE_ID,
     name: siteConfig.brand.name,
     url: siteConfig.brand.url,
+    publisher: { "@id": ORG_ID },
     potentialAction: {
       "@type": "SearchAction",
       target: {

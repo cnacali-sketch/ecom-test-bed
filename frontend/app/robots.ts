@@ -15,9 +15,12 @@ const PRIVATE_PATHS = [
   "/forgot-password",
   "/reset-password",
   "/verify-email",
-  "/track-order",
   "/search",
 ];
+
+// Deliberately NOT disallowed: /track-order and /contact are public utility
+// pages with real search intent ("savvy in teal track order") and no private
+// data — the order id is the credential. Both carry their own canonical.
 
 export default function robots(): MetadataRoute.Robots {
   return {

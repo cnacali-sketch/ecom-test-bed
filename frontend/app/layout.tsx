@@ -34,6 +34,23 @@ import "./globals.css";
 // the store: install another @fontsource-variable package, swap the
 // imports above, and update --font-* in app/globals.css.
 
+/** Site-ownership tokens for Search Console / Meta Business / Pinterest /
+ * Bing. Each is omitted while blank, so no empty meta tags ship before the
+ * accounts are actually connected — fill them in content/site.config.ts under
+ * seo.verification and they appear with no code change. */
+function siteVerification(): Metadata["verification"] {
+  const { google, facebook, pinterest, bing } = siteConfig.seo.verification;
+  const other: Record<string, string> = {};
+  if (facebook) other["facebook-domain-verification"] = facebook;
+  if (pinterest) other["p:domain_verify"] = pinterest;
+  if (bing) other["msvalidate.01"] = bing;
+
+  const verification: Metadata["verification"] = {};
+  if (google) verification.google = google;
+  if (Object.keys(other).length > 0) verification.other = other;
+  return verification;
+}
+
 export const metadata: Metadata = {
   // metadataBase is what lets every child page hand Next a relative OG image
   // path and still emit the absolute URL that crawlers require.
@@ -58,6 +75,7 @@ export const metadata: Metadata = {
     description: siteConfig.brand.description,
   },
   icons: { icon: siteConfig.brand.logo.src, apple: siteConfig.brand.logo.src },
+  verification: siteVerification(),
 };
 
 // viewport-fit=cover lets the layout extend under the notch / gesture bar so

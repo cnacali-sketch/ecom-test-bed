@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProductDetail } from "@/components/product/ProductDetail";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { fetchProducts } from "@/lib/api";
+import { fetchCollections, fetchProducts } from "@/lib/api";
 import { breadcrumbJsonLd, productJsonLd } from "@/lib/seo";
 import type { Product } from "@/lib/types";
 
@@ -53,12 +53,26 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
 
 export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
-  const allProducts = await fetchProducts();
+  const [allProducts, collections] = await Promise.all([fetchProducts(), fetchCollections()]);
   const product = allProducts.find((candidate) => candidate.slug === slug);
 
   if (!product) {
     notFound();
   }
+
+  // Home > Collection > Product mirrors how the site is actually organised.
+  // A two-level Home > Product trail tells Google nothing about where the
+  // product sits, so the collection never gains authority from its children.
+  const parentCollection = collections.find((candidate) =>
+    product.collectionSlugs.includes(candidate.slug),
+  );
+  const trail = [
+    { name: "Home", path: "/" },
+    ...(parentCollection
+      ? [{ name: parentCollection.name, path: `/collections/${parentCollection.slug}` }]
+      : []),
+    { name: product.name, path: `/products/${product.slug}` },
+  ];
 
   const relatedProducts = allProducts
     .filter(
@@ -73,12 +87,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   return (
     <>
       <JsonLd data={productJsonLd(product)} />
-      <JsonLd
-        data={breadcrumbJsonLd([
-          { name: "Home", path: "/" },
-          { name: product.name, path: `/products/${product.slug}` },
-        ])}
-      />
+      <JsonLd data={breadcrumbJsonLd(trail)} />
       <ProductDetail product={product} relatedProducts={relatedProducts} />
     </>
   );
