@@ -35,3 +35,7 @@ logs/
 # graphify: derived knowledge-graph output. Rebuildable with `/graphify --update`,
 # and embeds absolute paths from whoever generated it.
 graphify-out/
+
+# Python bytecode from tools/
+__pycache__/
+*.pyc

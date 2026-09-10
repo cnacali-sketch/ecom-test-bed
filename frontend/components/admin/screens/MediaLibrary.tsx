@@ -8,29 +8,15 @@ import { AlertTriangle, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl, apiFetch } from "@/lib/api-client";
-import { MEDIA_MAX_KB, type MediaItem } from "@/lib/admin/types";
-
-function readDimensions(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Not a readable image"));
-    };
-    img.src = url;
-  });
-}
+import { IMG_SPECS, MEDIA_MAX_KB, type MediaItem } from "@/lib/admin/types";
+import { prepareImage } from "@/lib/image-prepare";
 
 export function MediaLibrary() {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [drag, setDrag] = useState(false);
+  const [busy, setBusy] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -54,27 +40,34 @@ export function MediaLibrary() {
 
   async function add(files: FileList | null) {
     setErr("");
-    for (const file of Array.from(files ?? [])) {
+    const incoming = Array.from(files ?? []);
+    let done = 0;
+    for (const file of incoming) {
       if (!file.type.startsWith("image/")) {
         setErr("Only images.");
         continue;
       }
+
+      setBusy(`Preparing ${file.name} (${done + 1} of ${incoming.length})…`);
+      // Compress rather than reject. A phone photo is several megabytes, and
+      // the old rule bounced it with advice ("save it as WebP") that cannot
+      // be followed on a phone. No aspect-ratio rule here: this is a shared
+      // pool, so the right shape depends on which slot ends up using it.
+      let prepared;
       try {
-        await readDimensions(file);
+        prepared = await prepareImage(file, {
+          maxWidth: IMG_SPECS.hero.w,
+          maxHeight: IMG_SPECS.hero.h,
+          maxBytes: MEDIA_MAX_KB * 1024,
+        });
       } catch {
-        setErr(`Skipped ${file.name} — couldn't read as an image.`);
-        continue;
-      }
-      // No aspect-ratio rule here: this is a shared pool, so the right shape
-      // depends on which slot uses the image. Size still matters — see
-      // MEDIA_MAX_KB.
-      if (file.size > MEDIA_MAX_KB * 1024) {
-        setErr(`Skipped ${file.name} — over ${MEDIA_MAX_KB}KB. Save it as WebP to shrink it (try squoosh.app).`);
+        setErr(`Skipped ${file.name} — couldn't read it as an image.`);
         continue;
       }
 
+      setBusy(`Uploading ${file.name} (${done + 1} of ${incoming.length})…`);
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", prepared.file);
       const res = await apiFetch("/api/media", { method: "POST", body: form });
       if (!res?.ok) {
         const body = await res?.json().catch(() => null);
@@ -83,7 +76,9 @@ export function MediaLibrary() {
       }
       const uploaded = (await res.json()) as MediaItem;
       setMedia((m) => [uploaded, ...m]);
+      done += 1;
     }
+    setBusy("");
   }
 
   async function remove(id: string) {
@@ -122,7 +117,7 @@ export function MediaLibrary() {
         <UploadCloud className="mb-2 h-8 w-8 text-ink-soft/60" />
         <div className="text-sm font-semibold text-ink">Drop photos or click to upload</div>
         <div className="text-xs text-ink-soft/70">
-          Any shape · ≤{MEDIA_MAX_KB}KB each · {media.length} in library
+          Any size — converted and compressed for you · {media.length} in library
         </div>
         <input
           ref={inputRef}
@@ -133,6 +128,9 @@ export function MediaLibrary() {
           onChange={(e) => add(e.target.files)}
         />
       </div>
+      {busy && (
+        <p className="mb-3 rounded-lg bg-teal/10 px-3 py-2 text-xs font-medium text-teal">{busy}</p>
+      )}
       {err && (
         <div className="mb-3 flex items-center gap-2 rounded-lg bg-sale/5 px-3 py-2 text-xs text-sale">
           <AlertTriangle className="h-3.5 w-3.5" /> {err}
