@@ -442,6 +442,13 @@ export const siteConfig = {
       { label: "Privacy", href: "/policies/privacy" },
       { label: "Refund & Cancellation", href: "/policies/refund" },
       { label: "Returns", href: "/policies/returns" },
+      // The admin sign-in page has existed since launch but was linked from
+      // nowhere, so the only way in was to already know the URL. Sitting in
+      // the footer rather than the header is the usual compromise: staff can
+      // find it from any page, shoppers never trip over it. It is safe to
+      // publish — /admin/login is noindex, the API rejects non-admin accounts,
+      // and login_throttle.py returns 429 after repeated failures.
+      { label: "Staff sign in", href: "/admin/login" },
     ],
     fineprint: "Free shipping over ₹1,499",
   },
