@@ -6,7 +6,7 @@
 // Fields the backend has no column for are round-tripped through attrs.
 
 import type { BackendProduct } from "@/lib/backend-adapter";
-import type { AdminBadge, AdminProduct } from "./types";
+import type { AdminBadge, AdminDims, AdminProduct } from "./types";
 import { defBadge, defShow } from "./types";
 import type { BadgeAnimation, StockMode } from "@/lib/types";
 
@@ -38,6 +38,42 @@ function readBadge(attrs: Record<string, unknown>): AdminBadge {
   return defBadge(anim);
 }
 
+/** Card display toggles, defaulting any missing key to "shown". */
+function readShow(attrs: Record<string, unknown>) {
+  const base = defShow();
+  const raw = attrs.show;
+  if (!raw || typeof raw !== "object") return base;
+  const saved = raw as Record<string, unknown>;
+  const merged = { ...base };
+  for (const key of Object.keys(base) as (keyof typeof base)[]) {
+    if (typeof saved[key] === "boolean") merged[key] = saved[key] as boolean;
+  }
+  return merged;
+}
+
+function readDims(attrs: Record<string, unknown>): AdminDims {
+  const blank: AdminDims = { h: "", w: "", l: "", unit: "cm" };
+  const raw = attrs.dims;
+  if (!raw || typeof raw !== "object") return blank;
+  const d = raw as Record<string, unknown>;
+  const unit = d.unit === "in" || d.unit === "mm" ? d.unit : "cm";
+  return {
+    h: typeof d.h === "string" ? d.h : "",
+    w: typeof d.w === "string" ? d.w : "",
+    l: typeof d.l === "string" ? d.l : "",
+    unit,
+  };
+}
+
+/**
+ * Human-readable size for the PDP's Measurements accordion
+ * (components/product/ProductDetail.tsx:95), or null when nothing was entered.
+ */
+function measurementsFrom(dims: AdminDims): string | null {
+  const parts = [dims.h, dims.w, dims.l].map((v) => v.trim()).filter(Boolean);
+  return parts.length > 0 ? `${parts.join(" × ")} ${dims.unit}` : null;
+}
+
 /** Backend product -> editable admin product. */
 export function toAdmin(p: BackendProduct): AdminProduct {
   const attrs = p.attrs ?? {};
@@ -58,11 +94,13 @@ export function toAdmin(p: BackendProduct): AdminProduct {
     maxPerOrder: attrNum(attrs, "maxPerOrder") || "",
     desc: p.description ?? "",
     image: p.images?.[0] ?? "",
+    images: p.images ?? [],
+    collectionSlugs,
     published: p.in_stock,
     isNew: attrs.isNew === true,
-    show: defShow(),
+    show: readShow(attrs),
     stockMode: (attrStr(attrs, "stockMode", "hidden") as StockMode) || "hidden",
-    dims: { h: "", w: "", l: "", unit: "cm" },
+    dims: readDims(attrs),
     badge: readBadge(attrs),
   };
 }
@@ -87,6 +125,27 @@ export function toBackendPayload(p: AdminProduct): Record<string, unknown> {
   const slug = p.slug || slugify(p.name) || `product-${Date.now()}`;
   const sku = p.sku || slug.toUpperCase().slice(0, 60);
   const maxPerOrder = p.maxPerOrder === "" ? null : Number(p.maxPerOrder) || null;
+
+  // The editor exposes one ImageDrop, which owns the *primary* slot only. So
+  // images[0] is whatever that slot holds now (empty means the owner removed
+  // it), and images[1..] — the gallery the admin has no UI for — is carried
+  // through untouched instead of being replaced by [image].
+  const gallery = p.images ?? [];
+  const secondary = gallery.slice(1);
+  const images = p.image ? [p.image, ...secondary] : secondary;
+
+  // Preserve real membership. Deriving a slug from the category is only
+  // reasonable for a product that has never been in a collection — for anything
+  // else it silently relocates the product to a collection nobody created.
+  const collectionSlugs =
+    p.collectionSlugs && p.collectionSlugs.length > 0
+      ? p.collectionSlugs
+      : p.category
+        ? [slugify(p.category)]
+        : [];
+
+  const measurements = measurementsFrom(p.dims);
+
   return {
     sku,
     slug,
@@ -95,7 +154,7 @@ export function toBackendPayload(p: AdminProduct): Record<string, unknown> {
     mrp: (Number(p.mrp) || 0).toFixed(2),
     in_stock: p.published && p.stock > 0,
     description: p.desc,
-    images: p.image ? [p.image] : [],
+    images,
     attrs: {
       type: p.category,
       cost: Number(p.cost) || 0,
@@ -104,7 +163,14 @@ export function toBackendPayload(p: AdminProduct): Record<string, unknown> {
       stockMode: p.stockMode,
       isNew: p.isNew,
       badge: p.badge,
-      collectionSlugs: p.category ? [p.category.toLowerCase().replace(/\s+/g, "-")] : [],
+      collectionSlugs,
+      show: p.show,
+      dims: p.dims,
+      // Only written when dimensions were actually entered. Omitting the key
+      // lets the backend's attrs merge keep any hand-written measurements
+      // string that is already on the product (verified against the API), so
+      // a blank dims form never blanks the PDP's Measurements section.
+      ...(measurements ? { measurements } : {}),
     },
     variants: [],
   };

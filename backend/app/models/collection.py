@@ -35,6 +35,12 @@ class Collection(Base):
     description: Mapped[str | None] = mapped_column(Text(), nullable=True)
     hero_image: Mapped[str | None] = mapped_column(Text(), nullable=True)
 
-    products: Mapped[list] = relationship(
+    # Mapped[list["Product"]], not a bare Mapped[list]. SQLAlchemy 2.0 decides
+    # uselist from the annotation's type argument; without one it cannot tell
+    # this is a collection, configures the relationship as a scalar, and hands
+    # back a single Product. GET /api/collections/{slug} then died with
+    # "'Product' object is not iterable" — a 500 the storefront hid, because it
+    # silently falls back to the bundled catalogue on API failure.
+    products: Mapped[list["Product"]] = relationship(
         "Product", secondary=product_collections, back_populates="collections"
     )

@@ -143,6 +143,8 @@ function newDraft(): AdminProduct {
     maxPerOrder: "",
     desc: "",
     image: "",
+    images: [],
+    collectionSlugs: [],
     published: false,
     isNew: false,
     show: defShow(),

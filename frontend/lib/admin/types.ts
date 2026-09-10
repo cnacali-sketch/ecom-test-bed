@@ -55,7 +55,23 @@ export interface AdminProduct {
   stock: number;
   maxPerOrder: number | "";
   desc: string;
+  /** Primary image — what the editor's single ImageDrop shows and sets. */
   image: string;
+  /**
+   * Every image on the product, primary first.
+   *
+   * Carried even though the editor only edits the first one: without it a save
+   * rebuilt `images` as `[image]` and silently dropped the rest of the gallery.
+   */
+  images: string[];
+  /**
+   * Collections this product belongs to, as slugs.
+   *
+   * Round-tripped rather than derived. A save used to rebuild this from the
+   * category text, which moved the product into a collection that does not
+   * exist and removed it from every real collection page.
+   */
+  collectionSlugs: string[];
   published: boolean;
   // Drives the storefront's "New In" homepage section + New badge (see
   // lib/types.ts BackendProduct.isNew). Named to match what it actually
@@ -137,10 +153,41 @@ export const IMG_SPECS = {
   tile: { w: 640, h: 640, maxKB: 120, shape: "square" },
 } as const satisfies Record<string, ImageSpec>;
 
+export type SlotKey = keyof typeof IMG_SPECS;
+
+/** Plain-English slot names. Shown on the pickers and in the crop dialog's
+ * title, so the owner picks a place on the site rather than a pixel size. */
+export const SLOT_LABELS: Record<SlotKey, string> = {
+  product: "Product photo",
+  hero: "Homepage hero",
+  heroInset: "Hero inset",
+  campaign: "Campaign band",
+  editorial: "Editorial tile",
+  tile: "Category tile",
+};
+
 /**
- * File-size cap for the general Media Library. No aspect-ratio rule there —
- * it's a shared pool, and the right shape depends on which slot ends up
- * using the image. Matches the most generous slot (hero).
+ * Name for a slot, given its spec.
+ *
+ * Identity first: every caller passes an `IMG_SPECS` reference, and that
+ * resolves `product` vs `campaign` correctly even though the two share
+ * dimensions. The value comparison is only a fallback for a hand-built spec.
+ */
+export function slotLabelFor(spec: ImageSpec): string {
+  const keys = Object.keys(IMG_SPECS) as SlotKey[];
+  const byIdentity = keys.find((key) => IMG_SPECS[key] === spec);
+  if (byIdentity) return SLOT_LABELS[byIdentity];
+  const byValue = keys.find(
+    (key) => IMG_SPECS[key].w === spec.w && IMG_SPECS[key].h === spec.h,
+  );
+  return byValue ? SLOT_LABELS[byValue] : "Photo";
+}
+
+/**
+ * File-size cap for the general Media Library when no slot is chosen. The
+ * library is a shared pool, so "Original shape" stays available for images
+ * whose destination isn't known yet — it still gets resized and re-encoded,
+ * just not cropped. Matches the most generous slot (hero).
  */
 export const MEDIA_MAX_KB = 400;
 

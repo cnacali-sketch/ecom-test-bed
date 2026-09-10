@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db import get_db_session
 from app.models.collection import Collection
+from app.models.product import Product
 from app.schemas.product import ProductRead
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -43,7 +44,12 @@ async def get_collection(slug: str, db: AsyncSession = Depends(get_db_session)) 
     """Return a collection with its products by slug."""
     result = await db.execute(
         select(Collection)
-        .options(selectinload(Collection.products))
+        # Chained through to Product.variants on purpose. ProductRead includes
+        # variants, so loading only the products leaves Pydantic to trigger a
+        # lazy load while serialising — which under asyncio raises
+        # MissingGreenlet rather than quietly issuing a query. Same eager-load
+        # the products router uses (routers/products.py:29).
+        .options(selectinload(Collection.products).selectinload(Product.variants))
         .where(Collection.slug == slug)
     )
     collection = result.scalar_one_or_none()
