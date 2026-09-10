@@ -39,3 +39,7 @@ graphify-out/
 # Python bytecode from tools/
 __pycache__/
 *.pyc
+
+# Local SQLite dev database (backend/scripts/dev_bootstrap.py). Never committed.
+backend/*.db
+backend/*.db-journal
