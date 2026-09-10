@@ -20,9 +20,10 @@ import { AlertTriangle, CheckCircle2, Trash2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { fmtSize } from "@/lib/admin/helpers";
-import { IMG_SPECS, type ImageSpec } from "@/lib/admin/types";
+import { IMG_SPECS, slotLabelFor, type ImageSpec } from "@/lib/admin/types";
 import { apiBaseUrl, apiFetch } from "@/lib/api-client";
-import { prepareImage } from "@/lib/image-prepare";
+import type { PreparedImage } from "@/lib/image-prepare";
+import { ImageEditor } from "./ImageEditor";
 import { HelpTip } from "./atoms";
 
 interface Meta {
@@ -41,17 +42,25 @@ export function ImageDrop({
   onChange,
   compact = false,
   spec = IMG_SPECS.product,
+  label,
 }: {
   value: string;
   onChange: (url: string) => void;
   compact?: boolean;
   /** Which slot this picker fills — drives the aspect ratio and size limit. */
   spec?: ImageSpec;
+  /** Overrides the slot name shown on the picker and in the crop dialog. */
+  label?: string;
 }) {
+  // Derived so the SectionEditor, which picks a spec per field at runtime, gets
+  // an accurate dialog title without every call site repeating the name.
+  const slotLabel = label ?? slotLabelFor(spec);
   const [drag, setDrag] = useState(false);
   const [err, setErr] = useState("");
   const [meta, setMeta] = useState<Meta | null>(null);
   const [uploading, setUploading] = useState(false);
+  /** Chosen file waiting to be framed. Non-null means the editor is open. */
+  const [pending, setPending] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function upload(file: File) {
@@ -73,8 +82,13 @@ export function ImageDrop({
   // Photos are conformed to the slot rather than rejected for not matching it.
   // A portrait phone photo is 3:4 and several megabytes; this slot wants 4:5
   // under a few hundred KB, so every straight-from-camera upload used to fail
-  // with no way to fix it on the phone. Cropping is reported, never silent.
-  const handle = async (fileList: FileList | null) => {
+  // with no way to fix it on the phone.
+  //
+  // The file is handed to the editor rather than cropped and uploaded on the
+  // spot. Cropping is lossy and the upload is not trivially undoable, so the
+  // owner gets to place the frame *before* it happens instead of reading an
+  // apology afterwards.
+  const handle = (fileList: FileList | null) => {
     setErr("");
     const file = fileList?.[0];
     if (!file) return;
@@ -82,15 +96,12 @@ export function ImageDrop({
       setErr("That file isn't an image.");
       return;
     }
+    setPending(file);
+  };
 
+  async function acceptCrop(prepared: PreparedImage) {
     setUploading(true);
     try {
-      const prepared = await prepareImage(file, {
-        aspect: spec.w / spec.h,
-        maxWidth: spec.w,
-        maxHeight: spec.h,
-        maxBytes: spec.maxKB * 1024,
-      });
       setMeta({
         name: prepared.file.name,
         size: prepared.file.size,
@@ -100,19 +111,18 @@ export function ImageDrop({
         croppedPercent: prepared.croppedPercent,
       });
       await upload(prepared.file);
-    } catch (error) {
-      setErr(error instanceof Error ? error.message : "Couldn't read that image.");
+      setPending(null);
     } finally {
       setUploading(false);
     }
-  };
+  }
 
   return (
     <div>
       {!compact && (
         <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-ink">
-          Product photo{" "}
-          <HelpTip text="Every photo must be the same shape so your shop grid stays neat. Save as WebP to keep the file small — your pages load faster." />
+          {slotLabel}{" "}
+          <HelpTip text="Every photo must be the same shape so your shop grid stays neat. Drop any photo and you'll get to place the crop before it uploads." />
           <span className="ml-auto rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-semibold text-ink-soft">
             {spec.shape} · {spec.w}×{spec.h} · ≤{spec.maxKB} KB
           </span>
@@ -142,8 +152,8 @@ export function ImageDrop({
                 </div>
                 {meta.croppedPercent != null && meta.croppedPercent > 0 && (
                   <div className="text-ink-soft/70">
-                    Centre-cropped to {spec.shape} — {meta.croppedPercent}% of the photo trimmed.
-                    Reshoot with the product centred if that cut something off.
+                    Cropped to {spec.shape} — {meta.croppedPercent}% of the photo trimmed.
+                    Remove and drop it again to reframe.
                   </div>
                 )}
               </div>
@@ -182,7 +192,7 @@ export function ImageDrop({
             {uploading ? "Preparing…" : "Drop photo or click"}
           </div>
           <div className={`mt-0.5 text-ink-soft/70 ${compact ? "text-[11px]" : "text-xs"}`}>
-            Any size — cropped to {spec.shape} and compressed for you
+            Any size — you place the {spec.shape} crop, we compress it
           </div>
           <input
             ref={inputRef}
@@ -197,6 +207,15 @@ export function ImageDrop({
         <div className="mt-2 flex items-start gap-2 rounded-lg bg-sale/5 px-3 py-2 text-xs font-medium text-sale">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {err}
         </div>
+      )}
+      {pending && (
+        <ImageEditor
+          file={pending}
+          spec={spec}
+          slotLabel={slotLabel}
+          onCancel={() => setPending(null)}
+          onConfirm={acceptCrop}
+        />
       )}
     </div>
   );

@@ -8,8 +8,19 @@ import { AlertTriangle, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { apiBaseUrl, apiFetch } from "@/lib/api-client";
-import { IMG_SPECS, MEDIA_MAX_KB, type MediaItem } from "@/lib/admin/types";
-import { prepareImage } from "@/lib/image-prepare";
+import {
+  IMG_SPECS,
+  MEDIA_MAX_KB,
+  SLOT_LABELS,
+  type MediaItem,
+  type SlotKey,
+} from "@/lib/admin/types";
+import { prepareImage, type PreparedImage } from "@/lib/image-prepare";
+import { ImageEditor } from "../ImageEditor";
+
+/** "original" keeps the old shared-pool behaviour: resize and compress, but
+ * do not crop. Every other value conforms the photo to a real slot on the site. */
+type Destination = SlotKey | "original";
 
 export function MediaLibrary() {
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -17,6 +28,11 @@ export function MediaLibrary() {
   const [err, setErr] = useState("");
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState("");
+  const [destination, setDestination] = useState<Destination>("product");
+  /** When on, each photo opens the crop dialog instead of being auto-placed. */
+  const [review, setReview] = useState(false);
+  /** Photos waiting to be framed. The first one is what the editor shows. */
+  const [queue, setQueue] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,27 +54,51 @@ export function MediaLibrary() {
       .finally(() => setLoading(false));
   }, []);
 
+  const spec = destination === "original" ? null : IMG_SPECS[destination];
+
+  /** POST one already-prepared file. Returns false when the server refused. */
+  async function send(prepared: PreparedImage, originalName: string): Promise<boolean> {
+    const form = new FormData();
+    form.append("file", prepared.file);
+    const res = await apiFetch("/api/media", { method: "POST", body: form });
+    if (!res?.ok) {
+      const body = await res?.json().catch(() => null);
+      setErr(body?.detail ?? `Couldn't upload ${originalName}.`);
+      return false;
+    }
+    const uploaded = (await res.json()) as MediaItem;
+    setMedia((m) => [uploaded, ...m]);
+    return true;
+  }
+
   async function add(files: FileList | null) {
     setErr("");
-    const incoming = Array.from(files ?? []);
+    const incoming = Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (incoming.length === 0) {
+      setErr("Only images.");
+      return;
+    }
+
+    // Framing each photo by hand is right for a few and unbearable for forty,
+    // so bulk uploads are auto-placed unless the owner asks to review them.
+    if (review && spec) {
+      setQueue(incoming);
+      return;
+    }
+
     let done = 0;
     for (const file of incoming) {
-      if (!file.type.startsWith("image/")) {
-        setErr("Only images.");
-        continue;
-      }
-
       setBusy(`Preparing ${file.name} (${done + 1} of ${incoming.length})…`);
       // Compress rather than reject. A phone photo is several megabytes, and
       // the old rule bounced it with advice ("save it as WebP") that cannot
-      // be followed on a phone. No aspect-ratio rule here: this is a shared
-      // pool, so the right shape depends on which slot ends up using it.
+      // be followed on a phone.
       let prepared;
       try {
         prepared = await prepareImage(file, {
-          maxWidth: IMG_SPECS.hero.w,
-          maxHeight: IMG_SPECS.hero.h,
-          maxBytes: MEDIA_MAX_KB * 1024,
+          ...(spec
+            ? { aspect: spec.w / spec.h, maxWidth: spec.w, maxHeight: spec.h, maxBytes: spec.maxKB * 1024 }
+            : { maxWidth: IMG_SPECS.hero.w, maxHeight: IMG_SPECS.hero.h, maxBytes: MEDIA_MAX_KB * 1024 }),
+          place: "auto",
         });
       } catch {
         setErr(`Skipped ${file.name} — couldn't read it as an image.`);
@@ -66,19 +106,18 @@ export function MediaLibrary() {
       }
 
       setBusy(`Uploading ${file.name} (${done + 1} of ${incoming.length})…`);
-      const form = new FormData();
-      form.append("file", prepared.file);
-      const res = await apiFetch("/api/media", { method: "POST", body: form });
-      if (!res?.ok) {
-        const body = await res?.json().catch(() => null);
-        setErr(body?.detail ?? `Couldn't upload ${file.name}.`);
-        continue;
-      }
-      const uploaded = (await res.json()) as MediaItem;
-      setMedia((m) => [uploaded, ...m]);
-      done += 1;
+      if (await send(prepared, file.name)) done += 1;
     }
     setBusy("");
+  }
+
+  /** Editor finished with the head of the queue — upload it and move on. */
+  async function acceptQueued(prepared: PreparedImage) {
+    const [current, ...rest] = queue;
+    setBusy(`Uploading ${current.name}…`);
+    await send(prepared, current.name);
+    setBusy("");
+    setQueue(rest);
   }
 
   async function remove(id: string) {
@@ -100,6 +139,36 @@ export function MediaLibrary() {
         <h2 className="text-lg font-bold text-ink">Media library</h2>
         <p className="text-sm text-ink-soft">Drop many photos at once.</p>
       </div>
+
+      <div className="mb-4 flex flex-wrap items-end gap-4">
+        <label className="text-xs font-semibold text-ink-soft">
+          Where will these be used?
+          <select
+            value={destination}
+            onChange={(e) => setDestination(e.target.value as Destination)}
+            className="mt-1 block rounded-lg border border-ink/15 bg-card px-2.5 py-1.5 text-sm font-medium text-ink"
+          >
+            {(Object.keys(IMG_SPECS) as SlotKey[]).map((key) => (
+              <option key={key} value={key}>
+                {SLOT_LABELS[key]} · {IMG_SPECS[key].shape}
+              </option>
+            ))}
+            <option value="original">Original shape (no crop)</option>
+          </select>
+        </label>
+        <label
+          className={`flex items-center gap-2 pb-1.5 text-xs font-semibold ${spec ? "text-ink-soft" : "text-ink-soft/40"}`}
+        >
+          <input
+            type="checkbox"
+            checked={review && Boolean(spec)}
+            disabled={!spec}
+            onChange={(e) => setReview(e.target.checked)}
+            className="accent-teal"
+          />
+          Place each crop myself
+        </label>
+      </div>
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -117,7 +186,10 @@ export function MediaLibrary() {
         <UploadCloud className="mb-2 h-8 w-8 text-ink-soft/60" />
         <div className="text-sm font-semibold text-ink">Drop photos or click to upload</div>
         <div className="text-xs text-ink-soft/70">
-          Any size — converted and compressed for you · {media.length} in library
+          {spec
+            ? `Any size — cropped to ${spec.shape}, ${spec.w}×${spec.h}, ≤${spec.maxKB} KB`
+            : "Any size — resized and compressed, shape left alone"}{" "}
+          · {media.length} in library
         </div>
         <input
           ref={inputRef}
@@ -156,6 +228,22 @@ export function MediaLibrary() {
           <div className="col-span-full py-10 text-center text-sm text-ink-soft/70">No photos yet.</div>
         )}
       </div>
+      {queue.length > 0 && spec && (
+        <ImageEditor
+          // Keyed by name+size so moving to the next photo remounts the editor
+          // with fresh crop state instead of inheriting the last one's framing.
+          key={`${queue[0].name}-${queue[0].size}`}
+          file={queue[0]}
+          spec={spec}
+          slotLabel={
+            queue.length > 1
+              ? `${SLOT_LABELS[destination as SlotKey]} — ${queue.length} left`
+              : SLOT_LABELS[destination as SlotKey]
+          }
+          onCancel={() => setQueue((rest) => rest.slice(1))}
+          onConfirm={acceptQueued}
+        />
+      )}
     </div>
   );
 }
