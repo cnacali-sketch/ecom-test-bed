@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db_session
 from app.dependencies.auth import require_admin
-from app.models.user import ROLE_ADMIN, User
+from app.models.user import ROLE_ADMIN, ROLES, User
 from app.schemas.auth import Address, UserRead
 from app.services import audit, refresh_tokens
 
@@ -34,6 +34,9 @@ class CustomerRead(UserRead):
     created_at: datetime
     is_blocked: bool
     blocked_reason: str | None = None
+    # Needed by the console to show who has back-office access. UserRead does
+    # not carry it, because a customer has no use for their own role.
+    role: str
 
 
 class CustomerEdit(BaseModel):
@@ -52,6 +55,18 @@ class CustomerEdit(BaseModel):
 class BlockRequest(BaseModel):
     blocked: bool
     reason: str | None = None
+
+
+class RoleRequest(BaseModel):
+    """Promote or demote an account.
+
+    Deliberately its own endpoint rather than a field on CustomerEdit: this is
+    the one change here that hands out or takes away access to the back
+    office, and it should not be possible to make it by accident while
+    correcting somebody's phone number.
+    """
+
+    role: str
 
 
 def _profile_state(customer: User) -> dict:
@@ -136,6 +151,9 @@ async def block_customer(
     customer = await _get_customer_or_404(db, customer_id)
     if customer.role == ROLE_ADMIN:
         raise HTTPException(status_code=422, detail="Cannot block an admin account")
+    # A blocked staff account loses back-office access on its very next
+    # request (see _reject_blocked in dependencies/auth.py), not when its
+    # access token happens to expire.
     was = {"is_blocked": customer.is_blocked, "blocked_reason": customer.blocked_reason}
     customer.is_blocked = payload.blocked
     customer.blocked_reason = payload.reason if payload.blocked else None
@@ -158,6 +176,68 @@ async def block_customer(
             was,
             {"is_blocked": customer.is_blocked, "blocked_reason": customer.blocked_reason},
         ),
+    )
+    await db.commit()
+    await db.refresh(customer)
+    return customer
+
+
+@router.patch("/{customer_id}/role", response_model=CustomerRead)
+async def set_customer_role(
+    customer_id: uuid.UUID,
+    payload: RoleRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> User:
+    """Set an account's role: customer, staff, or admin. Admin-gated.
+
+    Staff can work orders — see them, move them through dispatch, flag one for
+    attention — and nothing else. Admin is everything, including money.
+
+    Two guards:
+
+    * The role must be one the code actually checks for. A typo would
+      otherwise create an account matching no permission check anywhere, which
+      reads as "logged in but every screen is empty" rather than as an error.
+    * Nobody can change their own role. An admin demoting themselves by
+      mistake locks the shop out of its own console with no way back except
+      the database.
+
+    Every session the account holds is revoked on any change. The access
+    token carries a role claim, but `require_current_user` re-reads the user
+    from the database on every request, so a demotion already takes effect
+    immediately; revoking is about the refresh token, which would otherwise
+    let a demoted account mint fresh access tokens indefinitely.
+    """
+    if payload.role not in ROLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"role must be one of {', '.join(ROLES)}",
+        )
+    if customer_id == actor.id:
+        raise HTTPException(
+            status_code=422,
+            detail="You cannot change your own role. Ask another admin to do it.",
+        )
+
+    customer = await _get_customer_or_404(db, customer_id)
+    was = customer.role
+    if was == payload.role:
+        return customer
+
+    customer.role = payload.role
+    await refresh_tokens.revoke_all_for_user(db, customer.id)
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="customer.role",
+        entity_type="customer",
+        entity_id=customer.id,
+        entity_label=customer.email,
+        summary=f"Changed {customer.email} from {was} to {payload.role}",
+        changes={"role": {"from": was, "to": payload.role}},
     )
     await db.commit()
     await db.refresh(customer)

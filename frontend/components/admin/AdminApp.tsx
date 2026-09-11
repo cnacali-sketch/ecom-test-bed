@@ -157,11 +157,11 @@ function newDraft(): AdminProduct {
 }
 
 export function AdminApp() {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
 
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [categories, setCategories] = useState<AdminCategory[]>([]);
-  const [view, setView] = useState<AdminView>("dashboard");
+  const [view, setView] = useState<AdminView>(isAdmin ? "dashboard" : "orders");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<AdminProduct | null>(null);
   const [toast, setToast] = useState("");
@@ -177,7 +177,12 @@ export function AdminApp() {
   // Mount-load health. Without these a dead backend renders an admin that
   // looks like an empty shop: no products, no categories, a zero notification
   // badge, and not one word saying anything went wrong.
-  const [productsState, setProductsState] = useState<LoadState>("loading");
+  // Staff never load a catalogue, so for them this starts already settled
+  // rather than being set to "ready" inside the effect below — a synchronous
+  // setState in an effect body is a cascading render.
+  const [productsState, setProductsState] = useState<LoadState>(
+    isAdmin ? "loading" : "ready",
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notifError, setNotifError] = useState(false);
   // Real orders behind the Dashboard's revenue/orders tiles. Same single
@@ -195,6 +200,10 @@ export function AdminApp() {
   // list once the catalogue grows past that (the storefront fetch in
   // lib/api.ts already passes this; this one was the one inconsistent gap).
   useEffect(() => {
+    // Staff have no catalogue screens. /api/categories is admin-only, so
+    // fetching it here would 403 and paint an error banner about data this
+    // session has no screen for.
+    if (!isAdmin) return;
     let cancelled = false;
     apiFetch("/api/products?limit=200")
       .then(async (res) => {
@@ -216,9 +225,11 @@ export function AdminApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
+    // Same reason as the products fetch above: admin-only data, no staff screen.
+    if (!isAdmin) return;
     let cancelled = false;
     apiFetch("/api/categories")
       .then(async (res) => {
@@ -231,7 +242,7 @@ export function AdminApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAdmin]);
 
   // Powers the notification bell: real signals from data the console already
   // needs elsewhere (Orders/Fraud screens re-fetch their own copies for
@@ -391,7 +402,15 @@ export function AdminApp() {
     />
   );
 
-  const nav = (
+  // Mirrors the server's require_staff set exactly. A nav entry pointing at
+  // an endpoint that will 403 is worse than a missing one: it reads as the
+  // console being broken rather than as the role working.
+  const nav = !isAdmin ? (
+    <nav className="space-y-1">
+      {navBtn("orders", ShoppingBag, "Orders")}
+      {navBtn("messages", Mail, "Messages")}
+    </nav>
+  ) : (
     <nav className="space-y-1">
       {navBtn("dashboard", BarChart3, "Dashboard")}
       {navBtn("home", Home, "Homepage editor")}
@@ -558,7 +577,7 @@ export function AdminApp() {
               </div>
               <div className="hidden sm:block">
                 <div className="text-xs font-semibold leading-tight">{user?.email ?? "Admin"}</div>
-                <div className="text-[10px] text-ink-soft">Owner</div>
+                <div className="text-[10px] text-ink-soft">{isAdmin ? "Owner" : "Staff"}</div>
               </div>
             </div>
             <button onClick={() => logout()} title="Sign out" className="grid h-9 w-9 place-items-center rounded-lg text-ink-soft hover:bg-ink/5">
@@ -643,7 +662,11 @@ export function AdminApp() {
           )}
           {view === "media" && <MediaLibrary />}
           {view === "orders" && (
-            <Orders deepLinkOrderId={ordersDeepLinkId} onDeepLinkConsumed={() => setOrdersDeepLinkId(null)} />
+            <Orders
+              deepLinkOrderId={ordersDeepLinkId}
+              onDeepLinkConsumed={() => setOrdersDeepLinkId(null)}
+              canManageMoney={isAdmin}
+            />
           )}
           {view === "customers" && <Customers />}
           {view === "analytics" && <Analytics />}

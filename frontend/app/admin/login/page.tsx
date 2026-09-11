@@ -13,9 +13,9 @@ export default function AdminLoginPage() {
     const user = await login(email, password);
     // A valid customer signing in here is still not staff. Drop the session and
     // say so, rather than bouncing them to an /admin that fails on every call.
-    if (user.role !== "admin") {
+    if (user.role !== "admin" && user.role !== "staff") {
       await logout();
-      throw new AuthError("That account does not have admin access.");
+      throw new AuthError("That account does not have back-office access.");
     }
     router.push("/admin");
   }

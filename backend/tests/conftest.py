@@ -15,7 +15,7 @@ from app.config import get_settings
 from app.db import Base, get_db_session
 from app.dependencies.auth import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER
 from app.main import app
-from app.models.user import ROLE_ADMIN, ROLE_CUSTOMER, User
+from app.models.user import ROLE_ADMIN, ROLE_CUSTOMER, ROLE_STAFF, User
 from app.services import login_throttle
 from app.services.security import create_access_token, hash_password
 
@@ -143,6 +143,38 @@ async def customer_client(
     app.dependency_overrides[get_db_session] = _override
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         ac.cookies.set(ACCESS_COOKIE, create_access_token(customer_user.id, customer_user.role))
+        _set_csrf(ac)
+        yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def staff_user(db_session: AsyncSession) -> User:
+    """A persisted fulfilment account — back office, no money."""
+    user = User(
+        email="staff@example.com",
+        password_hash=hash_password("staff-password"),
+        role=ROLE_STAFF,
+        is_verified=True,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def staff_client(
+    db_session: AsyncSession, staff_user: User
+) -> AsyncGenerator[AsyncClient, None]:
+    """AsyncClient signed in as staff — proves the fulfilment/money split
+    holds from the outside, not just in the dependency function."""
+    async def _override() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = _override
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        ac.cookies.set(ACCESS_COOKIE, create_access_token(staff_user.id, staff_user.role))
         _set_csrf(ac)
         yield ac
     app.dependency_overrides.clear()

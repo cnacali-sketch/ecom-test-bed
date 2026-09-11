@@ -1,8 +1,10 @@
-"""User ORM model — customers and admins share one table, split by `role`.
+"""User ORM model — customers and back-office accounts share one table,
+split by `role`.
 
-Two roles exist in P1: "customer" (storefront account) and "admin" (gates
-/admin and every write endpoint). `is_verified` is written by the P2 email
-OTP flow; P1 creates users already-unverified and does not enforce it yet.
+Three roles: "customer" (storefront account), "staff" (fulfilment: sees
+orders, moves them through dispatch, touches no money) and "admin" (the
+owner; everything). `is_verified` is written by the P2 email OTP flow; P1
+creates users already-unverified and does not enforce it yet.
 """
 from __future__ import annotations
 
@@ -18,7 +20,18 @@ from sqlalchemy.types import JSON
 from app.db import Base
 
 ROLE_CUSTOMER = "customer"
+# Fulfilment without money. Staff can see orders, move them through picking,
+# packing and dispatch, and flag one for the owner's attention — but cannot
+# refund, delete, edit the catalogue, or open the customer directory. The
+# split exists so a second pair of hands does not require handing over the
+# keys to the till.
+ROLE_STAFF = "staff"
 ROLE_ADMIN = "admin"
+
+# Every role that may exist on an account. Used to reject anything else at
+# the role-assignment endpoint, so a typo cannot create an account that
+# silently matches no permission check at all.
+ROLES = (ROLE_CUSTOMER, ROLE_STAFF, ROLE_ADMIN)
 
 # JSONB on Postgres, plain JSON on SQLite (tests) — same idiom as product.attrs.
 JSONType = JSONB().with_variant(JSON(), "sqlite")
@@ -56,6 +69,13 @@ class User(Base):
     @property
     def is_admin(self) -> bool:
         return self.role == ROLE_ADMIN
+
+    @property
+    def is_staff(self) -> bool:
+        """Anyone who may work the back office. An admin is always staff —
+        the roles are a ladder, not a set of separate boxes, so every check
+        written against staff keeps working for the owner."""
+        return self.role in (ROLE_STAFF, ROLE_ADMIN)
 
 
 def normalize_email(email: str) -> str:

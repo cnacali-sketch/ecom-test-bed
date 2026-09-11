@@ -5,7 +5,7 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 
 export default function AdminPage() {
   return (
-    <RequireAuth adminOnly>
+    <RequireAuth staffOnly>
       <AdminApp />
     </RequireAuth>
   );

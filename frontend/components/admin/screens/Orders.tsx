@@ -198,11 +198,17 @@ function formatPlaced(iso: string): string {
 export function Orders({
   deepLinkOrderId,
   onDeepLinkConsumed,
+  canManageMoney = true,
 }: {
   /** Set when a notification click asked for a specific order — expand and
    * scroll to it once loaded, instead of landing on the unfiltered list. */
   deepLinkOrderId?: string | null;
   onDeepLinkConsumed?: () => void;
+  /** False for a staff session: hides payment, refunds, invoicing, deletion
+   * and return decisions. This only decides what is painted — the server
+   * refuses all five for staff regardless (see require_admin in
+   * backend/app/routers/orders.py). */
+  canManageMoney?: boolean;
 } = {}) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
@@ -804,13 +810,21 @@ export function Orders({
                       />
                     </td>
                     <td className="px-5 py-3">
-                      <StatusSelect
-                        value={o.payment_status}
-                        options={PAYMENT}
-                        styleMap={PAYMENT_STYLE}
-                        labelMap={PAYMENT_LABEL}
-                        onChange={(v) => setPayment(o.id, v)}
-                      />
+                      {canManageMoney ? (
+                        <StatusSelect
+                          value={o.payment_status}
+                          options={PAYMENT}
+                          styleMap={PAYMENT_STYLE}
+                          labelMap={PAYMENT_LABEL}
+                          onChange={(v) => setPayment(o.id, v)}
+                        />
+                      ) : (
+                        // Still shown, just not changeable: whether an order is
+                        // paid decides whether it should be packed at all.
+                        <span className={`px-2 py-0.5 text-xs font-semibold capitalize ${PAYMENT_STYLE[o.payment_status] ?? ""}`}>
+                          {PAYMENT_LABEL[o.payment_status] ?? o.payment_status}
+                        </span>
+                      )}
                     </td>
                   </tr>
                   {expanded && (
@@ -841,30 +855,40 @@ export function Orders({
                           </button>
                         )}
                         <OrderLines order={o} />
-                        <InvoicePanel
-                          order={o}
-                          invoice={invoices[o.id] ?? null}
-                          onIssue={() => loadInvoice(o.id, true)}
-                          onPrint={printOneInvoice}
-                        />
-                        <RefundPanel
-                          order={o}
-                          onRefund={(amount, reference) => refundOrder(o.id, amount, reference)}
-                        />
+                        {canManageMoney && (
+                          <>
+                            <InvoicePanel
+                              order={o}
+                              invoice={invoices[o.id] ?? null}
+                              onIssue={() => loadInvoice(o.id, true)}
+                              onPrint={printOneInvoice}
+                            />
+                            <RefundPanel
+                              order={o}
+                              onRefund={(amount, reference) => refundOrder(o.id, amount, reference)}
+                            />
+                          </>
+                        )}
                         <ShippingDetail order={o} onSave={(courier, tracking) => setShipping(o.id, courier, tracking)} />
                         <ReturnRequestDetail
                           request={returnRequest}
-                          onResolve={(status) => returnRequest && resolveReturn(returnRequest.id, status)}
+                          onResolve={
+                            canManageMoney
+                              ? (status) => returnRequest && resolveReturn(returnRequest.id, status)
+                              : undefined
+                          }
                         />
-                        <div className="mt-4 flex justify-end border-t border-ink/10 pt-4">
-                          <button
-                            type="button"
-                            onClick={() => deleteOrder(o)}
-                            className="flex items-center gap-1.5 border border-sale/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-sale hover:bg-sale hover:text-white"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" /> Delete order
-                          </button>
-                        </div>
+                        {canManageMoney && (
+                          <div className="mt-4 flex justify-end border-t border-ink/10 pt-4">
+                            <button
+                              type="button"
+                              onClick={() => deleteOrder(o)}
+                              className="flex items-center gap-1.5 border border-sale/30 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-sale hover:bg-sale hover:text-white"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" /> Delete order
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -1560,7 +1584,10 @@ function ReturnRequestDetail({
   onResolve,
 }: {
   request: ReturnRequest | null;
-  onResolve: (status: "approved" | "rejected") => void;
+  /** Undefined for a staff session — the request is still shown, because a
+   * packer needs to know a parcel is coming back, but approving it releases
+   * stock and commits the shop to a refund, so the decision is the owner's. */
+  onResolve?: (status: "approved" | "rejected") => void;
 }) {
   if (!request) return null;
 
@@ -1570,7 +1597,12 @@ function ReturnRequestDetail({
         Return requested {request.pickup_requested ? "(pickup requested)" : ""}
       </p>
       <p className="mt-1 text-sm text-ink">{request.reason}</p>
-      {request.status === "pending" ? (
+      {request.status === "pending" && !onResolve && (
+        <p className="mt-1 text-xs font-semibold text-ink-soft">
+          Awaiting the owner&apos;s decision
+        </p>
+      )}
+      {request.status === "pending" && onResolve ? (
         <div className="mt-2 flex gap-2">
           <button
             type="button"
@@ -1588,7 +1620,9 @@ function ReturnRequestDetail({
           </button>
         </div>
       ) : (
-        <p className="mt-1 text-xs font-semibold capitalize text-ink-soft">{request.status}</p>
+        request.status !== "pending" && (
+          <p className="mt-1 text-xs font-semibold capitalize text-ink-soft">{request.status}</p>
+        )
       )}
     </div>
   );

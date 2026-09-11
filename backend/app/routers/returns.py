@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_db_session
-from app.dependencies.auth import require_admin
+from app.dependencies.auth import require_admin, require_staff
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.return_request import RETURN_STATUSES, ReturnRequest
@@ -73,7 +73,10 @@ async def create_return_request(
     return request
 
 
-@router.get("", response_model=list[ReturnRequestRead], dependencies=[Depends(require_admin)])
+# Staff can see what has been asked for — it is what they will be packing
+# a replacement for, or expecting back through the door. Approving one is
+# admin-only: approval releases stock and commits the shop to a refund.
+@router.get("", response_model=list[ReturnRequestRead], dependencies=[Depends(require_staff)])
 async def list_return_requests(db: AsyncSession = Depends(get_db_session)) -> list[ReturnRequest]:
     result = await db.execute(select(ReturnRequest).order_by(ReturnRequest.created_at.desc()))
     return list(result.scalars().all())

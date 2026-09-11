@@ -6,12 +6,17 @@
   GET   /api/orders/{id}          — fetch a single order (public: this is the
                                      "secret" a guest needs for order tracking)
   GET   /api/orders               — the CALLER's own orders (auth required)
-  GET   /api/orders/all           — every order (admin)
-  PATCH /api/orders/{id}/status   — fulfilment status (admin)
+  GET   /api/orders/all           — every order (staff)
+  PATCH /api/orders/{id}/status   — fulfilment status (staff)
+  PATCH /api/orders/bulk/status   — several at once (staff)
+  PATCH /api/orders/{id}/shipping — courier + tracking number (staff)
+  PATCH /api/orders/{id}/flag     — manually flag/unflag for review (staff)
   PATCH /api/orders/{id}/payment  — payment status (admin)
-  PATCH /api/orders/{id}/shipping — courier + tracking number (admin)
-  PATCH /api/orders/{id}/flag     — manually flag/unflag for review (admin)
+  POST  /api/orders/{id}/refund   — record a refund (admin)
   DELETE /api/orders/{id}         — delete an order, restocking it (admin)
+
+Staff may move an order through fulfilment; only an admin may move money
+or destroy the record of a sale.
 """
 import uuid
 from datetime import datetime, timezone
@@ -25,7 +30,12 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.db import get_db_session
-from app.dependencies.auth import optional_current_user, require_admin, require_current_user
+from app.dependencies.auth import (
+    optional_current_user,
+    require_admin,
+    require_current_user,
+    require_staff,
+)
 from app.models.coupon import Coupon
 from app.models.order import Order, OrderItem
 from app.models.product import Product
@@ -437,7 +447,7 @@ async def list_orders(
 
 # Registered before GET /{order_id} so "/all" matches this literal route
 # rather than being parsed as an order id.
-@router.get("/all", response_model=list[OrderAdminRead], dependencies=[Depends(require_admin)])
+@router.get("/all", response_model=list[OrderAdminRead], dependencies=[Depends(require_staff)])
 async def list_all_orders(
     q: str | None = None,
     status: str | None = None,
@@ -612,7 +622,7 @@ async def bulk_update_status(
     background_tasks: BackgroundTasks,
     request: Request,
     db: AsyncSession = Depends(get_db_session),
-    actor: User = Depends(require_admin),
+    actor: User = Depends(require_staff),
 ) -> list[Order]:
     """Move several orders to the same fulfilment status at once. Admin-gated.
 
@@ -671,7 +681,7 @@ async def update_order_status(
     background_tasks: BackgroundTasks,
     request: Request,
     db: AsyncSession = Depends(get_db_session),
-    actor: User = Depends(require_admin),
+    actor: User = Depends(require_staff),
 ) -> Order:
     """Update fulfilment status: pending → confirmed → shipped → delivered,
     plus the off-ramps cancelled / returned."""
@@ -771,7 +781,7 @@ async def flag_order(
     request: Request,
     reason: str | None = None,
     db: AsyncSession = Depends(get_db_session),
-    actor: User = Depends(require_admin),
+    actor: User = Depends(require_staff),
 ) -> Order:
     """Manually flag or clear an order for review. Admin-gated.
 
@@ -814,7 +824,7 @@ async def update_shipping(
     courier: str | None = None,
     tracking_number: str | None = None,
     db: AsyncSession = Depends(get_db_session),
-    actor: User = Depends(require_admin),
+    actor: User = Depends(require_staff),
 ) -> Order:
     """Set the courier + tracking number for an order. Admin-gated.
 

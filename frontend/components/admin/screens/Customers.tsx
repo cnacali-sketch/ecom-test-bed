@@ -1,15 +1,17 @@
 "use client";
 
 // Customers screen: registered accounts from GET /api/customers (admin-gated).
-// Admin can correct a profile (PATCH /api/customers/{id}), blacklist/unblock
-// an account (PATCH .../block — stops login and checkout, revokes sessions),
-// or delete it outright (DELETE .../{id}). Customers otherwise edit their own
-// profile from /account.
+// Admin can correct a profile (PATCH /api/customers/{id}), grant or revoke
+// back-office access (PATCH .../role), blacklist/unblock an account
+// (PATCH .../block — stops login and checkout, revokes sessions), or delete it
+// outright (DELETE .../{id}). Customers otherwise edit their own profile from
+// /account.
 
 import { Fragment, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Pencil, ShieldOff, Trash2, Users } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { inputCls } from "../atoms";
 
 interface Address {
@@ -36,12 +38,32 @@ interface Customer {
   blocked_reason: string | null;
 }
 
+/** The roles an admin can assign, in order of access. Mirrors ROLES in
+ * backend/app/models/user.py — anything else is refused there with a 422. */
+const ROLES = ["customer", "staff", "admin"] as const;
+
+const ROLE_STYLE: Record<string, string> = {
+  admin: "bg-gold/15 text-gold",
+  staff: "bg-teal/10 text-teal",
+  customer: "bg-ink/10 text-ink-soft",
+};
+
+/** What the role actually lets somebody do, in the words of the job. Shown
+ * beside the picker because "staff" on its own does not say whether that
+ * person can issue a refund. */
+const ROLE_BLURB: Record<string, string> = {
+  admin: "Everything, including refunds, prices and this screen.",
+  staff: "Works the order queue: pick, pack, dispatch. No money, no catalogue.",
+  customer: "Shops. No access to the back office.",
+};
+
 function oneLine(a: Address): string {
   const parts = [a.line1, a.line2, a.city, a.state, a.postcode, a.country].filter(Boolean);
   return parts.join(", ");
 }
 
 export function Customers() {
+  const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -109,6 +131,35 @@ export function Customers() {
     reportFailure(res, "Couldn't update that account. Please try again.");
   }
 
+  async function setRole(customer: Customer, role: string) {
+    if (role === customer.role) return;
+    // Confirmed because it is the one change on this screen that hands
+    // somebody the keys, and the one that is hardest to notice afterwards.
+    const question =
+      role === "customer"
+        ? `Remove back-office access from ${customer.email}?`
+        : `Give ${customer.email} ${role} access? ${ROLE_BLURB[role]}`;
+    if (!confirm(question)) return;
+
+    const res = await apiFetch(`/api/customers/${customer.id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    if (res?.ok) {
+      const updated = (await res.json()) as Customer;
+      setCustomers((cur) => cur.map((c) => (c.id === customer.id ? updated : c)));
+      setActionError(null);
+      return;
+    }
+    if (res?.status === 422) {
+      const body = await res.json().catch(() => null);
+      setActionError(body?.detail ?? "Couldn't change that role.");
+      return;
+    }
+    reportFailure(res, "Couldn't change that role. Please try again.");
+  }
+
   async function deleteCustomer(customer: Customer) {
     if (!confirm(`Delete ${customer.email}? This can't be undone.`)) return;
     const res = await apiFetch(`/api/customers/${customer.id}`, { method: "DELETE" });
@@ -164,6 +215,7 @@ export function Customers() {
               const billingLine = oneLine(billing);
               const expanded = expandedId === c.id;
               const isAdmin = c.role === "admin";
+              const isSelf = c.id === user?.id;
               return (
                 <Fragment key={c.id}>
                   <tr className={`border-b border-ink/5 align-top last:border-0 ${c.is_blocked ? "bg-sale/5" : ""}`}>
@@ -189,11 +241,30 @@ export function Customers() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${isAdmin ? "bg-gold/15 text-gold" : "bg-ink/10 text-ink-soft"}`}
-                      >
-                        {c.role}
-                      </span>
+                      {isSelf ? (
+                        // No self-demotion: the server refuses it, and an
+                        // enabled control that always errors is worse than none.
+                        <span
+                          title="You cannot change your own role"
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${ROLE_STYLE[c.role] ?? ROLE_STYLE.customer}`}
+                        >
+                          {c.role} (you)
+                        </span>
+                      ) : (
+                        <select
+                          value={c.role}
+                          aria-label={`Role for ${c.email}`}
+                          title={ROLE_BLURB[c.role]}
+                          onChange={(e) => setRole(c, e.target.value)}
+                          className={`cursor-pointer rounded-full border-0 px-2 py-0.5 text-xs font-semibold capitalize ${ROLE_STYLE[c.role] ?? ROLE_STYLE.customer}`}
+                        >
+                          {ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <span

@@ -20,7 +20,10 @@ export interface Address {
 export interface AuthUser {
   id: string;
   email: string;
-  role: "customer" | "admin";
+  /** "staff" works the order queue; "admin" owns everything including
+   * money. The server enforces the split — this only decides what the
+   * console paints. */
+  role: "customer" | "staff" | "admin";
   is_verified: boolean;
   full_name: string | null;
   phone: string | null;
@@ -43,6 +46,9 @@ interface AuthContextValue {
   /** True until the initial /me check resolves — gates render, not access. */
   isLoading: boolean;
   isAdmin: boolean;
+  /** True for staff *and* admin: the roles are a ladder, so a check for
+   * back-office access keeps working for the owner. */
+  isStaff: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   /**
    * Starts registration. Resolves with the server's message — NOT a session.
@@ -196,6 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       isLoading,
       isAdmin: user?.role === "admin",
+      isStaff: user?.role === "admin" || user?.role === "staff",
       login,
       register,
       forgotPassword,

@@ -5,7 +5,8 @@ X-API-Key header, so write endpoints now know *which* user acted, not just
 that someone held the key.
 
   require_current_user -> any logged-in account
-  require_admin        -> role == "admin" (write endpoints, /admin)
+  require_staff        -> role in {"staff", "admin"} (fulfilment endpoints)
+  require_admin        -> role == "admin" (money, catalogue, customers)
 
 Cookie-only auth is CSRF-exposed by construction: a third-party page can make
 a same-"simple-request" POST/PATCH/DELETE and the browser attaches the cookie
@@ -80,10 +81,42 @@ async def require_current_user(
     return user
 
 
+def _reject_blocked(user: User) -> None:
+    """A blocked back-office account loses access immediately, not at token
+    expiry.
+
+    `is_blocked` was only ever checked at login and at checkout, which was
+    enough while every blocked account was a customer: the worst it could do
+    was shop. A blocked staff or admin account holding a live access token is
+    a different problem entirely — blocking a compromised account would
+    revoke its refresh token and leave its admin session working until the
+    access token ran out. Checked here, on every back-office request.
+    """
+    if user.is_blocked:
+        raise HTTPException(
+            status_code=403,
+            detail="This account has been blocked. Contact the shop owner.",
+        )
+
+
+async def require_staff(user: User = Depends(require_current_user)) -> User:
+    """Gate the fulfilment endpoints: see orders, move them, dispatch them.
+
+    Deliberately *not* a gate on anything that moves money or changes what the
+    shop sells. Those keep require_admin, so widening this dependency by
+    accident cannot quietly hand a packer the refund button.
+    """
+    if not user.is_staff:
+        raise HTTPException(status_code=403, detail="Staff access required")
+    _reject_blocked(user)
+    return user
+
+
 async def require_admin(user: User = Depends(require_current_user)) -> User:
     """Gate admin-only endpoints. 403 (not 401) — the caller is known, just not allowed."""
     if user.role != ROLE_ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
+    _reject_blocked(user)
     return user
 
 

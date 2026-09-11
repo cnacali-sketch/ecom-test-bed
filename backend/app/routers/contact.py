@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db_session
-from app.dependencies.auth import require_admin
+from app.dependencies.auth import require_admin, require_staff
 from app.models.contact_message import CONTACT_CATEGORIES, ContactMessage
 from app.services import login_throttle
 from app.services.request_ip import client_ip
@@ -96,13 +96,15 @@ async def create_contact_message(
     return message
 
 
-@router.get("", response_model=list[ContactAdminRead], dependencies=[Depends(require_admin)])
+@router.get("", response_model=list[ContactAdminRead], dependencies=[Depends(require_staff)])
 async def list_contact_messages(db: AsyncSession = Depends(get_db_session)) -> list[ContactMessage]:
     result = await db.execute(select(ContactMessage).order_by(ContactMessage.created_at.desc()))
     return list(result.scalars().all())
 
 
-@router.patch("/{message_id}", response_model=ContactAdminRead, dependencies=[Depends(require_admin)])
+# Marking a message handled is the support job itself. Deleting one stays
+# admin-only — that is the customer's complaint disappearing.
+@router.patch("/{message_id}", response_model=ContactAdminRead, dependencies=[Depends(require_staff)])
 async def update_contact_message(
     message_id: uuid.UUID, is_read: bool, db: AsyncSession = Depends(get_db_session)
 ) -> ContactMessage:

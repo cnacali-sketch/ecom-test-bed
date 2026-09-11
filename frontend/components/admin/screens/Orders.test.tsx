@@ -632,3 +632,78 @@ describe("Orders screen", () => {
     expect(within(row.closest("tr") as HTMLElement).getByText(/flagged/i)).toBeInTheDocument();
   });
 });
+
+describe("a staff session", () => {
+  /**
+   * Staff pick, pack and dispatch. The server refuses payment, refunds,
+   * invoicing, deletion and return decisions for them outright, so every one
+   * of those controls would 403 on click. Painting a button that always fails
+   * reads as the console being broken rather than as the role working.
+   *
+   * These assert the painting only. The boundary itself is
+   * backend/tests/test_roles_staff.py.
+   */
+  test("can still move an order through dispatch", async () => {
+    routeApi({});
+    render(<Orders canManageMoney={false} />);
+    await screen.findByText("praveen@example.com");
+
+    const statuses = screen.getAllByRole("combobox");
+    expect(statuses).toHaveLength(1);
+    await userEvent.selectOptions(statuses[0], "shipped");
+
+    await waitFor(() =>
+      expect(apiFetch).toHaveBeenCalledWith(
+        expect.stringContaining("/status?status=shipped"),
+        expect.objectContaining({ method: "PATCH" }),
+      ),
+    );
+  });
+
+  test("sees whether an order is paid, but cannot change it", async () => {
+    /** Whether the money arrived decides whether it should be packed at all,
+     * so hiding the payment state entirely would break the actual job. */
+    routeApi({ orders: [order({ payment_status: "paid" })] });
+    render(<Orders canManageMoney={false} />);
+    await screen.findByText("praveen@example.com");
+
+    expect(screen.getByText("paid")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "refunded" })).not.toBeInTheDocument();
+  });
+
+  test("is not offered refunds, invoicing or deletion", async () => {
+    routeApi({ orders: [order({ payment_status: "paid" })] });
+    render(<Orders canManageMoney={false} />);
+    await userEvent.click(await screen.findByRole("button", { name: /expand/i }));
+
+    expect(screen.queryByRole("button", { name: /Delete order/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record refund" })).not.toBeInTheDocument();
+    // The whole invoice panel, not just its button: issuing burns a number in
+    // a legal series, and reading one is no more a packer's job than issuing.
+    expect(screen.queryByText("Invoice")).not.toBeInTheDocument();
+  });
+
+  test("can still flag an order for the owner", async () => {
+    /** Without this, somebody who spots a problem has no way to raise it. */
+    routeApi({});
+    render(<Orders canManageMoney={false} />);
+    await userEvent.click(await screen.findByRole("button", { name: /expand/i }));
+
+    expect(screen.getByRole("button", { name: /Flag for review/ })).toBeInTheDocument();
+  });
+
+  test("an owner still gets every money control", async () => {
+    /** The gate defaults to open, so this is the guard against it being wired
+     * the wrong way round and quietly hiding the owner's own buttons. */
+    routeApi({ orders: [order({ payment_status: "paid" })] });
+    render(<Orders />);
+    await userEvent.click(await screen.findByRole("button", { name: /expand/i }));
+
+    // Asserted by the same names the staff test queries for, so those
+    // negatives cannot pass by simply naming a button that never existed.
+    expect(screen.getByRole("button", { name: /Delete order/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record refund" })).toBeInTheDocument();
+    expect(screen.getByText("Invoice")).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox").length).toBeGreaterThan(1);
+  });
+});
