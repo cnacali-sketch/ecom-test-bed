@@ -1,5 +1,6 @@
 """FastAPI application entrypoint."""
 import logging
+import mimetypes
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,6 +81,19 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(error_logs.router)
     fastapi_app.include_router(contact.router)
     fastapi_app.include_router(payments.router)
+
+    # StaticFiles picks the Content-Type from Python's `mimetypes`, which reads
+    # the OS table. The slim container image ships no /etc/mime.types, and this
+    # Python's built-in table has no .webp entry (verified in the running
+    # container: guess_type("a.webp") -> (None, None), while .png and .avif
+    # resolve). Starlette then falls back to text/plain, and because the
+    # Caddyfile sets X-Content-Type-Options: nosniff the browser refuses to
+    # render it — every uploaded WebP showed as a broken image. The admin's
+    # crop editor emits WebP exclusively, so this silently broke every image
+    # uploaded through it, on the storefront as well as in the media library.
+    # Registered here rather than relying on the base image's file list.
+    mimetypes.add_type("image/webp", ".webp")
+    mimetypes.add_type("image/avif", ".avif")
 
     fastapi_app.mount("/media", StaticFiles(directory=media.UPLOAD_DIR), name="media")
 

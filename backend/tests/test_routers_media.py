@@ -92,3 +92,54 @@ async def test_upload_rejects_oversized_file(admin_client: AsyncClient) -> None:
         files={"file": ("big.png", oversized, "image/png")},
     )
     assert resp.status_code == 422
+
+
+def _webp_bytes() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (2, 2), color="teal").save(buf, format="WEBP")
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_uploaded_webp_is_served_as_an_image_not_text(
+    admin_client: AsyncClient,
+) -> None:
+    """The static mount must label WebP as image/webp.
+
+    Regression test for a bug that reached production. StaticFiles takes the
+    Content-Type from Python's `mimetypes`, which reads the OS table. The slim
+    container image ships no /etc/mime.types and that Python's built-in table
+    has no .webp entry, so every uploaded WebP went out as
+    "text/plain; charset=utf-8". With X-Content-Type-Options: nosniff set at
+    the edge the browser refused to render it, and since the admin's crop
+    editor emits WebP exclusively, every image uploaded through it appeared
+    broken -- in the media library and on the storefront.
+    """
+    upload = await admin_client.post(
+        "/api/media",
+        files={"file": ("photo.webp", _webp_bytes(), "image/webp")},
+    )
+    assert upload.status_code == 201
+    url = upload.json()["url"]
+    assert url.endswith(".webp")
+
+    served = await admin_client.get(url)
+
+    assert served.status_code == 200
+    assert served.headers["content-type"] == "image/webp"
+
+
+@pytest.mark.asyncio
+async def test_uploaded_png_is_served_as_an_image(admin_client: AsyncClient) -> None:
+    """The PNG counterpart, which worked all along -- kept so a future change
+    to the mount cannot quietly break the format that was never affected."""
+    upload = await admin_client.post(
+        "/api/media",
+        files={"file": ("photo.png", _png_bytes(), "image/png")},
+    )
+    assert upload.status_code == 201
+
+    served = await admin_client.get(upload.json()["url"])
+
+    assert served.status_code == 200
+    assert served.headers["content-type"] == "image/png"
