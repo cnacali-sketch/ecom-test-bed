@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.middleware.error_logging import ErrorLoggingMiddleware
 from app.routers import (
+    audit,
     auth,
     categories,
     collections,
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(media.router)
     fastapi_app.include_router(invoices.router)
     fastapi_app.include_router(sections.router)
+    fastapi_app.include_router(audit.router)
     fastapi_app.include_router(error_logs.router)
     fastapi_app.include_router(contact.router)
     fastapi_app.include_router(payments.router)

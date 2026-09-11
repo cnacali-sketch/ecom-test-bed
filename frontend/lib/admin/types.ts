@@ -113,6 +113,7 @@ export type AdminView =
   | "fraud"
   | "errorLogs"
   | "messages"
+  | "activity"
   | "tools";
 
 export const LOW_STOCK = 5;

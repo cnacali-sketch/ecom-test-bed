@@ -31,7 +31,7 @@ from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import ROLE_ADMIN, User
 from app.schemas.auth import Address
-from app.services import login_throttle, stock
+from app.services import audit, login_throttle, stock
 from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
 from app.services.razorpay import (
@@ -537,6 +537,20 @@ FULFILMENT_STATUSES = {
 ENDED_STATUSES = {"cancelled", "returned"}
 
 
+def _money_state(order: Order) -> dict:
+    """The fields an audit entry about money needs to compare.
+
+    Pulled into one place so the before- and after-snapshots cannot drift:
+    a field added to one and forgotten in the other silently stops being
+    audited, which is the failure mode nobody notices until it matters.
+    """
+    return {
+        "payment_status": order.payment_status,
+        "refund_amount": order.refund_amount,
+        "refund_reference": order.refund_reference,
+    }
+
+
 async def _apply_status(db: AsyncSession, order: Order, status: str) -> None:
     """Move one order to `status`, keeping its stock reservation honest.
 
@@ -592,11 +606,13 @@ class BulkStatusUpdate(BaseModel):
 # Declared BEFORE /{order_id}/status: FastAPI matches in declaration order, and
 # the parameterised route would otherwise swallow "bulk" as an order id and
 # fail UUID parsing with a 422 that says nothing useful.
-@router.patch("/bulk/status", response_model=list[OrderAdminRead], dependencies=[Depends(require_admin)])
+@router.patch("/bulk/status", response_model=list[OrderAdminRead])
 async def bulk_update_status(
     payload: BulkStatusUpdate,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> list[Order]:
     """Move several orders to the same fulfilment status at once. Admin-gated.
 
@@ -627,7 +643,19 @@ async def bulk_update_status(
         )
 
     for order in orders:
+        was = order.status
         await _apply_status(db, order, payload.status)
+        await audit.record(
+            db,
+            actor=actor,
+            request=request,
+            action="order.status",
+            entity_type="order",
+            entity_id=order.id,
+            entity_label=audit.order_label(order.id),
+            summary=f"Marked as {payload.status} (one of {len(orders)} in a batch)",
+            changes={"status": {"from": was, "to": payload.status}},
+        )
 
     await db.commit()
     for order in orders:
@@ -636,12 +664,14 @@ async def bulk_update_status(
     return orders
 
 
-@router.patch("/{order_id}/status", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/status", response_model=OrderAdminRead)
 async def update_order_status(
     order_id: uuid.UUID,
     status: str,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Order:
     """Update fulfilment status: pending → confirmed → shipped → delivered,
     plus the off-ramps cancelled / returned."""
@@ -659,18 +689,32 @@ async def update_order_status(
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    was = order.status
     await _apply_status(db, order, status)
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="order.status",
+        entity_type="order",
+        entity_id=order.id,
+        entity_label=audit.order_label(order.id),
+        summary=f"Marked as {status}",
+        changes={"status": {"from": was, "to": status}},
+    )
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     await _notify_if_shipped(db, order, status, background_tasks)
     return order
 
 
-@router.patch("/{order_id}/payment", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/payment", response_model=OrderAdminRead)
 async def update_payment_status(
     order_id: uuid.UUID,
     payment_status: str,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Order:
     """Update payment status: unpaid → paid → refunded. Admin-gated.
 
@@ -691,6 +735,8 @@ async def update_payment_status(
     # refunded while refund_amount stayed zero, and the books disagreed with
     # the screen — the exact ambiguity this phase exists to remove. A refund
     # already recorded through /refund is left alone.
+    before = _money_state(order)
+
     if payment_status == "refunded" and order.refund_amount <= 0:
         order.refund_amount = order.total_amount
         order.refunded_at = datetime.now(timezone.utc)
@@ -702,17 +748,30 @@ async def update_payment_status(
         order.refund_reference = None
 
     order.payment_status = payment_status
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="order.payment",
+        entity_type="order",
+        entity_id=order.id,
+        entity_label=audit.order_label(order.id),
+        summary=f"Payment marked {payment_status}",
+        changes=audit.diff(before, _money_state(order)),
+    )
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order
 
 
-@router.patch("/{order_id}/flag", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/flag", response_model=OrderAdminRead)
 async def flag_order(
     order_id: uuid.UUID,
     flagged: bool,
+    request: Request,
     reason: str | None = None,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Order:
     """Manually flag or clear an order for review. Admin-gated.
 
@@ -725,19 +784,37 @@ async def flag_order(
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
+    was = {"flagged": order.flagged, "flag_reason": order.flag_reason}
     order.flagged = flagged
     order.flag_reason = reason if flagged else None
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="order.flag",
+        entity_type="order",
+        entity_id=order.id,
+        entity_label=audit.order_label(order.id),
+        summary=(
+            f"Flagged for review: {reason}" if flagged and reason
+            else "Flagged for review" if flagged
+            else "Cleared the review flag"
+        ),
+        changes=audit.diff(was, {"flagged": order.flagged, "flag_reason": order.flag_reason}),
+    )
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order
 
 
-@router.patch("/{order_id}/shipping", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
+@router.patch("/{order_id}/shipping", response_model=OrderAdminRead)
 async def update_shipping(
     order_id: uuid.UUID,
+    request: Request,
     courier: str | None = None,
     tracking_number: str | None = None,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Order:
     """Set the courier + tracking number for an order. Admin-gated.
 
@@ -748,10 +825,24 @@ async def update_shipping(
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
+    was = {"courier": order.courier, "tracking_number": order.tracking_number}
     if courier is not None:
         order.courier = courier
     if tracking_number is not None:
         order.tracking_number = tracking_number
+    now = {"courier": order.courier, "tracking_number": order.tracking_number}
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="order.shipping",
+        entity_type="order",
+        entity_id=order.id,
+        entity_label=audit.order_label(order.id),
+        summary=f"Dispatch details set: {order.courier or 'no courier'} "
+        f"{order.tracking_number or '(no tracking number)'}",
+        changes=audit.diff(was, now),
+    )
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order
@@ -767,11 +858,13 @@ class RefundCreate(BaseModel):
     reference: str | None = Field(default=None, max_length=128)
 
 
-@router.post("/{order_id}/refund", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
+@router.post("/{order_id}/refund", response_model=OrderAdminRead)
 async def refund_order(
     order_id: uuid.UUID,
     payload: RefundCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Order:
     """Record money going back to the customer. Admin-gated.
 
@@ -808,6 +901,7 @@ async def refund_order(
             ),
         )
 
+    before = _money_state(order)
     already = order.refund_amount or Decimal("0")
     remaining = order.total_amount - already
     if payload.amount > remaining:
@@ -827,16 +921,32 @@ async def refund_order(
         "refunded" if order.refund_amount >= order.total_amount else "partially_refunded"
     )
 
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="order.refund",
+        entity_type="order",
+        entity_id=order.id,
+        entity_label=audit.order_label(order.id),
+        summary=(
+            f"Refunded ₹{payload.amount} of ₹{order.total_amount}"
+            + (f" — {payload.reference}" if payload.reference else "")
+        ),
+        changes=audit.diff(before, _money_state(order)),
+    )
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order
 
 
-@router.delete("/{order_id}", status_code=204, dependencies=[Depends(require_admin)])
+@router.delete("/{order_id}", status_code=204)
 async def delete_order(
     order_id: uuid.UUID,
+    request: Request,
     restock: bool = True,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> None:
     """Permanently delete an order. Admin-gated.
 
@@ -874,8 +984,29 @@ async def delete_order(
     # Guarded on stock_released, not just the `restock` flag: an order that was
     # already cancelled or had its return approved has given its units back
     # once already, and deleting it must not hand them out a second time.
-    if restock and not order.stock_released:
+    restocked = restock and not order.stock_released
+    if restocked:
         await stock.release(db, order.items)
+
+    # Recorded before the delete, while the order can still be read. This is
+    # the one action where the audit entry is the only surviving evidence,
+    # so it carries the totals rather than just the id.
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="order.delete",
+        entity_type="order",
+        entity_id=order.id,
+        entity_label=audit.order_label(order.id),
+        summary=f"Deleted the order (₹{order.total_amount}, {order.payment_status})",
+        changes={
+            "total_amount": {"from": order.total_amount, "to": None},
+            "status": {"from": order.status, "to": None},
+            "payment_status": {"from": order.payment_status, "to": None},
+            "restocked": {"from": None, "to": restocked},
+        },
+    )
 
     await db.delete(order)
     await db.commit()

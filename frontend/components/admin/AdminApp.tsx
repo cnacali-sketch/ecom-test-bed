@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   Sparkles,
   Wrench,
+  History,
   ShoppingBag,
   Ticket,
   TrendingUp,
@@ -60,6 +61,7 @@ import { Fraud } from "./screens/Fraud";
 import { ErrorLogs } from "./screens/ErrorLogs";
 import { Messages } from "./screens/Messages";
 import { Tools } from "./screens/Tools";
+import { Activity } from "./screens/Activity";
 
 // An order still "pending" (no status change at all) past this age is
 // flagged as unattended — long enough to not fire on normal same-day
@@ -404,6 +406,7 @@ export function AdminApp() {
       {navBtn("fraud", ShieldAlert, "Fraud & abuse")}
       {navBtn("errorLogs", AlertTriangle, "Error logs")}
       {navBtn("messages", Mail, "Messages")}
+      {navBtn("activity", History, "Activity")}
       {navBtn("tools", Wrench, "Tools")}
     </nav>
   );
@@ -423,6 +426,7 @@ export function AdminApp() {
     fraud: "Fraud & abuse",
     errorLogs: "Error logs",
     messages: "Messages",
+    activity: "Activity",
     tools: "Tools",
   };
 
@@ -647,6 +651,7 @@ export function AdminApp() {
           {view === "fraud" && <Fraud />}
           {view === "errorLogs" && <ErrorLogs />}
           {view === "messages" && <Messages />}
+          {view === "activity" && <Activity />}
           {view === "tools" && <Tools />}
         </main>
       </div>

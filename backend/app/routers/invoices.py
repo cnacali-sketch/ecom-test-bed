@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,8 @@ from app.db import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.invoice import Invoice
 from app.models.order import Order
+from app.models.user import User
+from app.services import audit
 from app.services.invoicing import build_invoice
 
 router = APIRouter(tags=["invoices"])
@@ -74,10 +76,12 @@ async def _existing(db: AsyncSession, order_id: uuid.UUID) -> Invoice | None:
     "/api/orders/{order_id}/invoice",
     response_model=InvoiceRead,
     status_code=201,
-    dependencies=[Depends(require_admin)],
 )
 async def issue_invoice(
-    order_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)
+    order_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Invoice:
     """Issue the invoice for an order. Admin-gated.
 
@@ -105,6 +109,23 @@ async def issue_invoice(
 
     invoice = await build_invoice(db, order)
     db.add(invoice)
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="invoice.issue",
+        entity_type="invoice",
+        entity_id=order.id,
+        entity_label=invoice.number,
+        summary=(
+            f"Issued {'tax invoice' if invoice.is_tax_invoice else 'bill of supply'} "
+            f"{invoice.number} for ₹{invoice.total}"
+        ),
+        changes={
+            "number": {"from": None, "to": invoice.number},
+            "total": {"from": None, "to": invoice.total},
+        },
+    )
     await db.commit()
     await db.refresh(invoice)
     return invoice
