@@ -23,6 +23,7 @@ from app.models.product import Product
 from app.models.user_event import UserEvent
 from app.services import login_throttle
 from app.services.request_ip import client_ip, hash_ip
+from app.services.user_agent import classify_browser, classify_device
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -52,39 +53,12 @@ CHECKOUT_FLAG_THRESHOLD = 5
 COUPON_ABUSE_MIN_ORDERS = 3
 COUPON_ABUSE_MIN_ACCOUNTS = 2
 
-# Deliberately coarse, regex-based UA parsing — good enough to bucket
-# "mobile vs desktop" and "which browser" for a dashboard chart, not meant to
-# be a precise UA-sniffing library. Order matters: check bot/tablet/mobile
-# before falling through to desktop.
-_DEVICE_PATTERNS = [
-    ("Bot", re.compile(r"bot|crawler|spider|slurp", re.I)),
-    ("Tablet", re.compile(r"ipad|tablet", re.I)),
-    ("Mobile", re.compile(r"mobile|iphone|android", re.I)),
-]
-_BROWSER_PATTERNS = [
-    ("Edge", re.compile(r"edg/", re.I)),
-    ("Chrome", re.compile(r"chrome/", re.I)),
-    ("Safari", re.compile(r"safari/", re.I)),  # after Chrome — Chrome UAs also contain "Safari/"
-    ("Firefox", re.compile(r"firefox/", re.I)),
-]
-
-
-def _classify_device(user_agent: str | None) -> str:
-    if not user_agent:
-        return "Unknown"
-    for label, pattern in _DEVICE_PATTERNS:
-        if pattern.search(user_agent):
-            return label
-    return "Desktop"
-
-
-def _classify_browser(user_agent: str | None) -> str:
-    if not user_agent:
-        return "Unknown"
-    for label, pattern in _BROWSER_PATTERNS:
-        if pattern.search(user_agent):
-            return label
-    return "Other"
+# UA classification lives in app/services/user_agent.py so this dashboard and
+# the admin Orders screen cannot drift into reporting different labels for the
+# same string. Aliased rather than imported under their own names to keep the
+# call sites below unchanged.
+_classify_device = classify_device
+_classify_browser = classify_browser
 
 
 class EventCreate(BaseModel):
