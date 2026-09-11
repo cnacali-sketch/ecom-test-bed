@@ -180,7 +180,15 @@ export function MediaLibrary() {
           setDrag(false);
           add(e.dataTransfer.files);
         }}
-        onClick={() => inputRef.current?.click()}
+        // Guarded against the input's own click. inputRef.current.click()
+        // dispatches a click that bubbles back up to this div, which would
+        // call click() again and fire onChange twice — uploading every chosen
+        // file two times. The live media library has five such pairs, each
+        // byte-identical and written in the same second.
+        onClick={(e) => {
+          if (e.target === inputRef.current) return;
+          inputRef.current?.click();
+        }}
         className={`mb-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed py-10 text-center transition ${drag ? "border-teal bg-teal/5" : "border-ink/20 hover:bg-ink/[0.02]"}`}
       >
         <UploadCloud className="mb-2 h-8 w-8 text-ink-soft/60" />
