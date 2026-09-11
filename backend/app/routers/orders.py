@@ -31,7 +31,7 @@ from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import ROLE_ADMIN, User
 from app.schemas.auth import Address
-from app.services import login_throttle
+from app.services import login_throttle, stock
 from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
 from app.services.razorpay import (
@@ -159,45 +159,29 @@ class OrderAdminRead(OrderRead):
 
 
 async def _reserve_stock(db: AsyncSession, items: list[OrderItemCreate]) -> None:
-    """Lock each distinct product and decrement attrs["stock"] by the quantity
-    ordered. 409 if a product tracks stock and there isn't enough. Products
-    with no numeric stock in attrs are untracked (unlimited) — most of the
-    seed catalogue doesn't set it, and that must stay a valid, sellable state
-    rather than an oversell-guard false positive.
+    """Take the ordered units out of stock, refusing the order if any product
+    cannot cover its line.
 
-    A product_id with no matching row is likewise treated as untracked rather
-    than a hard error: order creation has never validated product existence
-    (there's no FK enforcement in the test DB either), so keeping that the
-    same avoids turning "stock tracking" into an unrelated breaking change.
+    The mechanics live in services/stock.py so that reserving and releasing
+    are one implementation rather than two that can drift — which is exactly
+    how cancelling an order came to lose stock silently. This function is the
+    checkout-specific part: what a shortage means (409, with the product named)
+    and nothing else.
 
-    Row-level locking (SELECT ... FOR UPDATE) makes two concurrent orders for
-    the last unit resolve correctly instead of both succeeding.
+    Untracked products — no numeric attrs["stock"], which is most of the seed
+    catalogue — are unlimited and neither checked nor decremented. A product_id
+    with no matching row is treated the same way: order creation has never
+    validated product existence, and turning that into a hard error here would
+    be an unrelated breaking change.
     """
-    quantities: dict[uuid.UUID, int] = {}
-    for item in items:
-        quantities[item.product_id] = quantities.get(item.product_id, 0) + item.quantity
-
-    for product_id, qty in quantities.items():
-        result = await db.execute(
-            select(Product).where(Product.id == product_id).with_for_update()
+    short = await stock.shortfalls(db, items)
+    if short:
+        name, available, wanted = short[0]
+        raise HTTPException(
+            status_code=409,
+            detail=f"Not enough stock for {name}: {available} left, {wanted} requested",
         )
-        product = result.scalar_one_or_none()
-        if product is None:
-            continue  # unknown product — nothing to track or decrement
-
-        stock = product.attrs.get("stock")
-        if not isinstance(stock, (int, float)):
-            continue  # untracked — no oversell check, no decrement
-
-        if stock < qty:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Not enough stock for {product.name}: {stock} left, {qty} requested",
-            )
-        remaining = stock - qty
-        product.attrs = {**product.attrs, "stock": remaining}
-        if remaining <= 0:
-            product.in_stock = False
+    await stock.reserve(db, items)
 
 
 async def _authoritative_pricing(
@@ -526,10 +510,41 @@ async def update_order_status(
     valid = {"pending", "confirmed", "shipped", "delivered", "cancelled", "returned"}
     if status not in valid:
         raise HTTPException(status_code=422, detail=f"status must be one of {valid}")
-    result = await db.execute(select(Order).where(Order.id == order_id))
+    # Items are eager-loaded because releasing or re-reserving stock reads
+    # them; a lazy load here would raise MissingGreenlet under asyncio rather
+    # than quietly issuing a query.
+    result = await db.execute(
+        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
+    )
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
+    # An order holds its stock until it ends. Cancelling or returning ends it;
+    # moving back to an active status takes the units again. Both are guarded
+    # by order.stock_released so the operation is idempotent — clicking
+    # "cancelled" twice, or deleting an order that was already cancelled, must
+    # not hand out stock the shop never got back. See services/stock.py.
+    ENDED = {"cancelled", "returned"}
+    if status in ENDED and not order.stock_released:
+        await stock.release(db, order.items)
+        order.stock_released = True
+    elif status not in ENDED and order.stock_released:
+        # The units freed by the cancellation may have been sold since, so this
+        # can legitimately fail. Refuse rather than push stock negative.
+        short = await stock.shortfalls(db, order.items)
+        if short:
+            name, available, wanted = short[0]
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Cannot reinstate this order: not enough stock for {name} "
+                    f"({available} left, {wanted} needed). It was released when the "
+                    "order was cancelled and has since been sold."
+                ),
+            )
+        await stock.reserve(db, order.items)
+        order.stock_released = False
+
     order.status = status
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
@@ -657,24 +672,11 @@ async def delete_order(
             "before deleting, so the payment record is not lost.",
         )
 
-    if restock:
-        for item in order.items:
-            product_result = await db.execute(
-                select(Product).where(Product.id == item.product_id).with_for_update()
-            )
-            product = product_result.scalar_one_or_none()
-            if product is None:
-                continue
-            stock = (product.attrs or {}).get("stock")
-            if not isinstance(stock, (int, float)):
-                continue  # untracked product — same rule _reserve_stock uses
-            restored = stock + item.quantity
-            product.attrs = {**product.attrs, "stock": restored}
-            # _reserve_stock sets in_stock False when it hits zero, so putting
-            # the units back has to undo that too — otherwise deleting an order
-            # leaves the product permanently unsellable.
-            if restored > 0:
-                product.in_stock = True
+    # Guarded on stock_released, not just the `restock` flag: an order that was
+    # already cancelled or had its return approved has given its units back
+    # once already, and deleting it must not hand them out a second time.
+    if restock and not order.stock_released:
+        await stock.release(db, order.items)
 
     await db.delete(order)
     await db.commit()

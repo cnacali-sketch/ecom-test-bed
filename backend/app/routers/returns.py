@@ -22,6 +22,7 @@ from app.dependencies.auth import require_admin
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.return_request import RETURN_STATUSES, ReturnRequest
+from app.services import stock
 
 router = APIRouter(prefix="/api/returns", tags=["returns"])
 
@@ -78,29 +79,6 @@ async def list_return_requests(db: AsyncSession = Depends(get_db_session)) -> li
     return list(result.scalars().all())
 
 
-async def _restock_items(db: AsyncSession, items: list[OrderItem]) -> None:
-    """Mirror of orders.py's _reserve_stock, in reverse: row-lock each
-    distinct product and add the quantity back. Untracked products (no
-    numeric attrs.stock) are skipped — there's nothing to restock if it was
-    never decremented in the first place."""
-    quantities: dict[uuid.UUID, int] = {}
-    for item in items:
-        quantities[item.product_id] = quantities.get(item.product_id, 0) + item.quantity
-
-    for product_id, qty in quantities.items():
-        result = await db.execute(select(Product).where(Product.id == product_id).with_for_update())
-        product = result.scalar_one_or_none()
-        if product is None:
-            continue
-        stock = product.attrs.get("stock")
-        if not isinstance(stock, (int, float)):
-            continue
-        new_stock = stock + qty
-        product.attrs = {**product.attrs, "stock": new_stock}
-        if new_stock > 0:
-            product.in_stock = True
-
-
 @router.patch("/{request_id}", response_model=ReturnRequestRead, dependencies=[Depends(require_admin)])
 async def update_return_request(
     request_id: uuid.UUID,
@@ -141,7 +119,12 @@ async def update_return_request(
             if order.payment_status == "paid":
                 order.payment_status = "refunded"
             order.status = "returned"
-            await _restock_items(db, order.items)
+            # Guarded, and the flag is set here: an order cancelled before the
+            # return was approved has already given its units back, and a later
+            # delete must not give them back a third time. See services/stock.py.
+            if not order.stock_released:
+                await stock.release(db, order.items)
+                order.stock_released = True
 
     await db.commit()
     await db.refresh(request)

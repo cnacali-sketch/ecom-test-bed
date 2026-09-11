@@ -71,6 +71,13 @@ class Order(Base):
     # order is a specific, high-stakes action worth being able to act on
     # directly (block at the firewall) if it turns out fraudulent, not just
     # group with other visits.
+    # True once this order's units have been given back to stock. Tracked as
+    # state rather than inferred from `status`, because approving a return
+    # already restocks AND sets status to "returned" — any rule of the form
+    # "restock when the status becomes returned" would count those units
+    # twice. Every release path checks this flag, so cancel / return / delete
+    # compose safely in any order. See services/stock.py.
+    stock_released: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # The browser that placed the order, kept verbatim so the admin can tell a
     # phone order from a desktop one and spot an obvious script. Same 256-char

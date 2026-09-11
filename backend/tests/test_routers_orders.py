@@ -951,3 +951,188 @@ async def test_blank_search_still_lists_everything(
 @pytest.mark.asyncio
 async def test_search_is_admin_only(customer_client: AsyncClient) -> None:
     assert (await customer_client.get("/api/orders/all?q=anything")).status_code == 403
+
+
+# ---- Stock release: every exit from an order returns its units exactly once ----
+
+
+async def _product_with_stock(db_session: AsyncSession, sku: str, stock: int) -> Product:
+    product = Product(
+        sku=sku,
+        slug=sku.lower(),
+        name=f"Stocked {sku}",
+        price=Decimal("300.00"),
+        mrp=Decimal("300.00"),
+        in_stock=True,
+        attrs={"stock": stock},
+    )
+    db_session.add(product)
+    await db_session.commit()
+    return product
+
+
+async def _order_for(client: AsyncClient, product: Product, qty: int) -> str:
+    resp = await client.post(
+        "/api/orders",
+        json={
+            "user_id": "stock-test@example.com",
+            "items": [
+                {"product_id": str(product.id), "quantity": qty, "unit_price": "300.00"}
+            ],
+            "terms_accepted": True,
+            "terms_version": "2026-07-22",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_cancelling_an_order_returns_its_stock(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Cancelling used to change a word and nothing else.
+
+    Placing the order reserved the units; cancelling left them reserved
+    forever, so every cancellation permanently removed sellable stock the shop
+    still physically owned.
+    """
+    product = await _product_with_stock(db_session, "CANCEL-1", 10)
+    order_id = await _order_for(client, product, 3)
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 7
+
+    resp = await admin_client.patch(f"/api/orders/{order_id}/status?status=cancelled")
+
+    assert resp.status_code == 200
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 10
+
+
+@pytest.mark.asyncio
+async def test_cancelling_twice_does_not_restock_twice(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Idempotence is the whole point of tracking release as state rather than
+    reacting to a status transition — a double click must not invent stock."""
+    product = await _product_with_stock(db_session, "CANCEL-2", 10)
+    order_id = await _order_for(client, product, 4)
+
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=cancelled")
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=cancelled")
+
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 10
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_cancelled_order_does_not_restock_twice(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The two fixes have to agree with each other. Cancelling releases the
+    stock; deleting the same order afterwards must not release it again."""
+    product = await _product_with_stock(db_session, "CANCEL-3", 10)
+    order_id = await _order_for(client, product, 5)
+
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=cancelled")
+    await admin_client.delete(f"/api/orders/{order_id}")
+
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 10
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_returned_order_does_not_restock_twice(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Approving a return already restocks and sets the order to returned.
+    Deleting that order afterwards must not add the units a second time — a
+    double-restock that was reachable before stock release became a flag."""
+    product = await _product_with_stock(db_session, "RETURN-1", 10)
+    order_id = await _order_for(client, product, 2)
+    # A return can only be raised against a delivered order.
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=delivered")
+    created = await client.post(
+        "/api/returns", json={"order_id": order_id, "reason": "Damaged in transit"}
+    )
+    assert created.status_code == 201, created.text
+    approved = await admin_client.patch(
+        f"/api/returns/{created.json()['id']}?status=approved"
+    )
+    assert approved.status_code == 200
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 10
+
+    await admin_client.delete(f"/api/orders/{order_id}")
+
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 10
+
+
+@pytest.mark.asyncio
+async def test_reinstating_a_cancelled_order_takes_the_stock_back(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Cancelling by mistake and putting the order back must re-reserve, or the
+    shop would be counting units it has already promised to someone."""
+    product = await _product_with_stock(db_session, "REINSTATE-1", 10)
+    order_id = await _order_for(client, product, 6)
+
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=cancelled")
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 10
+
+    resp = await admin_client.patch(f"/api/orders/{order_id}/status?status=confirmed")
+
+    assert resp.status_code == 200
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 4
+
+
+@pytest.mark.asyncio
+async def test_reinstating_is_refused_when_the_stock_is_gone(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The units freed by a cancellation can be sold to someone else in the
+    meantime. Reinstating then has to fail loudly rather than push stock
+    negative and oversell."""
+    product = await _product_with_stock(db_session, "REINSTATE-2", 5)
+    order_id = await _order_for(client, product, 5)
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=cancelled")
+    # Someone else buys the freed units.
+    await _order_for(client, product, 5)
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 0
+
+    resp = await admin_client.patch(f"/api/orders/{order_id}/status?status=confirmed")
+
+    assert resp.status_code == 409
+    assert "stock" in resp.json()["detail"].lower()
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 0
+
+
+@pytest.mark.asyncio
+async def test_untracked_products_are_unaffected_by_cancellation(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Most of the seeded catalogue has no numeric stock at all. Those are
+    unlimited, and a cancellation must not invent a stock number for them."""
+    product = Product(
+        sku="UNTRACKED-1",
+        slug="untracked-1",
+        name="Untracked",
+        price=Decimal("300.00"),
+        mrp=Decimal("300.00"),
+        in_stock=True,
+        attrs={},
+    )
+    db_session.add(product)
+    await db_session.commit()
+    order_id = await _order_for(client, product, 2)
+
+    resp = await admin_client.patch(f"/api/orders/{order_id}/status?status=cancelled")
+
+    assert resp.status_code == 200
+    await db_session.refresh(product)
+    assert "stock" not in (product.attrs or {})
