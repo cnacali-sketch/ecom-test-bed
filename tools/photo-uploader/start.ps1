@@ -69,6 +69,22 @@ if ((Invoke-Quiet $exe ($prefix + @("-c", "import PIL"))) -ne 0) {
 }
 Write-Host "  Pillow: ok"
 
+# Antivirus HTTPS scanning (Avast, AVG, Kaspersky, ESET, Bitdefender) re-signs
+# every certificate with a locally installed root. Those roots leave
+# basicConstraints non-critical, which OpenSSL 3.x rejects and Windows accepts,
+# so Python alone cannot reach the API while every browser on the same machine
+# can. truststore makes Python verify through Windows. A no-op otherwise.
+if ((Invoke-Quiet $exe ($prefix + @("-c", "import truststore"))) -ne 0) {
+    Write-Host "  installing truststore..." -ForegroundColor Yellow
+    if ((Invoke-Quiet $exe ($prefix + @("-m", "pip", "install", "--quiet", "--disable-pip-version-check", "truststore"))) -eq 0) {
+        Write-Host "  truststore: ok"
+    } else {
+        Write-Host "  truststore: skipped (needed only if antivirus scans HTTPS)" -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host "  truststore: ok"
+}
+
 # Optional. Only needed if an iPhone is set to keep original HEIC files —
 # Safari normally hands over a JPEG when a photo goes through a web form.
 if ((Invoke-Quiet $exe ($prefix + @("-c", "import pillow_heif"))) -ne 0) {

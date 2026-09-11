@@ -64,6 +64,25 @@ try:
 except ImportError:
     HEIC_SUPPORTED = False
 
+# Antivirus "web shield" features (Avast, AVG, Kaspersky, ESET, Bitdefender)
+# intercept HTTPS and re-sign every certificate with a root they install
+# locally. Those roots routinely leave basicConstraints unmarked as critical,
+# which OpenSSL 3.x refuses outright:
+#
+#   CERTIFICATE_VERIFY_FAILED: Basic Constraints of CA cert not marked critical
+#
+# Browsers and curl never hit this because they verify through the operating
+# system, which is more forgiving about that flag. truststore makes Python do
+# the same. The connection is still fully verified -- by Windows/macOS instead
+# of by OpenSSL's own parser -- so this is not a downgrade to an unverified
+# context, and it is a no-op on a machine with no interception.
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 DEFAULT_API = "https://api.savvyinteal.com"
 
 # Mirrors IMG_SPECS in frontend/lib/admin/types.ts. `w`/`h` are 2x what the
@@ -86,6 +105,27 @@ WEBP_METHOD = 6  # 0 fastest .. 6 smallest; a few hundred ms per image, worth it
 
 
 # --------------------------------------------------------------- API client --
+
+def _network_help(base: str, error: Exception) -> str:
+    """Turn a connection failure into something the shop owner can act on."""
+    text = str(error)
+    if "CERTIFICATE_VERIFY_FAILED" in text:
+        return (
+            f"Could not verify the HTTPS certificate for {base}.\n\n"
+            "  This is almost always antivirus HTTPS scanning (Avast, AVG,\n"
+            "  Kaspersky, ESET, Bitdefender) re-signing the certificate with a\n"
+            "  root that Python refuses but Windows accepts. Fix it with:\n\n"
+            "      python -m pip install truststore\n\n"
+            "  then run this again. Failing that, turn off the antivirus's\n"
+            f"  'web shield' / 'HTTPS scanning' option.\n\n  ({text})"
+        )
+    return (
+        f"Could not reach {base}.\n\n"
+        "  Check this PC is online and that the site is up. If large requests\n"
+        "  hang while small ones work, it is usually an MTU problem on the\n"
+        f"  connection rather than the server.\n\n  ({text})"
+    )
+
 
 class AdminApi:
     """Cookie-session client for the admin API.
@@ -124,6 +164,10 @@ class AdminApi:
                 return response.status, response.read()
         except urllib.error.HTTPError as error:
             return error.code, error.read()
+        except urllib.error.URLError as error:
+            # Without this the first TLS or DNS failure surfaces as a raw
+            # traceback, which says nothing useful to whoever is running this.
+            raise SystemExit(_network_help(self.base, error)) from None
 
     def login(self, email: str, password: str) -> None:
         payload = json.dumps({"email": email, "password": password}).encode()
@@ -417,8 +461,13 @@ def main() -> None:
         f"      http://{lan_ip()}:{args.port}\n"
         f"  On this PC:\n"
         f"      http://localhost:{args.port}\n\n"
-        f"  Windows may ask to allow Python through the firewall — say yes for\n"
-        f"  Private networks, or the phone cannot reach it.\n\n"
+        f"  If the phone cannot open that URL, it is the Windows firewall.\n"
+        f"  Windows only offers to allow Python on Private networks, and most\n"
+        f"  Wi-Fi is classified Public, so the prompt does not help there. Run\n"
+        f"  this once in an ADMIN PowerShell instead:\n\n"
+        f"      New-NetFirewallRule -DisplayName 'Savvy photo uploader' "
+        f"-Direction Inbound -Protocol TCP -LocalPort {args.port} "
+        f"-Action Allow -Profile Any -RemoteAddress LocalSubnet\n\n"
         f"  Ctrl+C to stop.\n"
     )
     try:

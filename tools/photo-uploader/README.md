@@ -23,8 +23,43 @@ for the admin email and password once, then prints two URLs:
 
 Anyone on the same Wi-Fi who opens that URL can upload. Ctrl+C to stop.
 
-**Windows will ask to allow Python through the firewall the first time.** Say
-yes for *Private* networks, or phones cannot reach it.
+### If the phone cannot open that URL
+
+Almost always the Windows firewall. Windows offers to allow Python only on
+*Private* networks, but most Wi-Fi is classified **Public** — check with
+`Get-NetConnectionProfile` — so that prompt does not help, and the phone's
+connection is dropped before Python ever sees it.
+
+Run this once in an **admin** PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "Savvy In Teal photo uploader (LAN only)" `
+  -Direction Inbound -Protocol TCP -LocalPort 8765 `
+  -Action Allow -Profile Any -RemoteAddress LocalSubnet
+```
+
+`LocalSubnet` keeps it to the network the PC is currently on and follows the PC
+between networks, so switching Wi-Fi does not break it. Remove it with
+`Remove-NetFirewallRule -DisplayName "Savvy In Teal photo uploader (LAN only)"`.
+
+If the page still will not load, the router is isolating clients from each
+other (often called AP isolation or client isolation) — that is a router
+setting, not a PC one.
+
+### If sign-in fails with a certificate error
+
+Antivirus HTTPS scanning (Avast, AVG, Kaspersky, ESET, Bitdefender) re-signs
+every certificate with a root it installs locally. Those roots leave
+`basicConstraints` non-critical, which OpenSSL 3.x rejects and Windows accepts —
+so Python cannot reach the API while every browser on the same PC can:
+
+```
+CERTIFICATE_VERIFY_FAILED: Basic Constraints of CA cert not marked critical
+```
+
+`start.ps1` installs `truststore` for this, which makes Python verify through
+Windows instead. Still fully verified, just not by OpenSSL's own parser. Turning
+off the antivirus's "web shield" works too.
 
 To skip the credential prompt (e.g. for a shortcut):
 
