@@ -19,6 +19,7 @@ from app.routers import (
     events,
     health,
     inventory,
+    invoices,
     media,
     orders,
     payments,
@@ -77,6 +78,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(returns.router)
     fastapi_app.include_router(categories.router)
     fastapi_app.include_router(media.router)
+    fastapi_app.include_router(invoices.router)
     fastapi_app.include_router(sections.router)
     fastapi_app.include_router(error_logs.router)
     fastapi_app.include_router(contact.router)

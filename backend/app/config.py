@@ -67,6 +67,26 @@ class Settings(BaseSettings):
     # --- Email (P2 groundwork; used today by the enumeration-safe /register) ---
     # Dev stub logs the message to the app logger instead of sending it, so the
     # register flow is exercisable without an SMTP server.
+    # ---- GST invoicing -------------------------------------------------
+    # Left blank on purpose. A shop below the GST registration threshold is
+    # not registered and must NOT issue a tax invoice — with no GSTIN set,
+    # invoicing produces a plain bill of supply carrying no tax lines, which
+    # is the correct document for an unregistered seller. Filling this in is
+    # what turns on tax invoices.
+    shop_gstin: str = ""
+    shop_legal_name: str = "Savvy In Teal"
+    # The seller's state decides CGST+SGST versus IGST for every order.
+    shop_state: str = "Karnataka"
+    shop_address: str = ""
+    # Prefix for the invoice series: SIT/26-27/0001.
+    invoice_prefix: str = "SIT"
+    # Fallbacks for products that carry no HSN or rate of their own. Neither is
+    # a legal default — HSN classification and its rate are the shop's call
+    # with their accountant, and these only exist so an invoice is never
+    # silently issued with a blank code.
+    default_hsn: str = ""
+    default_gst_rate: str = "0"
+
     email_dev_stub: bool = True
     email_from: str = "no-reply@savvyinteal.local"
     smtp_host: str = ""

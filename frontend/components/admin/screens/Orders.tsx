@@ -71,6 +71,42 @@ interface Order {
   created_at: string;
   items: OrderItem[];
 }
+interface InvoiceLine {
+  description: string;
+  sku: string;
+  hsn: string;
+  quantity: number;
+  unit_price: string;
+  gross: string;
+  gst_rate: string;
+  taxable_value: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+}
+interface Invoice {
+  id: string;
+  order_id: string;
+  number: string;
+  issued_at: string;
+  /** False means a bill of supply — the shop has no GSTIN, so no tax was
+   * charged and none is shown. */
+  is_tax_invoice: boolean;
+  seller_name: string;
+  seller_gstin: string | null;
+  seller_address: string;
+  seller_state: string;
+  buyer_name: string;
+  buyer_address: string;
+  place_of_supply: string;
+  intra_state: boolean;
+  taxable_value: string;
+  cgst: string;
+  sgst: string;
+  igst: string;
+  total: string;
+  lines: InvoiceLine[];
+}
 interface ReturnRequest {
   id: string;
   order_id: string;
@@ -190,6 +226,10 @@ export function Orders({
   const [bulkBusy, setBulkBusy] = useState(false);
   /** Orders whose packing slips are staged for printing. */
   const [slips, setSlips] = useState<Order[] | null>(null);
+  /** Invoices already fetched or issued, keyed by order id. */
+  const [invoices, setInvoices] = useState<Record<string, Invoice>>({});
+  /** The invoice staged for printing, if any. */
+  const [printInvoice, setPrintInvoice] = useState<Invoice | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -409,6 +449,45 @@ export function Orders({
     } finally {
       setBulkBusy(false);
     }
+  }
+
+  /**
+   * Issue the invoice for an order, or fetch the one it already has.
+   *
+   * Issuing is deliberately a decision someone makes, not something that
+   * happens on payment: an invoice number is a legal record, and one raised
+   * against a test order cannot be quietly removed without leaving a hole in
+   * the series.
+   */
+  async function loadInvoice(orderId: string, issue: boolean): Promise<void> {
+    const res = await apiFetch(
+      `/api/orders/${orderId}/invoice`,
+      issue ? { method: "POST" } : undefined,
+    );
+    if (res?.ok) {
+      const invoice = (await res.json().catch(() => null)) as Invoice | null;
+      if (invoice?.id) {
+        setInvoices((cur) => ({ ...cur, [orderId]: invoice }));
+        setPatchError(null);
+      }
+      return;
+    }
+    // A 404 on the fetch just means none has been issued yet — that is the
+    // normal state of a new order, not a failure worth shouting about.
+    if (!issue && res?.status === 404) return;
+    if (!res) {
+      setPatchError("Couldn't reach the server. Check your connection and try again.");
+    } else if (res.status === 401 || res.status === 403) {
+      setPatchError("Your admin session has expired. Please log out and log back in.");
+    } else {
+      const body = await res.json().catch(() => null);
+      setPatchError(body?.detail ?? `Couldn't issue the invoice (HTTP ${res.status}).`);
+    }
+  }
+
+  function printOneInvoice(invoice: Invoice) {
+    setPrintInvoice(invoice);
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
   }
 
   /** Stage the ticked orders' slips, then hand the browser its print dialog. */
@@ -668,7 +747,14 @@ export function Orders({
                       <button
                         type="button"
                         aria-label={expanded ? "Collapse" : "Expand shipping details"}
-                        onClick={() => setExpandedId(expanded ? null : o.id)}
+                        onClick={() => {
+                          const next = expanded ? null : o.id;
+                          setExpandedId(next);
+                          // Ask whether this order already has an invoice the
+                          // first time it is opened, so the button can say
+                          // "View" rather than offering to issue a second one.
+                          if (next && !invoices[o.id]) loadInvoice(o.id, false);
+                        }}
                         className="grid h-6 w-6 place-items-center text-ink-soft hover:text-ink"
                       >
                         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -755,6 +841,12 @@ export function Orders({
                           </button>
                         )}
                         <OrderLines order={o} />
+                        <InvoicePanel
+                          order={o}
+                          invoice={invoices[o.id] ?? null}
+                          onIssue={() => loadInvoice(o.id, true)}
+                          onPrint={printOneInvoice}
+                        />
                         <RefundPanel
                           order={o}
                           onRefund={(amount, reference) => refundOrder(o.id, amount, reference)}
@@ -786,6 +878,7 @@ export function Orders({
           in the DOM during normal use. Kept mounted afterwards so a second
           Ctrl+P reprints the same batch rather than an empty page. */}
       {slips && <PackingSlips orders={slips} />}
+      {printInvoice && <PrintableInvoice invoice={printInvoice} />}
     </div>
   );
 }
@@ -846,6 +939,217 @@ function OrderLines({ order }: { order: Order }) {
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Issue or reprint the invoice for one order. */
+function InvoicePanel({
+  order,
+  invoice,
+  onIssue,
+  onPrint,
+}: {
+  order: Order;
+  invoice: Invoice | null;
+  onIssue: () => Promise<void>;
+  onPrint: (invoice: Invoice) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const payable = order.payment_status !== "unpaid";
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 border-t border-ink/10 pt-4">
+      <div className="flex-1">
+        <p className="text-xs uppercase tracking-wide text-ink-soft">Invoice</p>
+        {invoice ? (
+          <p className="mt-1 text-sm text-ink">
+            <span className="select-all font-mono font-semibold">{invoice.number}</span>
+            <span className="ml-2 text-xs text-ink-soft">
+              {invoice.is_tax_invoice ? "Tax invoice" : "Bill of supply"} ·{" "}
+              {formatPlaced(invoice.issued_at)}
+            </span>
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-ink-soft">
+            {payable
+              ? "Not issued yet. Issuing takes the next number in the series."
+              : "An invoice can be issued once this order is marked paid."}
+          </p>
+        )}
+      </div>
+      {invoice ? (
+        <button
+          type="button"
+          onClick={() => onPrint(invoice)}
+          className="flex items-center gap-1.5 border border-ink/15 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:border-teal hover:text-teal"
+        >
+          <Printer className="h-3.5 w-3.5" /> Print invoice
+        </button>
+      ) : (
+        <button
+          type="button"
+          disabled={!payable || busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onIssue();
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="border border-teal px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-teal hover:bg-teal hover:text-white disabled:cursor-not-allowed disabled:border-ink/20 disabled:text-ink-soft/60 disabled:hover:bg-transparent"
+        >
+          {busy ? "Issuing…" : "Issue invoice"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The invoice as a document.
+ *
+ * Every figure comes from the stored invoice, never recomputed here: what was
+ * issued is what must print, even after a price or an HSN code is corrected
+ * later. The layout follows what an Indian tax invoice has to show — seller
+ * GSTIN, buyer, place of supply, HSN per line, and the tax split.
+ */
+function PrintableInvoice({ invoice }: { invoice: Invoice }) {
+  const cell: React.CSSProperties = { padding: "4px 6px", fontSize: 11, textAlign: "left" };
+  const num: React.CSSProperties = { ...cell, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+
+  return (
+    <div id="packing-slips" aria-hidden>
+      <style>{`
+        #packing-slips { display: none; }
+        @media print {
+          body > * { visibility: hidden !important; }
+          #packing-slips, #packing-slips * { visibility: visible !important; }
+          #packing-slips {
+            display: block !important;
+            position: absolute; left: 0; top: 0; width: 100%;
+            color: #000; background: #fff;
+          }
+          .slip { padding: 16mm 14mm; }
+          .slip table { width: 100%; border-collapse: collapse; }
+          .slip th, .slip td { border: 1px solid #666; }
+        }
+      `}</style>
+      <section className="slip">
+        <div style={{ textAlign: "center", marginBottom: 10 }}>
+          <strong style={{ fontSize: 15, letterSpacing: "0.06em" }}>
+            {invoice.is_tax_invoice ? "TAX INVOICE" : "BILL OF SUPPLY"}
+          </strong>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 24 }}>
+          <div style={{ flex: 1, fontSize: 11, lineHeight: 1.5 }}>
+            <strong style={{ fontSize: 13 }}>{invoice.seller_name}</strong>
+            <div style={{ whiteSpace: "pre-line" }}>{invoice.seller_address}</div>
+            {invoice.seller_gstin && <div>GSTIN: {invoice.seller_gstin}</div>}
+            <div>State: {invoice.seller_state}</div>
+          </div>
+          <div style={{ fontSize: 11, lineHeight: 1.5, textAlign: "right" }}>
+            <div>
+              Invoice no: <strong>{invoice.number}</strong>
+            </div>
+            <div>Date: {formatPlaced(invoice.issued_at)}</div>
+            <div>Order: #{invoice.order_id.slice(0, 8)}</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10, fontSize: 11, lineHeight: 1.5 }}>
+          <div style={{ fontWeight: 700 }}>Billed to</div>
+          <div>{invoice.buyer_name || "—"}</div>
+          <div style={{ whiteSpace: "pre-line" }}>{invoice.buyer_address}</div>
+          {/* Required on the face of the invoice: it is what decides whether
+              the tax is CGST+SGST or IGST. */}
+          <div>Place of supply: {invoice.place_of_supply || "—"}</div>
+        </div>
+
+        <table style={{ marginTop: 10 }}>
+          <thead>
+            <tr>
+              <th style={cell}>Description</th>
+              <th style={cell}>HSN</th>
+              <th style={num}>Qty</th>
+              <th style={num}>Taxable</th>
+              {invoice.is_tax_invoice &&
+                (invoice.intra_state ? (
+                  <>
+                    <th style={num}>CGST</th>
+                    <th style={num}>SGST</th>
+                  </>
+                ) : (
+                  <th style={num}>IGST</th>
+                ))}
+              <th style={num}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoice.lines.map((line, i) => (
+              <tr key={`${line.sku}-${i}`}>
+                <td style={cell}>{line.description}</td>
+                <td style={cell}>{line.hsn || "—"}</td>
+                <td style={num}>{line.quantity}</td>
+                <td style={num}>{line.taxable_value}</td>
+                {invoice.is_tax_invoice &&
+                  (invoice.intra_state ? (
+                    <>
+                      <td style={num}>{line.cgst}</td>
+                      <td style={num}>{line.sgst}</td>
+                    </>
+                  ) : (
+                    <td style={num}>{line.igst}</td>
+                  ))}
+                <td style={num}>{line.gross}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+          <table style={{ width: "52%" }}>
+            <tbody>
+              <tr>
+                <td style={cell}>Taxable value</td>
+                <td style={num}>{invoice.taxable_value}</td>
+              </tr>
+              {invoice.is_tax_invoice && invoice.intra_state && (
+                <>
+                  <tr>
+                    <td style={cell}>CGST</td>
+                    <td style={num}>{invoice.cgst}</td>
+                  </tr>
+                  <tr>
+                    <td style={cell}>SGST</td>
+                    <td style={num}>{invoice.sgst}</td>
+                  </tr>
+                </>
+              )}
+              {invoice.is_tax_invoice && !invoice.intra_state && (
+                <tr>
+                  <td style={cell}>IGST</td>
+                  <td style={num}>{invoice.igst}</td>
+                </tr>
+              )}
+              <tr>
+                <td style={{ ...cell, fontWeight: 700 }}>Invoice total</td>
+                <td style={{ ...num, fontWeight: 700 }}>{rupee(Number(invoice.total))}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style={{ marginTop: 12, fontSize: 10, lineHeight: 1.5 }}>
+          {invoice.is_tax_invoice
+            ? "Prices are inclusive of GST. Tax shown above is contained in the amount charged."
+            : "Not registered for GST. No tax has been charged on this supply."}
+          <br />
+          {siteConfig.contact.email} · {siteConfig.contact.phone}
+        </p>
+      </section>
     </div>
   );
 }

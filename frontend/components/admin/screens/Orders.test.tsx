@@ -478,6 +478,152 @@ describe("Orders screen", () => {
     });
   });
 
+
+  describe("invoicing", () => {
+    const invoice = {
+      id: "inv-1",
+      order_id: "295b817f-e50a-4cdc-a371-7b5afd4b88c1",
+      number: "SIT/26-27/0001",
+      issued_at: "2026-09-11T10:00:00Z",
+      is_tax_invoice: true,
+      seller_name: "Savvy In Teal",
+      seller_gstin: "29ABCDE1234F1Z5",
+      seller_address: "12 Agah Abdullah Street",
+      seller_state: "Karnataka",
+      buyer_name: "Praveen Kumar",
+      buyer_address: "12 MG Road",
+      place_of_supply: "Kerala",
+      intra_state: false,
+      taxable_value: "422.88",
+      cgst: "0.00",
+      sgst: "0.00",
+      igst: "76.12",
+      total: "499.00",
+      lines: [
+        {
+          description: "Tortoise Grip Claw Clip",
+          sku: "SIT-CLIP-1",
+          hsn: "9615",
+          quantity: 1,
+          unit_price: "499.00",
+          gross: "499.00",
+          gst_rate: "18",
+          taxable_value: "422.88",
+          cgst: "0.00",
+          sgst: "0.00",
+          igst: "76.12",
+        },
+      ],
+    };
+
+    function routeWithInvoice(inv: unknown | null, paid = true) {
+      apiFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
+        if (path.startsWith("/api/returns")) return ok([]);
+        if (path.endsWith("/invoice")) {
+          if (init?.method === "POST") return ok(inv ?? invoice, 201);
+          return inv ? ok(inv) : fail(404);
+        }
+        return ok([order({ payment_status: paid ? "paid" : "unpaid" })]);
+      });
+    }
+
+    test("an uninvoiced order offers to issue one", async () => {
+      routeWithInvoice(null);
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+
+      expect(await screen.findByRole("button", { name: /issue invoice/i })).toBeEnabled();
+    });
+
+    test("an unpaid order cannot be invoiced", async () => {
+      routeWithInvoice(null, false);
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+
+      // The sale has not happened yet, so there is nothing to invoice.
+      expect(await screen.findByRole("button", { name: /issue invoice/i })).toBeDisabled();
+    });
+
+    test("issuing shows the number that was allocated", async () => {
+      routeWithInvoice(null);
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+
+      await userEvent.click(await screen.findByRole("button", { name: /issue invoice/i }));
+
+      expect(await screen.findByText("SIT/26-27/0001")).toBeInTheDocument();
+      expect(screen.getByText(/Tax invoice/)).toBeInTheDocument();
+    });
+
+    test("an already-invoiced order offers to print, never to issue again", async () => {
+      routeWithInvoice(invoice);
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+
+      // A second number against one sale would put a hole in the series.
+      expect(await screen.findByRole("button", { name: /print invoice/i })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /issue invoice/i })).not.toBeInTheDocument();
+    });
+
+    test("the printed invoice shows IGST for an inter-state sale", async () => {
+      const print = vi.spyOn(window, "print").mockImplementation(() => {});
+      routeWithInvoice(invoice);
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+
+      await userEvent.click(await screen.findByRole("button", { name: /print invoice/i }));
+
+      expect(await screen.findByText("TAX INVOICE")).toBeInTheDocument();
+      // Rendered as "GSTIN: 29ABCDE…", so matched loosely rather than exactly.
+      expect(screen.getByText(/29ABCDE1234F1Z5/)).toBeInTheDocument();
+      expect(screen.getByText(/Place of supply: Kerala/)).toBeInTheDocument();
+      // hidden: true because the invoice is display:none on screen by design —
+      // it exists for the printer. Without it these queries would search an
+      // empty accessibility tree and pass no matter what rendered.
+      expect(screen.getByRole("columnheader", { name: "IGST", hidden: true })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("columnheader", { name: "CGST", hidden: true }),
+      ).not.toBeInTheDocument();
+      // HSN per line is not optional on a tax invoice.
+      expect(screen.getByRole("cell", { name: "9615", hidden: true })).toBeInTheDocument();
+      await waitFor(() => expect(print).toHaveBeenCalled());
+    });
+
+    test("an unregistered shop prints a bill of supply with no tax columns", async () => {
+      const print = vi.spyOn(window, "print").mockImplementation(() => {});
+      routeWithInvoice({
+        ...invoice,
+        is_tax_invoice: false,
+        seller_gstin: null,
+        igst: "0.00",
+        taxable_value: "499.00",
+        lines: [{ ...invoice.lines[0], gst_rate: "0", igst: "0.00", taxable_value: "499.00" }],
+      });
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+
+      await userEvent.click(await screen.findByRole("button", { name: /print invoice/i }));
+
+      // Claiming a registration the shop does not have would be worse than
+      // showing no tax at all.
+      expect(await screen.findByText("BILL OF SUPPLY")).toBeInTheDocument();
+      expect(
+        screen.queryByRole("columnheader", { name: "IGST", hidden: true }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText(/Not registered for GST/)).toBeInTheDocument();
+      await waitFor(() => expect(print).toHaveBeenCalled());
+    });
+  });
+
   test("a flagged order is called out with its reason", async () => {
     routeApi({ orders: [order({ flagged: true, flag_reason: "Price mismatch at checkout" })] });
     render(<Orders />);
