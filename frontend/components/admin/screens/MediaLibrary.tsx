@@ -29,8 +29,16 @@ export function MediaLibrary() {
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState("");
   const [destination, setDestination] = useState<Destination>("product");
-  /** When on, each photo opens the crop dialog instead of being auto-placed. */
-  const [review, setReview] = useState(false);
+  /**
+   * When on, each photo opens the crop dialog instead of being auto-placed.
+   *
+   * Defaults ON. Off by default meant the crop editor never appeared unless
+   * you already knew to tick a checkbox for it — the whole feature was
+   * invisible, and photos were silently auto-cropped instead. Choosing the
+   * framing is the normal case; skipping it is the shortcut for a bulk import,
+   * so that is the box you tick, not the other way round.
+   */
+  const [review, setReview] = useState(true);
   /** Photos waiting to be framed. The first one is what the editor shows. */
   const [queue, setQueue] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -161,13 +169,20 @@ export function MediaLibrary() {
         >
           <input
             type="checkbox"
-            checked={review && Boolean(spec)}
+            checked={!(review && Boolean(spec))}
             disabled={!spec}
-            onChange={(e) => setReview(e.target.checked)}
+            onChange={(e) => setReview(!e.target.checked)}
             className="accent-teal"
           />
-          Place each crop myself
+          Skip cropping — place them for me
         </label>
+        {spec && (
+          <p className="w-full text-xs text-ink-soft/70">
+            {review
+              ? "Each photo opens the crop editor so you can place it."
+              : "Photos are cropped automatically, centred on the busiest part."}
+          </p>
+        )}
       </div>
       <div
         onDragOver={(e) => {
