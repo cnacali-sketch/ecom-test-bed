@@ -72,6 +72,11 @@ class Order(Base):
     # directly (block at the firewall) if it turns out fraudulent, not just
     # group with other visits.
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The browser that placed the order, kept verbatim so the admin can tell a
+    # phone order from a desktop one and spot an obvious script. Same 256-char
+    # cap as UserEvent.user_agent. Null for every order placed before this was
+    # recorded, and for admin-entered phone orders.
+    user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     items: Mapped[list[OrderItem]] = relationship(
@@ -91,3 +96,9 @@ class OrderItem(Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
 
     order: Mapped[Order] = relationship(back_populates="items")
+    # lazy="selectin" on purpose, not an explicit selectinload at each call
+    # site. Order is serialised by nine different endpoints; under asyncio a
+    # single one that forgot to eager-load would not fall back to a lazy query
+    # but raise MissingGreenlet mid-response — which is exactly how the
+    # collections 500 happened. Eager here means no endpoint can get it wrong.
+    product: Mapped["Product"] = relationship(lazy="selectin")

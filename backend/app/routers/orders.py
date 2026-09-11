@@ -11,14 +11,15 @@
   PATCH /api/orders/{id}/payment  — payment status (admin)
   PATCH /api/orders/{id}/shipping — courier + tracking number (admin)
   PATCH /api/orders/{id}/flag     — manually flag/unflag for review (admin)
+  DELETE /api/orders/{id}         — delete an order, restocking it (admin)
 """
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+from sqlalchemy import Text, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,6 +40,7 @@ from app.services.razorpay import (
     verify_payment_signature,
 )
 from app.services.request_ip import client_ip
+from app.services.user_agent import describe as describe_user_agent
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -78,12 +80,33 @@ class OrderCreate(BaseModel):
     coupon_code: str | None = Field(default=None, max_length=32)
 
 
+class OrderProductRead(BaseModel):
+    """Just enough of the product to read the line item.
+
+    An order item stores product_id, quantity and the price paid — nothing a
+    human can read. The admin Orders screen was showing "1" for every order
+    with no way to find out what "1" was, and the customer's own order history
+    had the same gap.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    sku: str
+    slug: str
+    images: list[str] = []
+
+
 class OrderItemRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
     product_id: uuid.UUID
     quantity: int
     unit_price: Decimal
+    # Eager-loaded via lazy="selectin" on OrderItem.product, so no endpoint
+    # returning this schema has to remember to load it. Optional because a
+    # product row deleted after the order was placed must not 500 the order.
+    product: OrderProductRead | None = None
 
 
 class OrderRead(BaseModel):
@@ -121,6 +144,18 @@ class OrderAdminRead(OrderRead):
 
     flag_reason: str | None
     ip_address: str | None
+    user_agent: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def device(self) -> str:
+        """"Android · Chrome (Mobile)" — derived, never stored.
+
+        Kept out of OrderRead with the other internal fields: it is derived
+        from the shopper's own User-Agent and belongs in the admin view, not
+        in the public order tracker.
+        """
+        return describe_user_agent(self.user_agent)
 
 
 async def _reserve_stock(db: AsyncSession, items: list[OrderItemCreate]) -> None:
@@ -340,6 +375,10 @@ async def create_order(
         flagged=flag_reason is not None,
         flag_reason=flag_reason,
         ip_address=client_ip(request)[:64] or None,
+        # Truncated, not validated: a User-Agent is client-supplied and can be
+        # any length or content. It is only ever displayed as a derived label
+        # in the admin, never parsed for a decision.
+        user_agent=(request.headers.get("user-agent") or "")[:256] or None,
     )
     for item in payload.items:
         order.items.append(
@@ -399,11 +438,62 @@ async def list_orders(
 # Registered before GET /{order_id} so "/all" matches this literal route
 # rather than being parsed as an order id.
 @router.get("/all", response_model=list[OrderAdminRead], dependencies=[Depends(require_admin)])
-async def list_all_orders(db: AsyncSession = Depends(get_db_session)) -> list[Order]:
-    """Every order, newest first — the admin console Orders screen. Admin-gated."""
-    result = await db.execute(
-        select(Order).options(selectinload(Order.items)).order_by(Order.created_at.desc())
-    )
+async def list_all_orders(
+    q: str | None = None,
+    db: AsyncSession = Depends(get_db_session),
+) -> list[Order]:
+    """Every order, newest first — the admin console Orders screen. Admin-gated.
+
+    `q` searches the fields a support conversation actually starts from. A
+    customer escalating never opens with an internal id — they quote the
+    courier's AWB from a tracking SMS, or the phone number they ordered with,
+    or just their email. Each of those has to find the order:
+
+      * order id, whole or partial (the console shows the first 8 characters)
+      * tracking number / AWB, and courier name
+      * customer email — both a guest checkout, where the email IS the
+        user_id, and a registered account, looked up through the users table
+      * anything in the shipping address snapshot: name, phone, street, city,
+        pincode
+
+    Matching is case-insensitive and substring-based. Deliberately server-side:
+    filtering in the browser would only ever search the page already loaded.
+    """
+    statement = select(Order).options(selectinload(Order.items))
+
+    term = (q or "").strip()
+    if term:
+        like = f"%{term}%"
+        # A UUID renders with dashes on Postgres and as bare hex on SQLite, and
+        # someone pasting an id may include them or not. Matching both spellings
+        # means the same search works either way.
+        like_nodash = f"%{term.replace('-', '')}%"
+
+        # Resolved as its own query rather than a subquery on purpose. An
+        # order stores the account's UUID as a string, and the two databases
+        # render a UUID column differently — dashed on Postgres, bare hex on
+        # SQLite — so an in-SQL comparison silently matches nothing on one of
+        # them. Reading the ids out and formatting them in Python is the same
+        # spelling everywhere.
+        matching_accounts = await db.execute(select(User.id).where(User.email.ilike(like)))
+        account_ids = [str(row) for row in matching_accounts.scalars().all()]
+
+        clauses = [
+            cast(Order.id, Text).ilike(like),
+            cast(Order.id, Text).ilike(like_nodash),
+            Order.user_id.ilike(like),
+            Order.tracking_number.ilike(like),
+            Order.courier.ilike(like),
+            # The address is a JSON snapshot, so there are no columns to
+            # target — cast the whole blob to text and search it. Covers
+            # phone, pincode and street, which is what support asks for.
+            cast(Order.shipping_address, Text).ilike(like),
+        ]
+        if account_ids:
+            clauses.append(Order.user_id.in_(account_ids))
+        statement = statement.where(or_(*clauses))
+
+    result = await db.execute(statement.order_by(Order.created_at.desc()))
     return list(result.scalars().all())
 
 
@@ -526,6 +616,68 @@ async def update_shipping(
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order
+
+
+@router.delete("/{order_id}", status_code=204, dependencies=[Depends(require_admin)])
+async def delete_order(
+    order_id: uuid.UUID,
+    restock: bool = True,
+    db: AsyncSession = Depends(get_db_session),
+) -> None:
+    """Permanently delete an order. Admin-gated.
+
+    Exists because the live catalogue accumulates test orders that would
+    otherwise sit in the console forever, skewing every count on the
+    dashboard.
+
+    Two guards, both deliberate:
+
+    * A paid order cannot be deleted. Money changed hands, so the row is a
+      financial record — refund it and mark it refunded instead. 409 rather
+      than a silent no-op so the console can say why.
+    * Deleting returns the stock the order reserved, unless `restock=false`.
+      _reserve_stock decrements attrs["stock"] at creation; dropping the order
+      without putting those units back leaks inventory quietly, and for test
+      orders that is exactly the stock the shop then cannot sell. Untracked
+      products (no numeric stock in attrs) are skipped, matching how
+      _reserve_stock treats them.
+
+    Items cascade with the order (Order.items is cascade="all, delete-orphan").
+    """
+    result = await db.execute(
+        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.payment_status == "paid":
+        raise HTTPException(
+            status_code=409,
+            detail="This order is marked paid. Refund it and set payment to refunded "
+            "before deleting, so the payment record is not lost.",
+        )
+
+    if restock:
+        for item in order.items:
+            product_result = await db.execute(
+                select(Product).where(Product.id == item.product_id).with_for_update()
+            )
+            product = product_result.scalar_one_or_none()
+            if product is None:
+                continue
+            stock = (product.attrs or {}).get("stock")
+            if not isinstance(stock, (int, float)):
+                continue  # untracked product — same rule _reserve_stock uses
+            restored = stock + item.quantity
+            product.attrs = {**product.attrs, "stock": restored}
+            # _reserve_stock sets in_stock False when it hits zero, so putting
+            # the units back has to undo that too — otherwise deleting an order
+            # leaves the product permanently unsellable.
+            if restored > 0:
+                product.in_stock = True
+
+    await db.delete(order)
+    await db.commit()
 
 
 # ---- Razorpay online payment (prepaid orders) ----

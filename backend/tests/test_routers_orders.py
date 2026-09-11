@@ -592,3 +592,362 @@ async def test_order_coupon_usage_limit_enforced(admin_client: AsyncClient) -> N
     assert first.status_code == 201
     second = await admin_client.post("/api/orders", json={**ORDER_PAYLOAD, "coupon_code": code})
     assert second.status_code == 422
+
+
+# ---- Line-item detail, device, and deletion (admin Orders screen) ----
+
+
+@pytest.mark.asyncio
+async def test_order_items_carry_the_product_they_are_for(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    """An order item stored only product_id, quantity and price.
+
+    The admin Orders screen showed "1" in the ITEMS column with no way to find
+    out what was actually bought, and the shopper's own order history had the
+    same gap. The product is eager-loaded (lazy="selectin"), so this works on
+    every endpoint that serialises an order rather than only the one that
+    remembered to load it.
+    """
+    created = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    assert created.status_code == 201
+
+    listed = await admin_client.get("/api/orders/all")
+
+    assert listed.status_code == 200
+    items = listed.json()[0]["items"]
+    names = sorted(item["product"]["name"] for item in items)
+    assert names == ["Order Payload Item 1", "Order Payload Item 2"]
+    assert all(item["product"]["sku"] for item in items)
+
+
+@pytest.mark.asyncio
+async def test_public_order_tracker_also_shows_what_was_ordered(
+    client: AsyncClient,
+) -> None:
+    """The guest tracker is the one place a customer can check an order, so it
+    needs the product names too -- and must not start 500ing on the added
+    relationship."""
+    created = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = created.json()["id"]
+
+    fetched = await client.get(f"/api/orders/{order_id}")
+
+    assert fetched.status_code == 200
+    assert fetched.json()["items"][0]["product"]["name"].startswith("Order Payload Item")
+
+
+@pytest.mark.asyncio
+async def test_order_records_the_device_it_was_placed_from(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    android = (
+        "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/126.0.0.0 Mobile Safari/537.36"
+    )
+    created = await client.post(
+        "/api/orders", json=ORDER_PAYLOAD, headers={"User-Agent": android}
+    )
+    assert created.status_code == 201
+
+    listed = await admin_client.get("/api/orders/all")
+
+    assert listed.json()[0]["device"] == "Android · Chrome (Mobile)"
+
+
+@pytest.mark.asyncio
+async def test_device_is_admin_only_and_never_reaches_the_public_tracker(
+    client: AsyncClient,
+) -> None:
+    """`device` is derived from the shopper's own User-Agent, so it belongs
+    with flag_reason and ip_address in the admin view -- not in the public,
+    unauthenticated order tracker."""
+    created = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = created.json()["id"]
+
+    body = (await client.get(f"/api/orders/{order_id}")).json()
+
+    assert "device" not in body
+    assert "user_agent" not in body
+
+
+@pytest.mark.asyncio
+async def test_delete_order_requires_admin(
+    client: AsyncClient, customer_client: AsyncClient
+) -> None:
+    created = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = created.json()["id"]
+
+    resp = await customer_client.delete(f"/api/orders/{order_id}")
+
+    assert resp.status_code == 403
+    assert (await client.get(f"/api/orders/{order_id}")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_delete_order_removes_it(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    created = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = created.json()["id"]
+
+    resp = await admin_client.delete(f"/api/orders/{order_id}")
+
+    assert resp.status_code == 204
+    assert (await client.get(f"/api/orders/{order_id}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_order_puts_the_stock_back(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Creating an order decrements attrs["stock"]. Deleting it has to return
+    those units -- otherwise clearing out test orders silently destroys the
+    stock they reserved."""
+    product = Product(
+        sku="RESTOCK-1",
+        slug="restock-me",
+        name="Restock Me",
+        price=Decimal("100.00"),
+        mrp=Decimal("100.00"),
+        in_stock=True,
+        attrs={"stock": 5},
+    )
+    db_session.add(product)
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/orders",
+        json={
+            "user_id": "test-user-restock",
+            "items": [{"product_id": str(product.id), "quantity": 5, "unit_price": "100.00"}],
+            "terms_accepted": True,
+            "terms_version": "2026-07-22",
+        },
+    )
+    assert created.status_code == 201
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 0
+    assert product.in_stock is False
+
+    await admin_client.delete(f"/api/orders/{created.json()['id']}")
+
+    await db_session.refresh(product)
+    assert product.attrs["stock"] == 5
+    # Reserving down to zero flipped in_stock off; restocking must flip it back
+    # or deleting an order leaves the product permanently unsellable.
+    assert product.in_stock is True
+
+
+@pytest.mark.asyncio
+async def test_delete_order_can_skip_the_restock(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    product = Product(
+        sku="NORESTOCK-1",
+        slug="no-restock",
+        name="No Restock",
+        price=Decimal("100.00"),
+        mrp=Decimal("100.00"),
+        attrs={"stock": 4},
+    )
+    db_session.add(product)
+    await db_session.commit()
+
+    created = await client.post(
+        "/api/orders",
+        json={
+            "user_id": "test-user-norestock",
+            # 3 units, not 1: a 100.00 COD order is below the 200 deposit
+            # floor create_order enforces, so a single unit is rejected 422.
+            "items": [{"product_id": str(product.id), "quantity": 3, "unit_price": "100.00"}],
+            "terms_accepted": True,
+            "terms_version": "2026-07-22",
+        },
+    )
+
+    assert created.status_code == 201, created.text
+    await admin_client.delete(f"/api/orders/{created.json()['id']}?restock=false")
+
+    await db_session.refresh(product)
+    # 4 - 3 reserved = 1, and the skipped restock leaves it there.
+    assert product.attrs["stock"] == 1
+
+
+@pytest.mark.asyncio
+async def test_delete_refuses_a_paid_order(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    """A paid order is a financial record. Deleting it would destroy the only
+    trace that money was taken, so it is refused with an explanation rather
+    than silently allowed."""
+    created = await client.post("/api/orders", json=ORDER_PAYLOAD)
+    order_id = created.json()["id"]
+    paid = await admin_client.patch(f"/api/orders/{order_id}/payment?payment_status=paid")
+    assert paid.status_code == 200
+
+    resp = await admin_client.delete(f"/api/orders/{order_id}")
+
+    assert resp.status_code == 409
+    assert "refund" in resp.json()["detail"].lower()
+    assert (await client.get(f"/api/orders/{order_id}")).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_delete_unknown_order_is_404(admin_client: AsyncClient) -> None:
+    resp = await admin_client.delete(f"/api/orders/{uuid.uuid4()}")
+    assert resp.status_code == 404
+
+
+# ---- Support search: find an order from what a customer actually quotes ----
+
+
+# Field names must match schemas/auth.py Address exactly -- Pydantic drops
+# anything it does not know, so a typo here silently stores a blank address.
+ADDRESS = {
+    "full_name": "Praveen Kumar",
+    "phone": "9738281596",
+    "line1": "12 MG Road",
+    "city": "Bangalore",
+    "state": "Karnataka",
+    "postcode": "560025",
+    "country": "India",
+}
+
+
+async def _place_searchable_order(client: AsyncClient, user_id: str) -> str:
+    payload = {**ORDER_PAYLOAD, "user_id": user_id, "shipping_address": ADDRESS}
+    created = await client.post("/api/orders", json=payload)
+    assert created.status_code == 201, created.text
+    return created.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_search_finds_an_order_by_tracking_number(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    """The AWB is what a customer quotes from the courier's SMS -- usually the
+    only reference they have, since they never see an internal order id."""
+    order_id = await _place_searchable_order(client, "shopper-a@example.com")
+    await _place_searchable_order(client, "shopper-b@example.com")
+    await admin_client.patch(
+        f"/api/orders/{order_id}/shipping?courier=Delhivery&tracking_number=AWB123456789"
+    )
+
+    found = await admin_client.get("/api/orders/all?q=AWB123456789")
+
+    assert found.status_code == 200
+    assert [o["id"] for o in found.json()] == [order_id]
+
+
+@pytest.mark.asyncio
+async def test_search_by_courier_name_is_case_insensitive(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    order_id = await _place_searchable_order(client, "shopper-a@example.com")
+    await admin_client.patch(
+        f"/api/orders/{order_id}/shipping?courier=Delhivery&tracking_number=AWB1"
+    )
+
+    found = await admin_client.get("/api/orders/all?q=delhiv")
+
+    assert [o["id"] for o in found.json()] == [order_id]
+
+
+@pytest.mark.asyncio
+async def test_search_finds_a_guest_order_by_email(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    order_id = await _place_searchable_order(client, "praveen9705@gmail.com")
+    await _place_searchable_order(client, "someone-else@example.com")
+
+    found = await admin_client.get("/api/orders/all?q=praveen9705")
+
+    assert [o["id"] for o in found.json()] == [order_id]
+
+
+@pytest.mark.asyncio
+async def test_search_finds_an_order_by_phone_number(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    """Phone lives inside the shipping-address JSON snapshot, which has no
+    column of its own -- support asks for it constantly."""
+    order_id = await _place_searchable_order(client, "shopper-a@example.com")
+
+    found = await admin_client.get("/api/orders/all?q=9738281596")
+
+    assert [o["id"] for o in found.json()] == [order_id]
+
+
+@pytest.mark.asyncio
+async def test_search_finds_an_order_by_pincode_and_name(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    order_id = await _place_searchable_order(client, "shopper-a@example.com")
+
+    by_pincode = await admin_client.get("/api/orders/all?q=560025")
+    by_street = await admin_client.get("/api/orders/all?q=MG Road")
+    by_name = await admin_client.get("/api/orders/all?q=Praveen")
+
+    assert [o["id"] for o in by_pincode.json()] == [order_id]
+    assert [o["id"] for o in by_street.json()] == [order_id]
+    # Recipient name: a courier will not accept a shipment without one, and
+    # support searches by it constantly.
+    assert [o["id"] for o in by_name.json()] == [order_id]
+
+
+@pytest.mark.asyncio
+async def test_search_by_partial_order_id(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    """The console displays only the first 8 characters, so that prefix is
+    what an admin can actually copy out of the table."""
+    order_id = await _place_searchable_order(client, "shopper-a@example.com")
+    await _place_searchable_order(client, "shopper-b@example.com")
+
+    found = await admin_client.get(f"/api/orders/all?q={order_id[:8]}")
+
+    assert order_id in [o["id"] for o in found.json()]
+
+
+@pytest.mark.asyncio
+async def test_search_finds_a_registered_customers_order_by_their_account_email(
+    client: AsyncClient, admin_client: AsyncClient, customer_user
+) -> None:
+    """A signed-in customer's order stores their account UUID, not their email,
+    so this one only works by joining through the users table."""
+    order_id = await _place_searchable_order(client, str(customer_user.id))
+
+    found = await admin_client.get(f"/api/orders/all?q={customer_user.email}")
+
+    assert [o["id"] for o in found.json()] == [order_id]
+
+
+@pytest.mark.asyncio
+async def test_search_with_no_match_returns_empty_not_everything(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    """The failure that matters: a query that matches nothing must not fall
+    back to listing every order, or support would act on the wrong one."""
+    await _place_searchable_order(client, "shopper-a@example.com")
+
+    found = await admin_client.get("/api/orders/all?q=NOSUCHTHING999")
+
+    assert found.json() == []
+
+
+@pytest.mark.asyncio
+async def test_blank_search_still_lists_everything(
+    client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    await _place_searchable_order(client, "shopper-a@example.com")
+    await _place_searchable_order(client, "shopper-b@example.com")
+
+    assert len((await admin_client.get("/api/orders/all")).json()) == 2
+    assert len((await admin_client.get("/api/orders/all?q=")).json()) == 2
+    assert len((await admin_client.get("/api/orders/all?q=%20%20")).json()) == 2
+
+
+@pytest.mark.asyncio
+async def test_search_is_admin_only(customer_client: AsyncClient) -> None:
+    assert (await customer_client.get("/api/orders/all?q=anything")).status_code == 403
