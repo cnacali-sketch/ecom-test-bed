@@ -60,6 +60,22 @@ class Order(Base):
     # order it was actually generated for, so without this binding a signature paid
     # for one order could be replayed to mark ANY other order paid for free.
     razorpay_order_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The id of the payment Razorpay actually captured. Distinct from
+    # razorpay_order_id, which is issued BEFORE payment and does not appear on
+    # a settlement report — so without this, money arriving in the bank could
+    # not be tied back to an order. It is also what Razorpay's refund API
+    # takes, so a refund cannot be issued from our own records without it.
+    razorpay_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # How much of this order has been refunded, cumulative across partial
+    # refunds. Zero is "nothing refunded", never null, so arithmetic against
+    # total_amount never has to guard for None.
+    refund_amount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=Decimal("0"), server_default="0"
+    )
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Whatever identifies the refund at the other end: a Razorpay refund id, a
+    # UPI reference, or "cash returned in person" for a COD doorstep refund.
+    refund_reference: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # Server-side price-tampering signal: set when a client-sent unit_price
     # didn't match Product.price at order time. The order still gets charged
     # the CORRECT (server) price either way — this is a human-review alert,

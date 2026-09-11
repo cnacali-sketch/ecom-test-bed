@@ -73,10 +73,15 @@ function fail(status: number, detail?: string) {
 
 /** Route each call by URL so tests describe data, not call order. */
 function routeApi(handlers: { orders?: unknown[]; onDelete?: () => unknown }) {
+  const rows = handlers.orders ?? [order()];
   apiFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
     if (init?.method === "DELETE") return handlers.onDelete?.() ?? ok(null, 204);
     if (path.startsWith("/api/returns")) return ok([]);
-    if (path.startsWith("/api/orders/all")) return ok(handlers.orders ?? [order()]);
+    if (path.startsWith("/api/orders/all")) return ok(rows);
+    // Every mutating order endpoint answers with the updated order, the way
+    // the real API does. Returning a bare null here once corrupted the list
+    // and crashed the screen — worth mirroring the real contract.
+    if (path.startsWith("/api/orders/")) return ok(rows[0]);
     return ok(null);
   });
 }
@@ -242,6 +247,86 @@ describe("Orders screen", () => {
       // operator what to do instead.
       expect(await screen.findByText(new RegExp("Refund it and set payment", "i"))).toBeInTheDocument();
       expect(screen.getByText("praveen@example.com")).toBeInTheDocument();
+    });
+  });
+
+
+  describe("refunds", () => {
+    async function openPaidOrder(overrides: Record<string, unknown> = {}) {
+      routeApi({
+        orders: [order({ payment_status: "paid", total_amount: "1000.00", ...overrides })],
+      });
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+    }
+
+    test("shows what was charged and the payment reference", async () => {
+      await openPaidOrder({ razorpay_payment_id: "pay_ABC123" });
+
+      expect(screen.getByText(/Charged/)).toBeInTheDocument();
+      // The id a bank settlement line refers to, without which money in the
+      // account cannot be tied back to an order.
+      expect(screen.getByText("pay_ABC123")).toBeInTheDocument();
+    });
+
+    test("records a partial refund with its reference", async () => {
+      await openPaidOrder();
+
+      await userEvent.type(screen.getByLabelText("Refund amount"), "250");
+      await userEvent.type(screen.getByLabelText("Refund reference"), "rfnd_X1");
+      await userEvent.click(screen.getByRole("button", { name: /record refund/i }));
+
+      await waitFor(() =>
+        expect(apiFetch).toHaveBeenCalledWith(
+          expect.stringContaining("/refund"),
+          expect.objectContaining({
+            method: "POST",
+            body: JSON.stringify({ amount: "250.00", reference: "rfnd_X1" }),
+          }),
+        ),
+      );
+    });
+
+    test("will not submit more than is still refundable", async () => {
+      await openPaidOrder({ refund_amount: "900.00", payment_status: "partially_refunded" });
+
+      await userEvent.type(screen.getByLabelText("Refund amount"), "500");
+
+      // Guarded in the UI as well as the API: a typo should not need a
+      // round-trip to be told it is impossible.
+      expect(screen.getByRole("button", { name: /record refund/i })).toBeDisabled();
+    });
+
+    test("an unpaid order offers no refund form", async () => {
+      await openPaidOrder({ payment_status: "unpaid" });
+
+      expect(screen.queryByLabelText("Refund amount")).not.toBeInTheDocument();
+      expect(screen.getByText(/Nothing to refund until this order is marked paid/i)).toBeInTheDocument();
+    });
+
+    test("a fully refunded order says so and offers no form", async () => {
+      await openPaidOrder({ refund_amount: "1000.00", payment_status: "refunded" });
+
+      expect(screen.getByText("Fully refunded.")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Refund amount")).not.toBeInTheDocument();
+    });
+
+    test("shows the server's arithmetic when a refund is refused", async () => {
+      const detail = "Refund of 5000.00 exceeds the 1000.00 still refundable on this order.";
+      apiFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
+        if (init?.method === "POST" && path.includes("/refund")) return fail(422, detail);
+        if (path.startsWith("/api/returns")) return ok([]);
+        return ok([order({ payment_status: "paid", total_amount: "1000.00" })]);
+      });
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByRole("button", { name: /expand/i }));
+
+      await userEvent.type(screen.getByLabelText("Refund amount"), "999");
+      await userEvent.click(screen.getByRole("button", { name: /record refund/i }));
+
+      expect(await screen.findByText(/still refundable/i)).toBeInTheDocument();
     });
   });
 

@@ -55,6 +55,13 @@ interface Order {
   ip_address: string | null;
   /** "Android · Chrome (Mobile)". Derived server-side from the User-Agent. */
   device?: string;
+  /** The payment Razorpay actually captured — what a bank settlement line
+   * refers to, and what Razorpay's own refund needs. */
+  razorpay_payment_id?: string | null;
+  /** Cumulative across partial refunds. "0.00" means nothing refunded. */
+  refund_amount?: string;
+  refunded_at?: string | null;
+  refund_reference?: string | null;
   created_at: string;
   items: OrderItem[];
 }
@@ -67,7 +74,11 @@ interface ReturnRequest {
 }
 
 const STATUS = ["pending", "confirmed", "shipped", "delivered", "cancelled", "returned"];
-const PAYMENT = ["unpaid", "paid", "refunded"];
+// "partially_refunded" is set by recording a refund, never chosen from the
+// dropdown — picking it by hand would claim money went back without saying how
+// much. It still has to appear here so the select can display an order that is
+// already in that state.
+const PAYMENT = ["unpaid", "paid", "partially_refunded", "refunded"];
 
 const STATUS_STYLE: Record<string, string> = {
   pending: "bg-ink/10 text-ink-soft",
@@ -80,7 +91,15 @@ const STATUS_STYLE: Record<string, string> = {
 const PAYMENT_STYLE: Record<string, string> = {
   unpaid: "bg-ink/10 text-ink-soft",
   paid: "bg-emerald-600/10 text-emerald-700",
+  // Gold, not the full refund red: part of the money is still the shop's, and
+  // the two states need to be distinguishable at a glance down the column.
+  partially_refunded: "bg-gold/15 text-gold",
   refunded: "bg-sale/10 text-sale",
+};
+
+/** "partially_refunded" -> "Partly refunded". */
+const PAYMENT_LABEL: Record<string, string> = {
+  partially_refunded: "Partly refunded",
 };
 
 function addressLine(a: ShippingAddress): string {
@@ -221,7 +240,16 @@ export function Orders({
     const query = new URLSearchParams(params).toString();
     const res = await apiFetch(`/api/orders/${id}/${path}${query ? `?${query}` : ""}`, { method: "PATCH" });
     if (res?.ok) {
-      const updated = (await res.json()) as Order;
+      // Guarded because the consequence is out of all proportion to the cause:
+      // splicing a null into the list makes the next render throw on
+      // `o.flagged` and takes the whole Orders screen down. A 200 whose body
+      // is not an order means the change was applied but the response was
+      // unusable, so say so rather than corrupt the list.
+      const updated = (await res.json().catch(() => null)) as Order | null;
+      if (!updated?.id) {
+        setPatchError("The change was saved, but the order couldn't be refreshed. Reload to confirm.");
+        return true;
+      }
       setOrders((cur) => cur.map((o) => (o.id === id ? updated : o)));
       setPatchError(null);
       return true;
@@ -276,6 +304,48 @@ export function Orders({
       const body = await res.json().catch(() => null);
       setPatchError(body?.detail ?? `Couldn't delete order ${label} (HTTP ${res.status}).`);
     }
+  }
+
+  /**
+   * Record money going back to the customer.
+   *
+   * This writes the ledger entry; it does not move money. The refund itself is
+   * issued in the Razorpay dashboard, or handed back in cash for COD — which is
+   * why the reference field matters, since it is the only link between the two.
+   */
+  async function refundOrder(id: string, amount: string, reference: string): Promise<boolean> {
+    const res = await apiFetch(`/api/orders/${id}/refund`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, reference: reference.trim() || null }),
+    });
+    if (res?.ok) {
+      // Guarded because the consequence is out of all proportion to the cause:
+      // splicing a null into the list makes the next render throw on
+      // `o.flagged` and takes the whole Orders screen down. A 200 whose body
+      // is not an order means the change was applied but the response was
+      // unusable, so say so rather than corrupt the list.
+      const updated = (await res.json().catch(() => null)) as Order | null;
+      if (!updated?.id) {
+        setPatchError("The change was saved, but the order couldn't be refreshed. Reload to confirm.");
+        return true;
+      }
+      setOrders((cur) => cur.map((o) => (o.id === id ? updated : o)));
+      setPatchError(null);
+      return true;
+    }
+    if (!res) {
+      setPatchError("Couldn't reach the server. Check your connection and try again.");
+    } else if (res.status === 401 || res.status === 403) {
+      setPatchError("Your admin session has expired. Please log out and log back in.");
+    } else {
+      // 422 carries the "exceeds what is still refundable" arithmetic and 409
+      // the "this order was never paid" reason — both are worth showing
+      // verbatim rather than flattening into a generic failure.
+      const body = await res.json().catch(() => null);
+      setPatchError(body?.detail ?? `Couldn't record the refund (HTTP ${res.status}).`);
+    }
+    return false;
   }
 
   function toggleFlag(order: Order) {
@@ -472,6 +542,7 @@ export function Orders({
                         value={o.payment_status}
                         options={PAYMENT}
                         styleMap={PAYMENT_STYLE}
+                        labelMap={PAYMENT_LABEL}
                         onChange={(v) => setPayment(o.id, v)}
                       />
                     </td>
@@ -504,6 +575,10 @@ export function Orders({
                           </button>
                         )}
                         <OrderLines order={o} />
+                        <RefundPanel
+                          order={o}
+                          onRefund={(amount, reference) => refundOrder(o.id, amount, reference)}
+                        />
                         <ShippingDetail order={o} onSave={(courier, tracking) => setShipping(o.id, courier, tracking)} />
                         <ReturnRequestDetail
                           request={returnRequest}
@@ -587,6 +662,146 @@ function OrderLines({ order }: { order: Order }) {
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * The money side of an order: what was captured, what has gone back, and how
+ * to record the next refund.
+ *
+ * A refund used to be one word on a dropdown. Recording an amount, a date and
+ * a reference is what lets the books agree with the bank — and what makes a
+ * partial refund expressible at all.
+ */
+function RefundPanel({
+  order,
+  onRefund,
+}: {
+  order: Order;
+  onRefund: (amount: string, reference: string) => Promise<boolean>;
+}) {
+  const total = Number(order.total_amount);
+  const refunded = Number(order.refund_amount ?? 0);
+  const remaining = Math.max(total - refunded, 0);
+  const [amount, setAmount] = useState("");
+  const [reference, setReference] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const paid = order.payment_status !== "unpaid";
+  const typed = Number(amount);
+  const valid = amount !== "" && Number.isFinite(typed) && typed > 0 && typed <= remaining;
+
+  async function submit() {
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      if (await onRefund(typed.toFixed(2), reference)) {
+        setAmount("");
+        setReference("");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mb-4 border-t border-ink/10 pt-4">
+      <p className="text-xs uppercase tracking-wide text-ink-soft">Payment</p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm">
+        <span className="text-ink">
+          Charged <span className="font-semibold tabular-nums">{rupee(total)}</span>
+        </span>
+        {refunded > 0 && (
+          <span className="text-sale">
+            Refunded <span className="font-semibold tabular-nums">{rupee(refunded)}</span>
+            {order.refunded_at && (
+              <span className="ml-1 text-xs text-ink-soft">
+                on {formatPlaced(order.refunded_at)}
+              </span>
+            )}
+          </span>
+        )}
+        {refunded > 0 && remaining > 0 && (
+          <span className="text-ink-soft">
+            Still refundable <span className="tabular-nums">{rupee(remaining)}</span>
+          </span>
+        )}
+      </div>
+
+      {(order.razorpay_payment_id || order.refund_reference) && (
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] text-ink-soft">
+          {order.razorpay_payment_id && (
+            <span className="flex items-center gap-1.5">
+              {/* The id a bank settlement line refers to — the one thing that
+                  ties money in the account back to this order. */}
+              Payment <span className="select-all text-ink">{order.razorpay_payment_id}</span>
+              <CopyButton text={order.razorpay_payment_id} label="Copy the payment id" />
+            </span>
+          )}
+          {order.refund_reference && (
+            <span>
+              Refund ref <span className="select-all text-ink">{order.refund_reference}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {!paid ? (
+        <p className="mt-2 text-xs text-ink-soft">
+          Nothing to refund until this order is marked paid.
+        </p>
+      ) : remaining <= 0 ? (
+        <p className="mt-2 text-xs text-ink-soft">Fully refunded.</p>
+      ) : (
+        <div className="mt-2 flex flex-wrap items-end gap-2">
+          <label className="text-xs">
+            <span className="block uppercase tracking-wide text-ink-soft">Refund amount</span>
+            <input
+              type="number"
+              min="0.01"
+              max={remaining}
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder={remaining.toFixed(2)}
+              aria-label="Refund amount"
+              className="mt-1 w-28 border border-ink/15 bg-card px-2 py-1.5 text-sm tabular-nums text-ink outline-none focus:border-teal"
+            />
+          </label>
+          <label className="flex-1 text-xs">
+            <span className="block uppercase tracking-wide text-ink-soft">
+              Reference (Razorpay refund id, UPI ref, or “cash returned”)
+            </span>
+            <input
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              aria-label="Refund reference"
+              className="mt-1 w-full border border-ink/15 bg-card px-2 py-1.5 text-sm text-ink outline-none focus:border-teal"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!valid || saving}
+            className="h-fit shrink-0 border border-sale px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-sale transition-colors hover:bg-sale hover:text-white disabled:cursor-not-allowed disabled:border-ink/20 disabled:text-ink-soft/60 disabled:hover:bg-transparent"
+          >
+            {saving ? "Recording…" : "Record refund"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAmount(remaining.toFixed(2))}
+            className="h-fit shrink-0 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:text-teal"
+          >
+            Full amount
+          </button>
+        </div>
+      )}
+      <p className="mt-1.5 text-[11px] text-ink-soft/70">
+        {/* Stated plainly so nobody assumes the customer has been paid. */}
+        This records the refund against the order. Move the money in Razorpay, or hand
+        it back in cash for COD.
+      </p>
     </div>
   );
 }
@@ -765,13 +980,18 @@ function StatusSelect({
   value,
   options,
   styleMap,
+  labelMap,
   onChange,
 }: {
   value: string;
   options: string[];
   styleMap: Record<string, string>;
+  /** Friendlier wording for values whose stored name reads badly — the
+   * default `capitalize` would otherwise render "Partially_refunded". */
+  labelMap?: Record<string, string>;
   onChange: (v: string) => void;
 }) {
+  const label = (opt: string) => labelMap?.[opt] ?? opt;
   return (
     <select
       value={value}
@@ -780,7 +1000,7 @@ function StatusSelect({
     >
       {options.map((opt) => (
         <option key={opt} value={opt} className="bg-card capitalize text-ink">
-          {opt}
+          {label(opt)}
         </option>
       ))}
     </select>

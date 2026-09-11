@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
 from sqlalchemy import select
@@ -62,7 +64,16 @@ async def razorpay_webhook(
     if order is None:
         return {"ok": True, "ignored": "order not found"}
 
+    # The payment id is on the entity for both handled events. Recorded
+    # whenever it is missing — the browser round-trip usually sets it, but this
+    # webhook is the path that runs when the customer closed the tab, and
+    # without it a bank settlement cannot be tied back to this order.
+    payment_id = entity.get("id")
     changed = False
+    if payment_id and not order.razorpay_payment_id:
+        order.razorpay_payment_id = str(payment_id)[:64]
+        changed = True
+
     if event == "payment.captured":
         if order.payment_method == "cod":
             if not order.deposit_paid:
@@ -73,8 +84,28 @@ async def razorpay_webhook(
                 order.payment_status = "paid"
                 changed = True
     elif event == "refund.processed":
-        if order.payment_status != "refunded":
-            order.payment_status = "refunded"
+        # Razorpay reports amount_refunded in paise, cumulative across every
+        # refund on the payment — so it is assigned, not added to, and a
+        # repeated webhook for the same refund is idempotent.
+        refunded_paise = entity.get("amount_refunded")
+        if isinstance(refunded_paise, int) and refunded_paise > 0:
+            refunded = (Decimal(refunded_paise) / 100).quantize(Decimal("0.01"))
+            # Never claim more came back than the order was worth: Razorpay is
+            # authoritative about its own payment, but a deposit-only COD
+            # payment is smaller than the order total and must not read as a
+            # full refund of the order.
+            capped = min(refunded, order.total_amount)
+            if capped != order.refund_amount:
+                order.refund_amount = capped
+                order.refunded_at = datetime.now(timezone.utc)
+                changed = True
+        status = (
+            "refunded"
+            if order.refund_amount >= order.total_amount and order.refund_amount > 0
+            else "partially_refunded"
+        )
+        if order.payment_status != status:
+            order.payment_status = status
             changed = True
 
     if changed:

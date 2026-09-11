@@ -64,6 +64,11 @@ class OrderItemCreate(BaseModel):
 
 PAYMENT_METHODS = {"cod", "prepaid"}
 
+# "partially_refunded" exists because the alternative was lying. With only
+# paid/refunded, giving back part of an order forced a choice between the books
+# saying the whole order came back and saying none of it did.
+PAYMENT_STATUSES = {"unpaid", "paid", "partially_refunded", "refunded"}
+
 
 class OrderCreate(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=64)
@@ -134,6 +139,11 @@ class OrderRead(BaseModel):
     total_amount: Decimal
     deposit_amount: Decimal
     deposit_paid: bool
+    # How much has come back, and when. Safe for the customer to see — it is
+    # their own money — unlike the internal reference that identifies the
+    # refund at the payment provider.
+    refund_amount: Decimal = Decimal("0")
+    refunded_at: datetime | None = None
     flagged: bool
     created_at: datetime
     items: list[OrderItemRead] = []
@@ -145,6 +155,12 @@ class OrderAdminRead(OrderRead):
     flag_reason: str | None
     ip_address: str | None
     user_agent: str | None = None
+    # Accounting records, not the customer's. The payment id is how a bank
+    # settlement is tied back to this order, and the refund reference is our
+    # own trace of where the money went — neither belongs in the public
+    # tracker, which the order id alone unlocks.
+    razorpay_payment_id: str | None = None
+    refund_reference: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -570,13 +586,30 @@ async def update_payment_status(
     Manual until the payment gateway is wired; a real gateway would drive these
     transitions from its webhook (payment.captured / refund.processed) instead.
     """
-    valid = {"unpaid", "paid", "refunded"}
-    if payment_status not in valid:
-        raise HTTPException(status_code=422, detail=f"payment_status must be one of {valid}")
+    if payment_status not in PAYMENT_STATUSES:
+        raise HTTPException(
+            status_code=422, detail=f"payment_status must be one of {PAYMENT_STATUSES}"
+        )
     result = await db.execute(select(Order).where(Order.id == order_id))
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    # Choosing "refunded" from the dropdown is a statement that the whole order
+    # came back, so record that as an amount too. Without this the status said
+    # refunded while refund_amount stayed zero, and the books disagreed with
+    # the screen — the exact ambiguity this phase exists to remove. A refund
+    # already recorded through /refund is left alone.
+    if payment_status == "refunded" and order.refund_amount <= 0:
+        order.refund_amount = order.total_amount
+        order.refunded_at = datetime.now(timezone.utc)
+    # Moving back off a refunded state clears the record rather than leaving a
+    # refund attached to an order that is no longer refunded.
+    if payment_status in {"unpaid", "paid"}:
+        order.refund_amount = Decimal("0")
+        order.refunded_at = None
+        order.refund_reference = None
+
     order.payment_status = payment_status
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
@@ -628,6 +661,81 @@ async def update_shipping(
         order.courier = courier
     if tracking_number is not None:
         order.tracking_number = tracking_number
+    await db.commit()
+    await db.refresh(order, attribute_names=["items"])
+    return order
+
+
+class RefundCreate(BaseModel):
+    """One refund against an order. Partial by default — `amount` is what is
+    going back now, not the order total."""
+
+    amount: Decimal = Field(..., gt=0, decimal_places=2)
+    # Whatever identifies the refund at the other end: a Razorpay refund id, a
+    # UPI reference, or a note like "cash returned at the door" for COD.
+    reference: str | None = Field(default=None, max_length=128)
+
+
+@router.post("/{order_id}/refund", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
+async def refund_order(
+    order_id: uuid.UUID,
+    payload: RefundCreate,
+    db: AsyncSession = Depends(get_db_session),
+) -> Order:
+    """Record money going back to the customer. Admin-gated.
+
+    Records the refund; it does not call Razorpay. The money is moved in the
+    Razorpay dashboard (or handed back in cash for COD) and this is the ledger
+    entry — which is what was missing, since a refund previously existed only
+    as the word "refunded" with no amount, date or reference.
+
+    Refunds accumulate, so a ₹200 and then a ₹249 refund on a ₹449 order add up
+    to a fully refunded order. Each one is checked against what is left rather
+    than the total, so a series of partials cannot exceed the order between
+    them.
+    """
+    result = await db.execute(
+        select(Order).options(selectinload(Order.items)).where(Order.id == order_id).with_for_update()
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # A COD order where the cash was never collected has nothing to give back.
+    # Recording a refund against it would invent an outgoing payment.
+    # "refunded" is allowed through deliberately: an already-refunded order has
+    # nothing left, but that is a fact about the amount, not about whether it
+    # was paid. Letting it fall to the remaining-balance check below produces
+    # the accurate message ("exceeds the 0 still refundable") instead of the
+    # misleading "this order is not paid".
+    if order.payment_status not in {"paid", "partially_refunded", "refunded"}:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This order is not paid, so there is nothing to refund. Mark it paid "
+                "first if the money was collected outside the system."
+            ),
+        )
+
+    already = order.refund_amount or Decimal("0")
+    remaining = order.total_amount - already
+    if payload.amount > remaining:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Refund of {payload.amount} exceeds the {remaining} still refundable "
+                f"on this order (total {order.total_amount}, already refunded {already})."
+            ),
+        )
+
+    order.refund_amount = already + payload.amount
+    order.refunded_at = datetime.now(timezone.utc)
+    if payload.reference:
+        order.refund_reference = payload.reference
+    order.payment_status = (
+        "refunded" if order.refund_amount >= order.total_amount else "partially_refunded"
+    )
+
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
     return order
@@ -790,6 +898,12 @@ async def verify_razorpay_payment(
         payload.razorpay_signature,
     ):
         raise HTTPException(status_code=400, detail="Payment verification failed")
+
+    # Keep the reference to the payment that was just proved. Without it a bank
+    # settlement cannot be tied back to this order, and Razorpay's refund API
+    # -- which takes a payment id, not an order id -- cannot be called from our
+    # own records.
+    order.razorpay_payment_id = payload.razorpay_payment_id
 
     if order.payment_method == "cod":
         # Deposit collected; the balance is still owed on delivery.
