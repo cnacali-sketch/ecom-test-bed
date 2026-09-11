@@ -440,6 +440,7 @@ async def list_orders(
 @router.get("/all", response_model=list[OrderAdminRead], dependencies=[Depends(require_admin)])
 async def list_all_orders(
     q: str | None = None,
+    status: str | None = None,
     db: AsyncSession = Depends(get_db_session),
 ) -> list[Order]:
     """Every order, newest first — the admin console Orders screen. Admin-gated.
@@ -460,6 +461,20 @@ async def list_all_orders(
     filtering in the browser would only ever search the page already loaded.
     """
     statement = select(Order).options(selectinload(Order.items))
+
+    # The morning question — "what still needs shipping?" — could not be asked
+    # at all before this. Several statuses can be passed comma-separated, so
+    # one request covers an "open orders" view (pending,confirmed).
+    if status:
+        wanted = [s.strip() for s in status.split(",") if s.strip()]
+        unknown = [s for s in wanted if s not in FULFILMENT_STATUSES]
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"unknown status: {', '.join(unknown)}. Must be one of {FULFILMENT_STATUSES}",
+            )
+        if wanted:
+            statement = statement.where(Order.status.in_(wanted))
 
     term = (q or "").strip()
     if term:
@@ -514,38 +529,27 @@ async def get_order(order_id: uuid.UUID, db: AsyncSession = Depends(get_db_sessi
     return order
 
 
-@router.patch("/{order_id}/status", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
-async def update_order_status(
-    order_id: uuid.UUID,
-    status: str,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db_session),
-) -> Order:
-    """Update fulfilment status: pending → confirmed → shipped → delivered,
-    plus the off-ramps cancelled / returned."""
-    valid = {"pending", "confirmed", "shipped", "delivered", "cancelled", "returned"}
-    if status not in valid:
-        raise HTTPException(status_code=422, detail=f"status must be one of {valid}")
-    # Items are eager-loaded because releasing or re-reserving stock reads
-    # them; a lazy load here would raise MissingGreenlet under asyncio rather
-    # than quietly issuing a query.
-    result = await db.execute(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
-    )
-    order = result.scalar_one_or_none()
-    if order is None:
-        raise HTTPException(status_code=404, detail="Order not found")
-    # An order holds its stock until it ends. Cancelling or returning ends it;
-    # moving back to an active status takes the units again. Both are guarded
-    # by order.stock_released so the operation is idempotent — clicking
-    # "cancelled" twice, or deleting an order that was already cancelled, must
-    # not hand out stock the shop never got back. See services/stock.py.
-    ENDED = {"cancelled", "returned"}
-    if status in ENDED and not order.stock_released:
+FULFILMENT_STATUSES = {
+    "pending", "confirmed", "shipped", "delivered", "cancelled", "returned",
+}
+# The two that end an order and give its stock back. Everything else means the
+# order is still live and still holding its units.
+ENDED_STATUSES = {"cancelled", "returned"}
+
+
+async def _apply_status(db: AsyncSession, order: Order, status: str) -> None:
+    """Move one order to `status`, keeping its stock reservation honest.
+
+    Shared by the single and bulk endpoints on purpose: a bulk "mark cancelled"
+    that skipped this would reintroduce exactly the bug Phase 1 fixed, only
+    twenty orders at a time. Does not commit — the caller decides the
+    transaction boundary, which is what makes a bulk update all-or-nothing.
+    """
+    if status in ENDED_STATUSES and not order.stock_released:
         await stock.release(db, order.items)
         order.stock_released = True
-    elif status not in ENDED and order.stock_released:
-        # The units freed by the cancellation may have been sold since, so this
+    elif status not in ENDED_STATUSES and order.stock_released:
+        # The units freed by a cancellation may have been sold since, so this
         # can legitimately fail. Refuse rather than push stock negative.
         short = await stock.shortfalls(db, order.items)
         if short:
@@ -562,16 +566,103 @@ async def update_order_status(
         order.stock_released = False
 
     order.status = status
+
+
+async def _notify_if_shipped(
+    db: AsyncSession, order: Order, status: str, background_tasks: BackgroundTasks
+) -> None:
+    if status != "shipped":
+        return
+    notify_email = await _resolve_order_email(db, order)
+    if notify_email:
+        background_tasks.add_task(
+            send_order_shipped_email,
+            notify_email,
+            str(order.id),
+            order.courier,
+            order.tracking_number,
+        )
+
+
+class BulkStatusUpdate(BaseModel):
+    order_ids: list[uuid.UUID] = Field(..., min_length=1, max_length=200)
+    status: str
+
+
+# Declared BEFORE /{order_id}/status: FastAPI matches in declaration order, and
+# the parameterised route would otherwise swallow "bulk" as an order id and
+# fail UUID parsing with a 422 that says nothing useful.
+@router.patch("/bulk/status", response_model=list[OrderAdminRead], dependencies=[Depends(require_admin)])
+async def bulk_update_status(
+    payload: BulkStatusUpdate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db_session),
+) -> list[Order]:
+    """Move several orders to the same fulfilment status at once. Admin-gated.
+
+    Exists because a pickup is a batch: twenty packed parcels previously meant
+    twenty dropdowns, and the cost of a good sales day scaled with it.
+
+    All-or-nothing. One commit covers every order, so if reinstating one of
+    them would oversell, none of them move — a half-applied bulk update is
+    worse than a refused one, because nothing on screen says which half.
+    """
+    if payload.status not in FULFILMENT_STATUSES:
+        raise HTTPException(
+            status_code=422, detail=f"status must be one of {FULFILMENT_STATUSES}"
+        )
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.id.in_(payload.order_ids))
+    )
+    orders = list(result.scalars().all())
+    if len(orders) != len(set(payload.order_ids)):
+        found = {o.id for o in orders}
+        missing = [str(i) for i in set(payload.order_ids) - found]
+        raise HTTPException(
+            status_code=404,
+            detail=f"{len(missing)} of these orders no longer exist: {', '.join(missing[:5])}",
+        )
+
+    for order in orders:
+        await _apply_status(db, order, payload.status)
+
+    await db.commit()
+    for order in orders:
+        await db.refresh(order, attribute_names=["items"])
+        await _notify_if_shipped(db, order, payload.status, background_tasks)
+    return orders
+
+
+@router.patch("/{order_id}/status", response_model=OrderAdminRead, dependencies=[Depends(require_admin)])
+async def update_order_status(
+    order_id: uuid.UUID,
+    status: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db_session),
+) -> Order:
+    """Update fulfilment status: pending → confirmed → shipped → delivered,
+    plus the off-ramps cancelled / returned."""
+    if status not in FULFILMENT_STATUSES:
+        raise HTTPException(
+            status_code=422, detail=f"status must be one of {FULFILMENT_STATUSES}"
+        )
+    # Items are eager-loaded because releasing or re-reserving stock reads
+    # them; a lazy load here would raise MissingGreenlet under asyncio rather
+    # than quietly issuing a query.
+    result = await db.execute(
+        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    await _apply_status(db, order, status)
     await db.commit()
     await db.refresh(order, attribute_names=["items"])
-
-    if status == "shipped":
-        notify_email = await _resolve_order_email(db, order)
-        if notify_email:
-            background_tasks.add_task(
-                send_order_shipped_email, notify_email, str(order.id), order.courier, order.tracking_number
-            )
-
+    await _notify_if_shipped(db, order, status, background_tasks)
     return order
 
 

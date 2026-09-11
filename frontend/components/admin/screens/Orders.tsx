@@ -12,12 +12,14 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Printer,
   Search,
   ShoppingBag,
   Trash2,
   X,
 } from "lucide-react";
 
+import { siteConfig } from "@/content/site.config";
 import { rupee } from "@/lib/admin/helpers";
 import { apiFetch } from "@/lib/api-client";
 
@@ -62,6 +64,10 @@ interface Order {
   refund_amount?: string;
   refunded_at?: string | null;
   refund_reference?: string | null;
+  /** COD collects a deposit online; the balance is owed at the door. The
+   * packing slip has to show the courier what to collect. */
+  deposit_amount?: string;
+  deposit_paid?: boolean;
   created_at: string;
   items: OrderItem[];
 }
@@ -176,6 +182,14 @@ export function Orders({
   // whole point is to find the one order a caller is asking about.
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  // The morning work queue. Server-side like the search, so it filters every
+  // order rather than the page already on screen.
+  const [statusFilter, setStatusFilter] = useState("");
+  /** Orders ticked for a bulk action. Ids, not indexes — the list reloads. */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  /** Orders whose packing slips are staged for printing. */
+  const [slips, setSlips] = useState<Order[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,7 +200,11 @@ export function Orders({
     const timer = setTimeout(() => {
       if (cancelled) return;
       if (term) setSearching(true);
-      apiFetch(`/api/orders/all${term ? `?q=${encodeURIComponent(term)}` : ""}`)
+      const params = new URLSearchParams();
+      if (term) params.set("q", term);
+      if (statusFilter) params.set("status", statusFilter);
+      const qs = params.toString();
+      apiFetch(`/api/orders/all${qs ? `?${qs}` : ""}`)
         .then(async (res) => {
           if (cancelled) return;
           if (!res?.ok) return setError(true);
@@ -204,7 +222,7 @@ export function Orders({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, statusFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -348,6 +366,68 @@ export function Orders({
     return false;
   }
 
+  /**
+   * Move every ticked order to one status in a single request.
+   *
+   * The server applies them in one transaction, so a batch that would oversell
+   * on reinstatement is refused whole rather than half-applied — nothing on
+   * screen could say which half had moved.
+   */
+  async function bulkStatus(status: string) {
+    const ids = [...selected];
+    if (ids.length === 0 || bulkBusy) return;
+    setBulkBusy(true);
+    try {
+      const res = await apiFetch("/api/orders/bulk/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_ids: ids, status }),
+      });
+      if (res?.ok) {
+        const updated = (await res.json().catch(() => null)) as Order[] | null;
+        if (Array.isArray(updated)) {
+          const byId = new Map(updated.map((o) => [o.id, o]));
+          setOrders((cur) => cur.map((o) => byId.get(o.id) ?? o));
+        }
+        setSelected(new Set());
+        setPatchError(null);
+        // A status filter is a live queue: orders that just moved out of it
+        // should leave the list rather than linger as stale rows.
+        if (statusFilter && !statusFilter.split(",").includes(status)) {
+          setOrders((cur) => cur.filter((o) => !ids.includes(o.id)));
+        }
+        return;
+      }
+      if (!res) {
+        setPatchError("Couldn't reach the server. Check your connection and try again.");
+      } else if (res.status === 401 || res.status === 403) {
+        setPatchError("Your admin session has expired. Please log out and log back in.");
+      } else {
+        const body = await res.json().catch(() => null);
+        setPatchError(body?.detail ?? `Couldn't update those orders (HTTP ${res.status}).`);
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  /** Stage the ticked orders' slips, then hand the browser its print dialog. */
+  function printSlips() {
+    const chosen = orders.filter((o) => selected.has(o.id));
+    if (chosen.length === 0) return;
+    setSlips(chosen);
+    // One frame so React has committed the slips before the dialog captures
+    // the page — printing an empty container is the classic failure here.
+    requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+  }
+
+  const toggleOne = (id: string) =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
   function toggleFlag(order: Order) {
     if (order.flagged) {
       patchOrder(order.id, "flag", { flagged: "false" });
@@ -394,6 +474,44 @@ export function Orders({
     </div>
   );
 
+  // "Open" is the working queue: everything still owed to a customer. The rest
+  // map one-to-one onto a fulfilment status.
+  const FILTERS: { value: string; label: string }[] = [
+    { value: "", label: "All" },
+    { value: "pending,confirmed", label: "Open" },
+    { value: "pending", label: "Pending" },
+    { value: "shipped", label: "Shipped" },
+    { value: "delivered", label: "Delivered" },
+    { value: "cancelled,returned", label: "Cancelled / returned" },
+  ];
+
+  const filterTabs = (
+    <div className="flex flex-wrap gap-1" role="group" aria-label="Filter orders by status">
+      {FILTERS.map((f) => {
+        const active = statusFilter === f.value;
+        return (
+          <button
+            key={f.value || "all"}
+            type="button"
+            aria-pressed={active}
+            onClick={() => {
+              setStatusFilter(f.value);
+              // Selection is meaningless once the visible set changes.
+              setSelected(new Set());
+            }}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              active
+                ? "bg-teal text-white"
+                : "bg-ink/5 text-ink-soft hover:bg-ink/10 hover:text-ink"
+            }`}
+          >
+            {f.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   const searchBox = (
     <label className="relative block w-full sm:w-80">
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-soft/60" />
@@ -430,6 +548,7 @@ export function Orders({
           </h3>
           {searchBox}
         </div>
+        <div className="border-b border-ink/10 px-5 py-3">{filterTabs}</div>
         <div className="p-16 text-center">
           <ShoppingBag className="mx-auto h-8 w-8 text-ink-soft/40" />
           {query.trim() ? (
@@ -468,12 +587,64 @@ export function Orders({
         </h3>
         {searchBox}
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-5 py-3">
+        {filterTabs}
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-ink">{selected.size} selected</span>
+            <select
+              value=""
+              disabled={bulkBusy}
+              onChange={(e) => e.target.value && bulkStatus(e.target.value)}
+              aria-label="Set status for selected orders"
+              className="cursor-pointer border border-ink/15 bg-card px-2 py-1 text-xs font-semibold text-ink outline-none focus:border-teal"
+            >
+              <option value="">Set status…</option>
+              {STATUS.map((s) => (
+                <option key={s} value={s} className="capitalize">
+                  {s}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={printSlips}
+              className="flex items-center gap-1.5 border border-ink/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:border-teal hover:text-teal"
+            >
+              <Printer className="h-3.5 w-3.5" /> Packing slips
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="text-xs font-semibold uppercase tracking-wide text-ink-soft hover:text-ink"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
       {errorBanner}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[820px] text-sm">
           <thead>
             <tr className="border-b border-ink/10 text-left text-[11px] uppercase tracking-wide text-ink-soft">
               <th className="w-8 px-3 py-3" />
+              <th className="w-8 px-1 py-3">
+                <input
+                  type="checkbox"
+                  aria-label="Select all orders"
+                  className="accent-teal"
+                  checked={orders.length > 0 && selected.size === orders.length}
+                  // Indeterminate is the honest state for a partial selection:
+                  // an unticked box would imply clicking it selects nothing new.
+                  ref={(el) => {
+                    if (el) el.indeterminate = selected.size > 0 && selected.size < orders.length;
+                  }}
+                  onChange={(e) =>
+                    setSelected(e.target.checked ? new Set(orders.map((o) => o.id)) : new Set())
+                  }
+                />
+              </th>
               <th className="px-2 py-3 font-semibold">Order</th>
               <th className="px-3 py-3 font-semibold">Customer</th>
               <th className="px-3 py-3 font-semibold">Placed</th>
@@ -502,6 +673,15 @@ export function Orders({
                       >
                         {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                       </button>
+                    </td>
+                    <td className="px-1 py-3">
+                      <input
+                        type="checkbox"
+                        className="accent-teal"
+                        checked={selected.has(o.id)}
+                        onChange={() => toggleOne(o.id)}
+                        aria-label={`Select order ${o.id.slice(0, 8)}`}
+                      />
                     </td>
                     <td className="px-2 py-3 font-mono text-xs text-ink-soft">
                       <span className="flex items-center gap-1.5">
@@ -549,7 +729,7 @@ export function Orders({
                   </tr>
                   {expanded && (
                     <tr className="border-b border-ink/5 bg-paper-tint/50">
-                      <td colSpan={8} className="px-5 py-4">
+                      <td colSpan={9} className="px-5 py-4">
                         {o.flagged && (
                           <div className="mb-4 flex items-start justify-between gap-2 border border-sale/30 bg-sale/5 px-3 py-2 text-xs text-sale">
                             <span className="flex items-start gap-2">
@@ -602,6 +782,10 @@ export function Orders({
           </tbody>
         </table>
       </div>
+      {/* Rendered only once a print has been asked for, so the slips are never
+          in the DOM during normal use. Kept mounted afterwards so a second
+          Ctrl+P reprints the same batch rather than an empty page. */}
+      {slips && <PackingSlips orders={slips} />}
     </div>
   );
 }
@@ -662,6 +846,136 @@ function OrderLines({ order }: { order: Order }) {
           </tr>
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/**
+ * Printable packing slips — one page per order.
+ *
+ * Kept off screen and revealed only to the printer. A separate window would be
+ * blocked by popup settings and would have to re-fetch everything it needs;
+ * this prints from the orders already in hand.
+ *
+ * What goes on it is decided by what the packing table and the courier need:
+ * who it is for, what should be in the box, and — for COD — exactly how much
+ * cash to collect at the door, which is the one number nobody can guess.
+ */
+function PackingSlips({ orders }: { orders: Order[] }) {
+  return (
+    <div id="packing-slips" aria-hidden>
+      <style>{`
+        #packing-slips { display: none; }
+        @media print {
+          /* Hide the console without unmounting it — display:none on a parent
+             would take the slips with it. */
+          body > * { visibility: hidden !important; }
+          #packing-slips, #packing-slips * { visibility: visible !important; }
+          #packing-slips {
+            display: block !important;
+            position: absolute; left: 0; top: 0; width: 100%;
+            color: #000; background: #fff;
+          }
+          .slip { page-break-after: always; padding: 18mm 14mm; }
+          .slip:last-child { page-break-after: auto; }
+          .slip table { width: 100%; border-collapse: collapse; }
+          .slip th, .slip td { text-align: left; padding: 4px 0; font-size: 12px; }
+          .slip thead th { border-bottom: 1px solid #000; }
+        }
+      `}</style>
+      {orders.map((o) => {
+        const total = Number(o.total_amount);
+        const deposit = o.deposit_paid ? Number(o.deposit_amount ?? 0) : 0;
+        const dueOnDelivery = o.payment_method === "cod" ? Math.max(total - deposit, 0) : 0;
+        const a = o.shipping_address;
+        return (
+          <section className="slip" key={o.id}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <strong style={{ fontSize: 18 }}>{siteConfig.brand.name}</strong>
+              <span style={{ fontSize: 12 }}>
+                Order #{o.id.slice(0, 8)} · {formatPlaced(o.created_at)}
+              </span>
+            </div>
+            <hr style={{ margin: "10px 0", border: 0, borderTop: "2px solid #000" }} />
+
+            <div style={{ display: "flex", gap: 32, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Deliver to
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
+                  {a.full_name && <div style={{ fontWeight: 700 }}>{a.full_name}</div>}
+                  <div>{addressLine(a)}</div>
+                  {a.phone && <div>Phone: {a.phone}</div>}
+                </div>
+              </div>
+              <div style={{ width: "38%" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  Shipping
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, marginTop: 4 }}>
+                  <div>{o.courier || "Courier not set"}</div>
+                  <div>{o.tracking_number || "No tracking number"}</div>
+                </div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th style={{ width: 90 }}>SKU</th>
+                  <th style={{ width: 40, textAlign: "right" }}>Qty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {o.items.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.product?.name ?? "Product no longer listed"}</td>
+                    <td>{item.product?.sku ?? "—"}</td>
+                    <td style={{ textAlign: "right" }}>{item.quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div style={{ marginTop: 14, fontSize: 13 }}>
+              <div>
+                Order total: <strong>{rupee(total)}</strong>
+              </div>
+              {o.payment_method === "cod" ? (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: "8px 10px",
+                    border: "2px solid #000",
+                    fontSize: 15,
+                    fontWeight: 700,
+                  }}
+                >
+                  {/* The only number the delivery person acts on. Boxed so it
+                      survives a bad print and cannot be skimmed past. */}
+                  COLLECT ON DELIVERY: {rupee(dueOnDelivery)}
+                  {deposit > 0 && (
+                    <span style={{ fontWeight: 400, fontSize: 12 }}>
+                      {" "}
+                      (deposit of {rupee(deposit)} already paid)
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: 6, fontWeight: 700 }}>PAID ONLINE — collect nothing</div>
+              )}
+            </div>
+
+            <p style={{ marginTop: 16, fontSize: 11 }}>
+              {/* From the content layer, not typed into the component — the
+                  shop's contact details live in one place. */}
+              Questions about this order? {siteConfig.contact.email} · {siteConfig.contact.phone}
+            </p>
+          </section>
+        );
+      })}
     </div>
   );
 }

@@ -330,6 +330,154 @@ describe("Orders screen", () => {
     });
   });
 
+
+  describe("fulfilment at batch size", () => {
+    test("a status tab asks the server for that queue", async () => {
+      routeApi({});
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+
+      // Server-side, so it filters every order rather than the page on screen.
+      await waitFor(() =>
+        expect(apiFetch).toHaveBeenCalledWith(
+          expect.stringContaining("status=pending%2Cconfirmed"),
+        ),
+      );
+    });
+
+    test("selecting orders reveals the bulk actions", async () => {
+      routeApi({});
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+
+      expect(screen.queryByLabelText(/set status for selected/i)).not.toBeInTheDocument();
+      await userEvent.click(screen.getByLabelText(/select order 295b817f/i));
+
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+      expect(screen.getByLabelText(/set status for selected/i)).toBeInTheDocument();
+    });
+
+    test("select-all ticks every visible order", async () => {
+      routeApi({ orders: [order(), order({ id: "aaaaaaaa-0000-0000-0000-000000000001" })] });
+      render(<Orders />);
+      await screen.findAllByText("praveen@example.com");
+
+      await userEvent.click(screen.getByLabelText("Select all orders"));
+
+      expect(screen.getByText("2 selected")).toBeInTheDocument();
+    });
+
+    test("a bulk status change sends one request for the whole batch", async () => {
+      routeApi({ orders: [order(), order({ id: "aaaaaaaa-0000-0000-0000-000000000001" })] });
+      render(<Orders />);
+      await screen.findAllByText("praveen@example.com");
+      await userEvent.click(screen.getByLabelText("Select all orders"));
+
+      await userEvent.selectOptions(screen.getByLabelText(/set status for selected/i), "shipped");
+
+      // One request, not one per order — the whole point of the batch.
+      await waitFor(() =>
+        expect(apiFetch).toHaveBeenCalledWith(
+          "/api/orders/bulk/status",
+          expect.objectContaining({ method: "PATCH" }),
+        ),
+      );
+      const call = apiFetch.mock.calls.find((c: unknown[]) => c[0] === "/api/orders/bulk/status");
+      const body = JSON.parse((call![1] as { body: string }).body);
+      expect(body.order_ids).toHaveLength(2);
+      expect(body.status).toBe("shipped");
+    });
+
+    test("changing the filter clears a stale selection", async () => {
+      routeApi({});
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByLabelText(/select order 295b817f/i));
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: "Shipped" }));
+
+      // Acting on orders that are no longer on screen is how the wrong parcel
+      // gets marked shipped.
+      expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+    });
+
+    test("a failed bulk update shows the server's reason and keeps the selection", async () => {
+      apiFetch.mockImplementation(async (path: string) => {
+        if (path === "/api/orders/bulk/status") return fail(409, "Cannot reinstate this order: not enough stock");
+        if (path.startsWith("/api/returns")) return ok([]);
+        return ok([order()]);
+      });
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByLabelText(/select order 295b817f/i));
+
+      await userEvent.selectOptions(screen.getByLabelText(/set status for selected/i), "confirmed");
+
+      expect(await screen.findByText(/not enough stock/i)).toBeInTheDocument();
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+    });
+  });
+
+  describe("packing slips", () => {
+    test("prints a slip carrying what the packer and courier each need", async () => {
+      const print = vi.spyOn(window, "print").mockImplementation(() => {});
+      routeApi({ orders: [order({ payment_method: "cod", total_amount: "449.00" })] });
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByLabelText(/select order 295b817f/i));
+
+      await userEvent.click(screen.getByRole("button", { name: /packing slips/i }));
+
+      const slips = await screen.findByText(/COLLECT ON DELIVERY/);
+      expect(slips).toBeInTheDocument();
+      // The cash figure is the one number nobody at the door can work out.
+      expect(slips.textContent).toContain("449");
+      await waitFor(() => expect(print).toHaveBeenCalled());
+    });
+
+    test("a prepaid order tells the courier to collect nothing", async () => {
+      const print = vi.spyOn(window, "print").mockImplementation(() => {});
+      routeApi({ orders: [order({ payment_method: "prepaid", payment_status: "paid" })] });
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByLabelText(/select order 295b817f/i));
+
+      await userEvent.click(screen.getByRole("button", { name: /packing slips/i }));
+
+      expect(await screen.findByText(/collect nothing/i)).toBeInTheDocument();
+      // Awaited so the queued print lands inside the test rather than after
+      // its mocks are restored, where it would hit jsdom's real stub.
+      await waitFor(() => expect(print).toHaveBeenCalled());
+    });
+
+    test("a COD deposit is subtracted from what is collected at the door", async () => {
+      const print = vi.spyOn(window, "print").mockImplementation(() => {});
+      routeApi({
+        orders: [
+          order({
+            payment_method: "cod",
+            total_amount: "449.00",
+            deposit_amount: "200.00",
+            deposit_paid: true,
+          }),
+        ],
+      });
+      render(<Orders />);
+      await screen.findByText("praveen@example.com");
+      await userEvent.click(screen.getByLabelText(/select order 295b817f/i));
+
+      await userEvent.click(screen.getByRole("button", { name: /packing slips/i }));
+
+      // 449 - 200 already paid online.
+      const slip = await screen.findByText(/COLLECT ON DELIVERY/);
+      expect(slip.textContent).toContain("249");
+      await waitFor(() => expect(print).toHaveBeenCalled());
+    });
+  });
+
   test("a flagged order is called out with its reason", async () => {
     routeApi({ orders: [order({ flagged: true, flag_reason: "Price mismatch at checkout" })] });
     render(<Orders />);
