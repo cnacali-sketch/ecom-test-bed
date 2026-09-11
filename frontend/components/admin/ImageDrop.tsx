@@ -16,7 +16,7 @@
 //    5.4 MB document (measured live); the URL is ~40 bytes and the browser
 //    caches the image separately.
 
-import { AlertTriangle, CheckCircle2, Trash2, UploadCloud } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ImageIcon, Trash2, UploadCloud } from "lucide-react";
 import { useRef, useState } from "react";
 
 import { fmtSize } from "@/lib/admin/helpers";
@@ -24,6 +24,7 @@ import { IMG_SPECS, slotLabelFor, type ImageSpec } from "@/lib/admin/types";
 import { apiBaseUrl, apiFetch } from "@/lib/api-client";
 import type { PreparedImage } from "@/lib/image-prepare";
 import { ImageEditor } from "./ImageEditor";
+import { MediaPicker } from "./MediaPicker";
 import { HelpTip } from "./atoms";
 
 interface Meta {
@@ -61,6 +62,8 @@ export function ImageDrop({
   const [uploading, setUploading] = useState(false);
   /** Chosen file waiting to be framed. Non-null means the editor is open. */
   const [pending, setPending] = useState<File | null>(null);
+  /** True while the media-library picker is open. */
+  const [picking, setPicking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function upload(file: File) {
@@ -158,16 +161,26 @@ export function ImageDrop({
                 )}
               </div>
             )}
-            <button
-              onClick={() => {
-                onChange("");
-                setMeta(null);
-                setErr("");
-              }}
-              className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-sale hover:underline"
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Remove
-            </button>
+            <div className="mt-1 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-ink-soft hover:text-teal hover:underline"
+              >
+                <ImageIcon className="h-3.5 w-3.5" /> Change
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange("");
+                  setMeta(null);
+                  setErr("");
+                }}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-sale hover:underline"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Remove
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -194,6 +207,18 @@ export function ImageDrop({
           <div className={`mt-0.5 text-ink-soft/70 ${compact ? "text-[11px]" : "text-xs"}`}>
             Any size — you place the {spec.shape} crop, we compress it
           </div>
+          {/* Stops the click from reaching the drop zone's own handler, which
+              would open the file dialog behind the picker. */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPicking(true);
+            }}
+            className={`mt-2 inline-flex items-center gap-1.5 rounded-lg border border-ink/15 bg-card px-2.5 py-1 font-semibold text-ink-soft hover:border-teal hover:text-teal ${compact ? "text-[11px]" : "text-xs"}`}
+          >
+            <ImageIcon className="h-3.5 w-3.5" /> Choose from library
+          </button>
           <input
             ref={inputRef}
             type="file"
@@ -202,6 +227,21 @@ export function ImageDrop({
             onChange={(e) => handle(e.target.files)}
           />
         </div>
+      )}
+      {picking && (
+        <MediaPicker
+          slotLabel={slotLabel}
+          onClose={() => setPicking(false)}
+          onPick={(url) => {
+            // No upload and no re-encode: the file is already on the server,
+            // already compressed. Meta is cleared because the size/crop figures
+            // belong to a freshly prepared upload, not to a reused photo.
+            onChange(url);
+            setMeta(null);
+            setErr("");
+            setPicking(false);
+          }}
+        />
       )}
       {err && (
         <div className="mt-2 flex items-start gap-2 rounded-lg bg-sale/5 px-3 py-2 text-xs font-medium text-sale">
