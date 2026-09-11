@@ -28,6 +28,22 @@ export interface ProductImage {
 export type BadgeAnimation = "shine" | "pulse" | "wiggle" | "none";
 export type StockMode = "hidden" | "exact" | "lowOnly";
 
+/**
+ * Per-product card display toggles, set in the admin's product editor and
+ * previewed there by ProductCardPreview.
+ *
+ * Every key defaults to true. A product saved before these existed, or one
+ * whose attrs carry only some of the keys, must keep rendering exactly as it
+ * does today — so a missing key is "show", never "hide".
+ */
+export interface ProductShow {
+  name: boolean;
+  category: boolean;
+  price: boolean;
+  mrp: boolean;
+  dims: boolean;
+}
+
 export interface Product {
   id: string;
   slug: string;
@@ -55,6 +71,8 @@ export interface Product {
   stockMode?: StockMode;
   /** Discount-badge attention style. Defaults to "shine" when on sale. */
   badgeAnimation?: BadgeAnimation;
+  /** Which rows the product card renders. Absent means show everything. */
+  show?: ProductShow;
   /** Internal payment-verification product. Real rows in the live catalogue,
    * but they must never be indexed by search engines or listed in the
    * sitemap. Carried from the backend's attrs so this keeps working when the

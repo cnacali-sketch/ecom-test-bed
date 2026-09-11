@@ -59,8 +59,22 @@ export function ProductCard({ product }: ProductCardProps) {
   const displayImage = isHovered ? secondaryImage : primaryImage;
 
   const wished = isWished(product.id);
+
+  // Per-product card toggles from the admin editor. Absent means show
+  // everything, which is how every product saved before these existed behaves.
+  const show = product.show;
+  const showName = show?.name !== false;
+  const showCategory = show?.category !== false;
+  const showPrice = show?.price !== false;
+  const showMrp = show?.mrp !== false;
+  const showDims = show?.dims !== false;
+
   const discountPercent = calculateDiscountPercent(product.mrp, product.price);
-  const showDiscountBadge = product.isSale && discountPercent > 0;
+  // Gated on the price toggle as well: a "20% off" flash over a card that
+  // deliberately hides its price would advertise a discount off nothing.
+  // ProductCardPreview.tsx:23 makes the same call, so the admin's preview and
+  // the real card agree.
+  const showDiscountBadge = product.isSale && discountPercent > 0 && showPrice;
   const badgeAnimation = product.badgeAnimation ?? "shine";
   const badgeAnimClass = badgeAnimation !== "none" ? `badge-anim-${badgeAnimation}` : "";
 
@@ -143,14 +157,33 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
       )}
 
-      <Link href={`/products/${product.slug}`} className="mt-2">
-        <p className="eyebrow">{product.type}</p>
-        <h3 className="text-[13px] uppercase tracking-[0.06em] text-ink transition-colors group-hover:text-teal">{product.name}</h3>
+      {/* aria-label carries the real product name even when the visible
+          heading is withheld, so the link is never announced as "New arrival"
+          to a screen reader and every card in a grid stays distinguishable. */}
+      <Link href={`/products/${product.slug}`} className="mt-2" aria-label={product.name}>
+        {showCategory && <p className="eyebrow">{product.type}</p>}
+        <h3 className="text-[13px] uppercase tracking-[0.06em] text-ink transition-colors group-hover:text-teal">
+          {showName ? product.name : "New arrival"}
+        </h3>
       </Link>
 
       <div className="mt-1">
-        <PriceBlock price={product.price} mrp={product.mrp} currency={product.currency} size="sm" />
+        {showPrice ? (
+          <PriceBlock
+            price={product.price}
+            mrp={product.mrp}
+            currency={product.currency}
+            size="sm"
+            showMrp={showMrp}
+          />
+        ) : (
+          <p className="text-sm font-semibold text-teal">Price on request</p>
+        )}
       </div>
+
+      {showDims && product.measurements && (
+        <p className="mt-1 text-[11px] text-ink-soft">Size: {product.measurements}</p>
+      )}
 
       {stockMode !== "hidden" && product.inStock && stock !== undefined && (
         <p className="mt-1 text-[11px] font-medium text-ink-soft">

@@ -124,4 +124,60 @@ describe("adaptProduct", () => {
       },
     ]);
   });
+
+  describe("card display toggles", () => {
+    test("shows every row when attrs carries no toggles", () => {
+      // The whole seeded catalogue predates these toggles. If a missing
+      // attrs.show hid anything, saving nothing would blank live product cards.
+      expect(adaptProduct(makeBackendProduct()).show).toEqual({
+        name: true,
+        category: true,
+        price: true,
+        mrp: true,
+        dims: true,
+      });
+    });
+
+    test("carries the toggles the admin actually saved", () => {
+      const product = makeBackendProduct({
+        attrs: { ...makeBackendProduct().attrs, show: { price: false, mrp: false } },
+      });
+      const { show } = adaptProduct(product);
+
+      expect(show).toEqual({
+        name: true,
+        category: true,
+        price: false,
+        mrp: false,
+        dims: true,
+      });
+    });
+
+    test("ignores non-boolean and unknown keys instead of hiding rows", () => {
+      const product = makeBackendProduct({
+        attrs: {
+          ...makeBackendProduct().attrs,
+          show: { name: "no", price: 0, nonsense: true, dims: false },
+        },
+      });
+
+      // "no" and 0 are not booleans, so they must not read as "hide".
+      expect(adaptProduct(product).show).toEqual({
+        name: true,
+        category: true,
+        price: true,
+        mrp: true,
+        dims: false,
+      });
+    });
+
+    test("falls back to showing everything when attrs.show is the wrong type", () => {
+      for (const value of [null, "all", 1, []]) {
+        const product = makeBackendProduct({
+          attrs: { ...makeBackendProduct().attrs, show: value },
+        });
+        expect(adaptProduct(product).show?.price).toBe(true);
+      }
+    });
+  });
 });

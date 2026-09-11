@@ -7,6 +7,13 @@ interface PriceBlockProps {
   mrp: number;
   currency?: Currency;
   size?: "sm" | "md" | "lg";
+  /**
+   * Render the struck-through M.R.P. and the discount percentage.
+   *
+   * Off only when the product's own "show M.R.P." toggle is off in the admin.
+   * Defaults to true so every existing caller keeps its current output.
+   */
+  showMrp?: boolean;
 }
 
 const SIZE_CLASSES: Record<NonNullable<PriceBlockProps["size"]>, string> = {
@@ -20,8 +27,14 @@ const SIZE_CLASSES: Record<NonNullable<PriceBlockProps["size"]>, string> = {
  * Shared across ProductCard, PDP, and CrossSellRail per the graph's
  * cross-site "price-block" convergence.
  */
-export function PriceBlock({ price, mrp, currency = "INR", size = "md" }: PriceBlockProps) {
-  const isOnSale = mrp > price;
+export function PriceBlock({
+  price,
+  mrp,
+  currency = "INR",
+  size = "md",
+  showMrp = true,
+}: PriceBlockProps) {
+  const isOnSale = showMrp && mrp > price;
   const discountPercent = calculateDiscountPercent(mrp, price);
   const sizeClass = SIZE_CLASSES[size];
 

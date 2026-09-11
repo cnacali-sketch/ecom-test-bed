@@ -1,4 +1,4 @@
-import type { BadgeAnimation, Product, ProductVariant, StockMode } from "./types";
+import type { BadgeAnimation, Product, ProductShow, ProductVariant, StockMode } from "./types";
 
 /**
  * Shape returned by GET /api/products (see backend/app/schemas/product.py).
@@ -33,6 +33,31 @@ export interface BackendProduct {
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+const SHOW_EVERYTHING: ProductShow = {
+  name: true,
+  category: true,
+  price: true,
+  mrp: true,
+  dims: true,
+};
+
+/**
+ * Read the admin's card display toggles out of attrs.
+ *
+ * Keys are merged over "show everything" one at a time rather than spread
+ * wholesale, so a half-written or hand-edited attrs blob can only ever turn
+ * off a row it explicitly names. Anything non-boolean is ignored.
+ */
+function readShow(value: unknown): ProductShow {
+  if (!value || typeof value !== "object") return SHOW_EVERYTHING;
+  const saved = value as Record<string, unknown>;
+  const merged = { ...SHOW_EVERYTHING };
+  for (const key of Object.keys(SHOW_EVERYTHING) as (keyof ProductShow)[]) {
+    if (typeof saved[key] === "boolean") merged[key] = saved[key];
+  }
+  return merged;
 }
 
 function adaptVariant(variant: BackendProductVariant): ProductVariant {
@@ -80,6 +105,7 @@ export function adaptProduct(product: BackendProduct): Product {
     stockMode: typeof attrs.stockMode === "string" ? (attrs.stockMode as StockMode) : undefined,
     badgeAnimation:
       typeof attrs.badgeAnimation === "string" ? (attrs.badgeAnimation as BadgeAnimation) : undefined,
+    show: readShow(attrs.show),
     isTestProduct: attrs.isTestProduct === true,
   };
 }
