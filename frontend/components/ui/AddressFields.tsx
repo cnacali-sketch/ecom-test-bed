@@ -6,6 +6,7 @@
 import type { Address } from "@/lib/auth-context";
 
 export const EMPTY_ADDRESS: Address = {
+  full_name: "",
   line1: "",
   line2: "",
   city: "",
@@ -35,6 +36,13 @@ export function AddressFields({
     <section className="space-y-4">
       <h2 className="font-display text-xl italic text-ink">{heading}</h2>
       <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Full name"
+          value={value.full_name ?? ""}
+          onChange={(v) => set("full_name", v)}
+          autoComplete={`${prefix} name`}
+          className="sm:col-span-2"
+        />
         <Field label="Address line 1" value={value.line1 ?? ""} onChange={(v) => set("line1", v)} autoComplete={`${prefix} address-line1`} className="sm:col-span-2" />
         <Field label="Address line 2" value={value.line2 ?? ""} onChange={(v) => set("line2", v)} autoComplete={`${prefix} address-line2`} className="sm:col-span-2" />
         <Field label="City" value={value.city ?? ""} onChange={(v) => set("city", v)} />

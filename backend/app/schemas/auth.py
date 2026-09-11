@@ -52,6 +52,12 @@ class Address(BaseModel):
     """A postal or billing address. Every field optional so a half-filled form
     still saves; widths guard against oversized input."""
 
+    # Who the courier hands the parcel to. Every Indian courier (Delhivery,
+    # Shiprocket, Bluedart) requires a consignee name on the waybill, and
+    # without it the admin's "deliver to" block was a street address with
+    # nobody's name on it. Optional like every other field so a half-filled
+    # form still saves.
+    full_name: str = Field(default="", max_length=120)
     line1: str = Field(default="", max_length=200)
     line2: str = Field(default="", max_length=200)
     city: str = Field(default="", max_length=100)

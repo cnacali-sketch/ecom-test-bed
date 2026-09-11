@@ -5,6 +5,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { apiFetch } from "./api-client";
 
 export interface Address {
+  /** Recipient name. Couriers require a consignee on the waybill, so an
+   * address without this cannot actually be shipped. */
+  full_name?: string;
   line1?: string;
   line2?: string;
   city?: string;

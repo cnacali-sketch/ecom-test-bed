@@ -22,7 +22,13 @@ export default function CheckoutPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState(user?.email ?? "");
-  const [address, setAddress] = useState<Address>(seedAddress(user?.postal_address));
+  // Seeded from the saved address, falling back to the account holder's own
+  // name — a signed-in shopper shipping to themselves should not have to
+  // retype what the profile already knows.
+  const [address, setAddress] = useState<Address>(() => {
+    const seeded = seedAddress(user?.postal_address);
+    return seeded.full_name ? seeded : { ...seeded, full_name: user?.full_name ?? "" };
+  });
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "prepaid">("cod");
   const [submitting, setSubmitting] = useState(false);
@@ -90,6 +96,13 @@ export default function CheckoutPage() {
 
     if (!user && !email.includes("@")) {
       setError("Enter a valid email so we can send your order confirmation.");
+      return;
+    }
+    // The consignee name goes on the waybill — Delhivery, Shiprocket and
+    // Bluedart all reject a shipment without one, so an order placed without
+    // it cannot actually be dispatched.
+    if ((address.full_name ?? "").trim().length < 2) {
+      setError("Enter the full name of whoever is receiving the parcel.");
       return;
     }
     if (!address.line1 || !address.city || !address.postcode) {
