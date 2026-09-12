@@ -8,9 +8,19 @@
 // /account.
 
 import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Package, Pencil, ShieldOff, Trash2, Users } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Package,
+  Pencil,
+  ShieldOff,
+  Trash2,
+  Users,
+} from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
+import { csvStamp, downloadCsv, toCsv, type CsvColumn } from "@/lib/csv";
 import { useAuth } from "@/lib/auth-context";
 import { inputCls } from "../atoms";
 
@@ -148,6 +158,25 @@ function OrderHistory({ customerId }: { customerId: string }) {
   );
 }
 
+/** The account directory as a spreadsheet.
+ *
+ * Deliberately excludes the blacklist reason: it is a private note about a
+ * person, written for one admin to read, and an export is the easiest thing
+ * in the console to forward by accident. Whether an account is blocked is
+ * exported; why is not.
+ */
+const CUSTOMER_COLUMNS: CsvColumn<Customer>[] = [
+  { header: "Name", value: (c) => c.full_name ?? "" },
+  { header: "Email", value: (c) => c.email },
+  { header: "Phone", value: (c) => c.phone ?? "" },
+  { header: "Role", value: (c) => c.role },
+  { header: "Verified", value: (c) => (c.is_verified ? "yes" : "no") },
+  { header: "Blocked", value: (c) => (c.is_blocked ? "yes" : "no") },
+  { header: "Registered", value: (c) => new Date(c.created_at).toLocaleDateString("en-IN") },
+  { header: "Address", value: (c) => oneLine(c.postal_address) },
+  { header: "Pincode", value: (c) => c.postal_address?.postcode ?? "" },
+];
+
 function oneLine(a: Address): string {
   const parts = [a.line1, a.line2, a.city, a.state, a.postcode, a.country].filter(Boolean);
   return parts.join(", ");
@@ -277,6 +306,17 @@ export function Customers() {
         <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
           <Users className="h-4 w-4 text-teal" /> Customers ({customers.length})
         </h3>
+        {customers.length > 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              downloadCsv(`customers-${csvStamp()}.csv`, toCsv(customers, CUSTOMER_COLUMNS))
+            }
+            className="flex items-center gap-1.5 border border-ink/15 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:border-teal hover:text-teal"
+          >
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </button>
+        )}
       </div>
       {actionError && (
         <div className="flex items-center justify-between gap-3 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">

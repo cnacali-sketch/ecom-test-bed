@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Download,
   Printer,
   Search,
   ShoppingBag,
@@ -22,6 +23,7 @@ import {
 import { siteConfig } from "@/content/site.config";
 import { rupee } from "@/lib/admin/helpers";
 import { apiFetch } from "@/lib/api-client";
+import { csvStamp, downloadCsv, toCsv, type CsvColumn } from "@/lib/csv";
 
 interface OrderItem {
   id: string;
@@ -156,6 +158,33 @@ function addressLine(a: ShippingAddress): string {
  * both take a multi-line address, and pasting a single comma-run means
  * re-splitting it by hand for every shipment.
  */
+/** What an accountant and a courier each need out of an order.
+ *
+ * One row per order, not per line item: the shop's own question is "what did
+ * we sell in September", and a line-item export makes every total appear once
+ * per product bought. Items are summarised into a single cell instead.
+ */
+const ORDER_COLUMNS: CsvColumn<Order>[] = [
+  { header: "Order", value: (o) => `#${o.id.slice(0, 8)}` },
+  { header: "Placed", value: (o) => new Date(o.created_at).toLocaleString("en-IN") },
+  { header: "Customer", value: (o) => o.shipping_address?.full_name ?? "" },
+  { header: "Email / account", value: (o) => o.user_id },
+  { header: "Phone", value: (o) => o.shipping_address?.phone ?? "" },
+  { header: "Address", value: (o) => addressLine(o.shipping_address ?? {}) },
+  { header: "Pincode", value: (o) => o.shipping_address?.postcode ?? "" },
+  { header: "Items", value: (o) => itemSummary(o) },
+  { header: "Status", value: (o) => o.status },
+  { header: "Payment", value: (o) => o.payment_status },
+  { header: "Method", value: (o) => o.payment_method },
+  // Amounts stay unformatted: a rupee symbol or a thousands separator turns
+  // the column into text and stops it adding up, which is the one thing an
+  // exported order list is for.
+  { header: "Total", value: (o) => o.total_amount },
+  { header: "Refunded", value: (o) => o.refund_amount ?? "0" },
+  { header: "Courier", value: (o) => o.courier ?? "" },
+  { header: "Tracking", value: (o) => o.tracking_number ?? "" },
+];
+
 function addressForCopy(order: Order): string {
   const a = order.shipping_address;
   return [
@@ -702,6 +731,17 @@ export function Orders({
       )}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-5 py-3">
         {filterTabs}
+        {orders.length > 0 && selected.size === 0 && (
+          <button
+            type="button"
+            onClick={() =>
+              downloadCsv(`orders-${csvStamp()}.csv`, toCsv(orders, ORDER_COLUMNS))
+            }
+            className="flex items-center gap-1.5 border border-ink/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:border-teal hover:text-teal"
+          >
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </button>
+        )}
         {selected.size > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-ink">{selected.size} selected</span>
