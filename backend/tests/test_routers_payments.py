@@ -254,3 +254,58 @@ async def test_refund_is_never_recorded_as_more_than_the_order_was_worth(
     order = await _reload(db_session, order_id)
     assert order.refund_amount == Decimal("1000.00")
     assert order.payment_status == "refunded"
+
+
+@pytest.mark.asyncio
+async def test_a_webhook_payment_is_logged_against_the_webhook_not_an_admin(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Money moved with nobody signed in, and the log has to say so.
+
+    The tempting shortcut is to attribute an automated write to whichever
+    admin account is at hand. That produces a log which names a real person
+    next to a payment they never touched -- a confident lie in the one record
+    meant to settle arguments about money.
+    """
+    from sqlalchemy import select
+
+    from app.models.audit_log import AuditLog
+
+    order_id = await _order(client, "prepaid")
+    raw, headers = _signed(_event("payment.captured", order_id))
+
+    await client.post("/api/payments/razorpay/webhook", content=raw, headers=headers)
+
+    entry = (
+        await db_session.execute(
+            select(AuditLog).where(AuditLog.action.startswith("order.payment_captured"))
+        )
+    ).scalars().first()
+
+    assert entry is not None, "a webhook that moved money wrote no audit entry"
+    assert entry.actor_role == "system"
+    assert entry.actor_id is None
+    assert entry.actor_email == "razorpay@webhook"
+    assert entry.changes["payment_status"]["to"] == "paid"
+
+
+@pytest.mark.asyncio
+async def test_a_webhook_that_changed_nothing_writes_no_audit_entry(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Razorpay retries. A redelivery of an event already applied must not
+    append a second entry saying the payment was captured twice."""
+    from sqlalchemy import func, select
+
+    from app.models.audit_log import AuditLog
+
+    order_id = await _order(client, "prepaid")
+    raw, headers = _signed(_event("payment.captured", order_id))
+
+    await client.post("/api/payments/razorpay/webhook", content=raw, headers=headers)
+    await client.post("/api/payments/razorpay/webhook", content=raw, headers=headers)
+
+    count = await db_session.scalar(
+        select(func.count()).select_from(AuditLog).where(AuditLog.entity_type == "order")
+    )
+    assert count == 1

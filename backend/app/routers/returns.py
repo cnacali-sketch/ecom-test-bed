@@ -11,7 +11,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,8 @@ from app.dependencies.auth import require_admin, require_staff
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.return_request import RETURN_STATUSES, ReturnRequest
-from app.services import stock
+from app.models.user import User
+from app.services import audit, stock
 
 router = APIRouter(prefix="/api/returns", tags=["returns"])
 
@@ -86,7 +87,11 @@ async def list_return_requests(db: AsyncSession = Depends(get_db_session)) -> li
 async def update_return_request(
     request_id: uuid.UUID,
     status: str,
+    # Named `http_request` because `request` is already the ReturnRequest row
+    # a few lines down; reusing the name would shadow it silently.
+    http_request: Request,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> ReturnRequest:
     """Approve or reject a return request. Admin-gated. Approving refunds the
     order (payment_status -> refunded, status -> returned) and restocks each
@@ -129,6 +134,21 @@ async def update_return_request(
                 await stock.release(db, order.items)
                 order.stock_released = True
 
+    await audit.record(
+        db,
+        actor=actor,
+        request=http_request,
+        action=f"return.{status}",
+        entity_type="return",
+        entity_id=request.id,
+        entity_label=f"#{str(request.order_id)[:8]}",
+        summary=(
+            f"Approved the return on #{str(request.order_id)[:8]} - refunded and restocked"
+            if status == "approved"
+            else f"Rejected the return on #{str(request.order_id)[:8]}"
+        ),
+        changes={"status": {"from": "pending", "to": status}},
+    )
     await db.commit()
     await db.refresh(request)
     return request

@@ -1,6 +1,10 @@
 # Node / Next.js
 frontend/node_modules/
 frontend/.next/
+# Any .next/, not just the frontend's. Running `next build` from the wrong
+# directory drops a full build tree wherever it was invoked, and the anchored
+# rule above does not catch it.
+**/.next/
 frontend/out/
 frontend/.env*.local
 

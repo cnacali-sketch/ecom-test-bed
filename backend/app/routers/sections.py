@@ -10,7 +10,7 @@
                         partial patch, matching the single settings screen
                         that calls it).
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.homepage_content import HomepageContent
+from app.models.user import User
+from app.services import audit
 
 router = APIRouter(prefix="/api/sections", tags=["sections"])
 
@@ -72,11 +74,33 @@ async def get_homepage_content(db: AsyncSession = Depends(get_db_session)) -> Ho
 
 @router.put("", response_model=HomepageContentRead, dependencies=[Depends(require_admin)])
 async def update_homepage_content(
-    payload: HomepageContentWrite, db: AsyncSession = Depends(get_db_session)
+    payload: HomepageContentWrite,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> HomepageContent:
     row = await _get_or_create(db)
-    for field, value in payload.model_dump().items():
+    incoming = payload.model_dump()
+    before = {field: getattr(row, field) for field in incoming}
+    for field, value in incoming.items():
         setattr(row, field, value)
+
+    # This endpoint is a full replace: a field the caller omitted is written as
+    # null and the storefront falls back to the static default. That makes
+    # "what did this look like before" a question only the log can answer, so
+    # the whole diff is recorded rather than a summary of it.
+    changed = audit.diff(before, {field: getattr(row, field) for field in incoming})
+    if changed:
+        await audit.record(
+            db,
+            actor=actor,
+            request=request,
+            action="homepage.update",
+            entity_type="homepage",
+            entity_label="Homepage",
+            summary=f"Edited the homepage: {', '.join(sorted(changed))}",
+            changes=changed,
+        )
     await db.commit()
     await db.refresh(row)
     return row

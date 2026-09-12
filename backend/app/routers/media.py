@@ -12,11 +12,15 @@ import io
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from sqlalchemy.ext.asyncio import AsyncSession
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel
 
+from app.db import get_db_session
 from app.dependencies.auth import require_admin
+from app.models.user import User
+from app.services import audit
 
 router = APIRouter(prefix="/api/media", tags=["media"], dependencies=[Depends(require_admin)])
 
@@ -56,7 +60,15 @@ async def list_media() -> list[MediaItem]:
 
 
 @router.post("", response_model=MediaItem, status_code=201)
-async def upload_media(file: UploadFile) -> MediaItem:
+async def upload_media(
+    file: UploadFile,
+    request: Request,
+    # This router is otherwise filesystem-only; the session exists purely so
+    # the upload can be recorded. Photos are how a product is represented to a
+    # customer, and a swapped one is a change worth being able to trace.
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> MediaItem:
     contents = await file.read()
     if len(contents) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=422, detail="File exceeds 8MB limit")
@@ -78,11 +90,26 @@ async def upload_media(file: UploadFile) -> MediaItem:
     original_stem = Path(file.filename or "upload").stem
     stored_name = f"{uuid.uuid4()}__{original_stem}{extension}"
     (UPLOAD_DIR / stored_name).write_bytes(contents)
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="media.upload",
+        entity_type="media",
+        entity_label=stored_name,
+        summary=f"Uploaded {original_stem}{extension} ({len(contents) // 1024} KB)",
+    )
+    await db.commit()
     return _to_item(UPLOAD_DIR / stored_name)
 
 
 @router.delete("/{media_id}", status_code=204)
-async def delete_media(media_id: str) -> None:
+async def delete_media(
+    media_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> None:
     # media_id is a filename we generated (uuid__name) — reject anything that
     # could escape UPLOAD_DIR via path separators before it ever touches disk.
     if "/" in media_id or "\\" in media_id or ".." in media_id:
@@ -90,4 +117,20 @@ async def delete_media(media_id: str) -> None:
     path = UPLOAD_DIR / media_id
     if not path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
+
+    # Committed before the file is removed. The two cannot be made atomic - one
+    # is a filesystem call and the other a transaction - so the order is chosen
+    # deliberately: a log entry for a delete that then failed is a false alarm
+    # somebody can check, while a deleted file with no entry is the silent loss
+    # this table exists to prevent.
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="media.delete",
+        entity_type="media",
+        entity_label=media_id,
+        summary=f"Deleted {media_id}",
+    )
+    await db.commit()
     path.unlink()

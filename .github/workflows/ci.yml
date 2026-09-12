@@ -1,0 +1,134 @@
+# The four checks that have been run by hand before every commit, run
+# automatically instead.
+#
+# The backend job exists in two halves on purpose. The suite itself runs on
+# in-memory SQLite, which is fast and needs no service — but that is also why
+# PostgreSQL-only behaviour has never been tested. The append-only trigger on
+# `audit_logs` is exactly that kind of behaviour: it is PL/pgSQL, it cannot be
+# expressed in SQLite, and it is a security control. So a real Postgres is
+# provided and `TEST_POSTGRES_URL` is set, which un-skips the trigger test.
+# A security test that silently skips is worse than no test, because the
+# summary line still says everything passed.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: savvy
+          POSTGRES_PASSWORD: savvy
+          POSTGRES_DB: savvy_test
+        ports: ["5432:5432"]
+        # Without this the job races the database and fails on connection
+        # refused rather than on anything real.
+        options: >-
+          --health-cmd "pg_isready -U savvy"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches backend/Dockerfile. 3.14 lacks prebuilt wheels for asyncpg
+          # and Pillow, so CI must not drift ahead of what production runs.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          # Presence of this is what un-skips the PostgreSQL-only tests.
+          TEST_POSTGRES_URL: postgresql+asyncpg://savvy:savvy@localhost:5432/savvy_test
+          JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+          FRAUD_HASH_SECRET: ci-only-fraud-secret-not-used-elsewhere-0123456789
+        run: pytest -q
+
+      - name: Fail if a PostgreSQL-only test was skipped
+        working-directory: backend
+        env:
+          TEST_POSTGRES_URL: postgresql+asyncpg://savvy:savvy@localhost:5432/savvy_test
+          JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+          FRAUD_HASH_SECRET: ci-only-fraud-secret-not-used-elsewhere-0123456789
+        # The point of running Postgres here is these tests. If they skip
+        # anyway — a renamed env var, a dropped fixture — the suite still
+        # reports success, and the protection quietly stops being checked.
+        run: |
+          if pytest tests/test_audit_chain.py -q -rs 2>&1 | grep -q "SKIPPED"; then
+            echo "::error::A PostgreSQL-only test skipped despite a database being available."
+            pytest tests/test_audit_chain.py -q -rs 2>&1 | grep "SKIPPED" || true
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend (tsc, eslint, vitest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Lint (must not get worse)
+        working-directory: frontend
+        # There are 16 known errors, all of them `react-hooks/set-state-in-effect`
+        # on fetch-on-mount effects that are correct as written. Failing the
+        # build on them would mean starting with a red pipeline nobody trusts,
+        # and deleting them wholesale would suppress the rule where it is right.
+        # So the gate is on the count: fix them if you like, but do not add more.
+        # Counted from --format json, not by grepping human output: the `unix`
+        # formatter was removed from ESLint core, and a grep that matches
+        # nothing reports zero errors and passes forever.
+        run: |
+          BASELINE=16
+          npx eslint --format json > eslint.json || true
+          COUNT=$(node -e "console.log(require('./eslint.json').reduce((a,f)=>a+f.errorCount,0))")
+          echo "eslint errors: $COUNT (baseline $BASELINE)"
+          npx eslint || true
+          if [ "$COUNT" -gt "$BASELINE" ]; then
+            echo "::error::Lint errors rose from $BASELINE to $COUNT."
+            exit 1
+          fi
+          if [ "$COUNT" -lt "$BASELINE" ]; then
+            echo "::notice::Lint errors are down to $COUNT. Lower BASELINE in this workflow to lock the improvement in."
+          fi
+
+      - name: Tests
+        working-directory: frontend
+        run: npx vitest run
+
+      - name: Production build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://api.savvyinteal.com
+        run: npm run build

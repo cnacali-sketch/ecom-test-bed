@@ -8,7 +8,13 @@
 // log the admin can quietly rewrite answers no question worth asking.
 
 import { useCallback, useEffect, useState } from "react";
-import { History, Search, ShieldCheck, User as UserIcon } from "lucide-react";
+import {
+  History,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  User as UserIcon,
+} from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
 
@@ -34,9 +40,29 @@ const PAGE = 100;
 const FILTERS = [
   { id: "", label: "Everything" },
   { id: "order", label: "Orders" },
+  { id: "product", label: "Products" },
+  { id: "coupon", label: "Discounts" },
   { id: "customer", label: "Customers" },
+  { id: "return", label: "Returns" },
   { id: "invoice", label: "Invoices" },
+  { id: "homepage", label: "Homepage" },
+  { id: "media", label: "Photos" },
+  { id: "category", label: "Categories" },
 ] as const;
+
+/** The answer to "has this log been edited?".
+ *
+ * `unverifiable` counts entries written before the log was hashed. Kept
+ * separate from a failure on purpose: "we cannot prove this row is untouched"
+ * and "this row was altered" are different statements, and an integrity
+ * warning that cries wolf is one nobody reads the second time. */
+interface ChainStatus {
+  ok: boolean;
+  checked: number;
+  first_broken_id: string | null;
+  unverifiable: number;
+  detail: string;
+}
 
 /** Money and deletions get colour; routine fulfilment does not. The point is
  * that a page of twenty status changes should not look as alarming as the one
@@ -45,6 +71,9 @@ function actionStyle(action: string): string {
   if (action.endsWith(".delete")) return "bg-sale/10 text-sale";
   if (action.startsWith("order.refund") || action.startsWith("order.payment"))
     return "bg-gold/15 text-gold";
+  // A discount is money leaving as surely as a refund is.
+  if (action.startsWith("coupon.")) return "bg-gold/15 text-gold";
+  if (action === "error_log.purge") return "bg-sale/10 text-sale";
   if (action.startsWith("invoice.")) return "bg-teal/10 text-teal";
   return "bg-ink/10 text-ink-soft";
 }
@@ -65,6 +94,24 @@ const ACTION_NAMES: Record<string, string> = {
   "customer.delete": "Deleted",
   "customer.role": "Role",
   "invoice.issue": "Invoice",
+  "product.create": "Added",
+  "product.update": "Edited",
+  "product.delete": "Deleted",
+  "coupon.create": "Discount added",
+  "coupon.update": "Discount edited",
+  "coupon.delete": "Discount deleted",
+  "category.create": "Category added",
+  "category.update": "Category edited",
+  "category.reorder": "Reordered",
+  "category.delete": "Category deleted",
+  "homepage.update": "Homepage",
+  "media.upload": "Photo added",
+  "media.delete": "Photo deleted",
+  "return.approved": "Return approved",
+  "return.rejected": "Return rejected",
+  "error_log.purge": "Errors cleared",
+  "order.payment_captured": "Payment (Razorpay)",
+  "order.refund_processed": "Refund (Razorpay)",
 };
 
 function show(value: unknown): string {
@@ -82,6 +129,7 @@ export function Activity() {
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const [chain, setChain] = useState<ChainStatus | null>(null);
 
   // Nothing sets state before the first `await`. The effect below calls this,
   // and a synchronous setState inside an effect body triggers a cascading
@@ -122,6 +170,20 @@ export function Activity() {
     void load(entityType, 0);
   }, [entityType, load]);
 
+  // Checked once on mount rather than on every filter change: the answer is
+  // about the whole table, not the current view, and re-running it per click
+  // would rehash every row for no new information.
+  const checkChain = useCallback(async () => {
+    const res = await apiFetch("/api/audit/verify");
+    if (!res?.ok) return;
+    setChain((await res.json()) as ChainStatus);
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- awaits first
+    void checkChain();
+  }, [checkChain]);
+
   // Filtering happens here rather than server-side: the actor and the label
   // are what someone searches by ("what did Priya do", "what happened to
   // #3fa85f64"), and both are already on the page that was fetched.
@@ -149,9 +211,31 @@ export function Activity() {
         </div>
       )}
 
+      {chain && !chain.ok && (
+        <div className="flex items-start gap-2 border-b border-sale/30 bg-sale/5 px-5 py-3 text-xs text-sale">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">This log has been tampered with.</p>
+            <p className="mt-0.5 text-ink-soft">
+              {chain.detail} Entries are chained, so everything after the break is
+              no longer trustworthy. Treat the records below as evidence of a
+              problem rather than as an account of what happened.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-5 py-4">
         <h3 className="flex items-center gap-2 text-sm font-bold text-ink">
           <History className="h-4 w-4 text-teal" /> Activity ({visible.length})
+          {chain?.ok && chain.checked > 0 && (
+            <span
+              title={`${chain.checked} entries verified against their hashes`}
+              className="flex items-center gap-1 rounded-full bg-teal/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal"
+            >
+              <ShieldCheck className="h-3 w-3" /> Verified
+            </span>
+          )}
         </h3>
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-soft" />

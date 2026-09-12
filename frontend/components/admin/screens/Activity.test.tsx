@@ -39,6 +39,30 @@ function ok(body: unknown, status = 200) {
   return { ok: true, status, json: async () => body };
 }
 
+const CHAIN_OK = {
+  ok: true,
+  checked: 1,
+  first_broken_id: null,
+  unverifiable: 0,
+  detail: "All 1 hashed entries verify.",
+};
+
+/** Answer by URL rather than by call order.
+ *
+ * The screen makes two requests on mount -- the page of entries and the chain
+ * integrity check -- so a queue of `mockResolvedValueOnce` responses gets
+ * consumed by whichever lands first, and the test silently asserts against the
+ * wrong reply. Routing on the path removes the race. */
+function routeAudit(...pages: unknown[][]) {
+  let call = 0;
+  apiFetch.mockImplementation(async (path: string) => {
+    if (String(path).startsWith("/api/audit/verify")) return ok(CHAIN_OK);
+    const page = pages[Math.min(call, pages.length - 1)];
+    call += 1;
+    return ok(page);
+  });
+}
+
 beforeEach(() => {
   apiFetch.mockReset();
 });
@@ -107,9 +131,9 @@ test("searching matches the actor as well as the summary", async () => {
 test("changing the filter replaces the list instead of appending to it", async () => {
   /** Both requests start at offset 0, so treating the second as another page
    * would show every order entry twice under the Customers filter. */
-  apiFetch.mockResolvedValueOnce(ok([entry()]));
-  apiFetch.mockResolvedValueOnce(
-    ok([entry({ id: "c1", action: "customer.block", summary: "Blocked a@b.com" })]),
+  routeAudit(
+    [entry()],
+    [entry({ id: "c1", action: "customer.block", summary: "Blocked a@b.com" })],
   );
   render(<Activity />);
   await screen.findByText("Marked as shipped");
@@ -118,7 +142,7 @@ test("changing the filter replaces the list instead of appending to it", async (
 
   expect(await screen.findByText("Blocked a@b.com")).toBeInTheDocument();
   expect(screen.queryByText("Marked as shipped")).not.toBeInTheDocument();
-  expect(apiFetch).toHaveBeenLastCalledWith(expect.stringContaining("entity_type=customer"));
+  expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining("entity_type=customer"));
 });
 
 test("a short page means there is nothing older to load", async () => {
@@ -131,14 +155,13 @@ test("a short page means there is nothing older to load", async () => {
 
 test("a full page offers the next one, and appends it", async () => {
   const page = Array.from({ length: 100 }, (_, i) => entry({ id: `p${i}` }));
-  apiFetch.mockResolvedValueOnce(ok(page));
-  apiFetch.mockResolvedValueOnce(ok([entry({ id: "older", summary: "Refunded ₹200.00" })]));
+  routeAudit(page, [entry({ id: "older", summary: "Refunded ₹200.00" })]);
   render(<Activity />);
 
   await userEvent.click(await screen.findByRole("button", { name: /Load older activity/ }));
 
   expect(await screen.findByText("Refunded ₹200.00")).toBeInTheDocument();
-  expect(apiFetch).toHaveBeenLastCalledWith(expect.stringContaining("offset=100"));
+  expect(apiFetch).toHaveBeenCalledWith(expect.stringContaining("offset=100"));
 });
 
 test("an expired session says so instead of showing an empty log", async () => {
@@ -205,4 +228,57 @@ test("the actor's role is shown, so a staff action is not mistaken for the owner
   // Asserted as adjacent text rather than "contains staff": the word has to
   // sit next to the actor it describes, not merely somewhere on the row.
   expect(row).toHaveTextContent(/priya@savvyinteal\.com\s*·\s*staff/);
+});
+
+
+/**
+ * The tamper warning. An audit log that has been edited is worse than no log,
+ * because it is believed -- so the screen has to say so loudly rather than
+ * carry on rendering the rows as if they were an account of what happened.
+ */
+
+test("a broken chain is reported as tampering, not as a loading error", async () => {
+  apiFetch.mockImplementation(async (path: string) => {
+    if (String(path).startsWith("/api/audit/verify")) {
+      return ok({
+        ok: false,
+        checked: 12,
+        first_broken_id: "a1",
+        unverifiable: 0,
+        detail: "An entry's contents do not match its recorded hash.",
+      });
+    }
+    return ok([entry()]);
+  });
+
+  render(<Activity />);
+
+  expect(await screen.findByText(/This log has been tampered with/)).toBeInTheDocument();
+  expect(screen.getByText(/do not match its recorded hash/)).toBeInTheDocument();
+});
+
+test("an intact chain is shown as verified", async () => {
+  routeAudit([entry()]);
+  render(<Activity />);
+
+  expect(await screen.findByText("Verified")).toBeInTheDocument();
+  expect(screen.queryByText(/tampered with/)).not.toBeInTheDocument();
+});
+
+test("entries still render when the integrity check itself fails", async () => {
+  /** A verify endpoint that 500s must not blank the log. Losing the rows
+   * because the extra check failed would turn a minor fault into the same
+   * outcome as the tampering it exists to detect. */
+  apiFetch.mockImplementation(async (path: string) => {
+    if (String(path).startsWith("/api/audit/verify")) {
+      return { ok: false, status: 500, json: async () => ({}) };
+    }
+    return ok([entry()]);
+  });
+
+  render(<Activity />);
+
+  expect(await screen.findByText("Marked as shipped")).toBeInTheDocument();
+  expect(screen.queryByText(/tampered with/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Verified")).not.toBeInTheDocument();
 });

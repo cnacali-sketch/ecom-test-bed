@@ -11,7 +11,7 @@ import re
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,8 +19,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.category import Category
+from app.models.user import User
+from app.services import audit
 
 router = APIRouter(prefix="/api/categories", tags=["categories"], dependencies=[Depends(require_admin)])
+
+
+def _audited_state(category: Category) -> dict:
+    """What a category edit can actually change. `slug` is derived from the
+    name, so it moves with it and is recorded to make a broken storefront link
+    traceable to the rename that caused it."""
+    return {
+        "name": category.name,
+        "slug": category.slug,
+        "parent": category.parent,
+        "image": category.image,
+    }
 
 
 def _slugify(name: str) -> str:
@@ -57,7 +71,12 @@ async def list_categories(db: AsyncSession = Depends(get_db_session)) -> list[Ca
 
 
 @router.post("", response_model=CategoryRead, status_code=201)
-async def create_category(payload: CategoryCreate, db: AsyncSession = Depends(get_db_session)) -> Category:
+async def create_category(
+    payload: CategoryCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> Category:
     slug = _slugify(payload.name)
     existing = await db.execute(select(Category).where(Category.slug == slug))
     if existing.scalar_one_or_none() is not None:
@@ -68,6 +87,17 @@ async def create_category(payload: CategoryCreate, db: AsyncSession = Depends(ge
 
     category = Category(name=payload.name, slug=slug, parent=payload.parent, image=payload.image, sort_order=next_order)
     db.add(category)
+    await db.flush()
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="category.create",
+        entity_type="category",
+        entity_id=category.id,
+        entity_label=category.name,
+        summary=f"Added category {category.name}",
+    )
     await db.commit()
     await db.refresh(category)
     return category
@@ -75,13 +105,18 @@ async def create_category(payload: CategoryCreate, db: AsyncSession = Depends(ge
 
 @router.patch("/{category_id}", response_model=CategoryRead)
 async def update_category(
-    category_id: uuid.UUID, payload: CategoryUpdate, db: AsyncSession = Depends(get_db_session)
+    category_id: uuid.UUID,
+    payload: CategoryUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Category:
     result = await db.execute(select(Category).where(Category.id == category_id))
     category = result.scalar_one_or_none()
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
 
+    before = _audited_state(category)
     if payload.name is not None:
         category.name = payload.name
         category.slug = _slugify(payload.name)
@@ -90,6 +125,19 @@ async def update_category(
     if payload.image is not None:
         category.image = payload.image
 
+    changed = audit.diff(before, _audited_state(category))
+    if changed:
+        await audit.record(
+            db,
+            actor=actor,
+            request=request,
+            action="category.update",
+            entity_type="category",
+            entity_id=category.id,
+            entity_label=category.name,
+            summary=f"Edited category {category.name}",
+            changes=changed,
+        )
     await db.commit()
     await db.refresh(category)
     return category
@@ -100,7 +148,12 @@ class ReorderPayload(BaseModel):
 
 
 @router.put("/reorder", response_model=list[CategoryRead])
-async def reorder_categories(payload: ReorderPayload, db: AsyncSession = Depends(get_db_session)) -> list[Category]:
+async def reorder_categories(
+    payload: ReorderPayload,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> list[Category]:
     """Persist a full drag-drop reorder: `ids` is the complete new order."""
     result = await db.execute(select(Category).where(Category.id.in_(payload.ids)))
     by_id = {c.id: c for c in result.scalars().all()}
@@ -110,16 +163,44 @@ async def reorder_categories(payload: ReorderPayload, db: AsyncSession = Depends
     for index, cat_id in enumerate(payload.ids):
         by_id[cat_id].sort_order = index
 
+    # One entry for the whole reorder, not one per category. A drag that moves
+    # a single item shifts the sort_order of everything below it, and a log
+    # that reports twelve changes for one drag is a log nobody reads.
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="category.reorder",
+        entity_type="category",
+        summary=f"Reordered {len(payload.ids)} categories",
+        changes={"order": {"from": None, "to": [str(i) for i in payload.ids]}},
+    )
     await db.commit()
     ordered = await db.execute(select(Category).order_by(Category.sort_order, Category.created_at))
     return list(ordered.scalars().all())
 
 
 @router.delete("/{category_id}", status_code=204)
-async def delete_category(category_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)) -> None:
+async def delete_category(
+    category_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> None:
     result = await db.execute(select(Category).where(Category.id == category_id))
     category = result.scalar_one_or_none()
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found")
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="category.delete",
+        entity_type="category",
+        entity_id=category.id,
+        entity_label=category.name,
+        summary=f"Deleted category {category.name}",
+        changes={k: {"from": v, "to": None} for k, v in _audited_state(category).items()},
+    )
     await db.delete(category)
     await db.commit()

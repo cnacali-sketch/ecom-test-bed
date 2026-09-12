@@ -26,7 +26,8 @@ from app.db import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.coupon import DISCOUNT_TYPES, Coupon
 from app.models.order import Order
-from app.services import login_throttle
+from app.models.user import User
+from app.services import audit, login_throttle
 from app.services.coupons import compute_discount
 
 router = APIRouter(prefix="/api/coupons", tags=["coupons"])
@@ -81,6 +82,20 @@ class CouponEdit(BaseModel):
     active: bool | None = None
 
 
+def _audited_state(coupon: Coupon) -> dict:
+    """A coupon is a standing instruction to charge less, so every field on it
+    is a money field. `code` is immutable and identifies the row, so it is the
+    label rather than part of the diff."""
+    return {
+        "discount_type": coupon.discount_type,
+        "value": coupon.value,
+        "min_order_value": coupon.min_order_value,
+        "usage_limit": coupon.usage_limit,
+        "expires_at": coupon.expires_at,
+        "active": coupon.active,
+    }
+
+
 async def _get_coupon_or_404(db: AsyncSession, coupon_id: uuid.UUID) -> Coupon:
     result = await db.execute(select(Coupon).where(Coupon.id == coupon_id))
     coupon = result.scalar_one_or_none()
@@ -117,7 +132,12 @@ def _to_read(coupon: Coupon, stats: dict[str, tuple[Decimal, Decimal]]) -> Coupo
 
 
 @router.post("", response_model=CouponRead, status_code=201, dependencies=[Depends(require_admin)])
-async def create_coupon(payload: CouponCreate, db: AsyncSession = Depends(get_db_session)) -> CouponRead:
+async def create_coupon(
+    payload: CouponCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> CouponRead:
     if payload.discount_type not in DISCOUNT_TYPES:
         raise HTTPException(status_code=422, detail=f"discount_type must be one of {DISCOUNT_TYPES}")
     if payload.discount_type == "percent" and payload.value > 100:
@@ -137,6 +157,18 @@ async def create_coupon(payload: CouponCreate, db: AsyncSession = Depends(get_db
         expires_at=payload.expires_at,
     )
     db.add(coupon)
+    await db.flush()
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="coupon.create",
+        entity_type="coupon",
+        entity_id=coupon.id,
+        entity_label=coupon.code,
+        summary=f"Created {coupon.code}: {coupon.value} {coupon.discount_type} off",
+        changes={k: {"from": None, "to": v} for k, v in _audited_state(coupon).items()},
+    )
     await db.commit()
     await db.refresh(coupon)
     return _to_read(coupon, {})
@@ -153,7 +185,9 @@ async def list_coupons(db: AsyncSession = Depends(get_db_session)) -> list[Coupo
 async def update_coupon(
     coupon_id: uuid.UUID,
     payload: CouponEdit,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> CouponRead:
     """Edit a coupon. Admin-gated. `code` stays fixed (see CouponEdit); every
     other field — discount type/value/min order, usage limit, expiry, active —
@@ -161,6 +195,7 @@ async def update_coupon(
     own snapshotted discount_amount, so editing a coupon never rewrites
     history, only what happens on the *next* redemption."""
     coupon = await _get_coupon_or_404(db, coupon_id)
+    before = _audited_state(coupon)
     if payload.discount_type is not None:
         if payload.discount_type not in DISCOUNT_TYPES:
             raise HTTPException(status_code=422, detail=f"discount_type must be one of {DISCOUNT_TYPES}")
@@ -178,6 +213,20 @@ async def update_coupon(
         coupon.expires_at = payload.expires_at
     if payload.active is not None:
         coupon.active = payload.active
+
+    changed = audit.diff(before, _audited_state(coupon))
+    if changed:
+        await audit.record(
+            db,
+            actor=actor,
+            request=request,
+            action="coupon.update",
+            entity_type="coupon",
+            entity_id=coupon.id,
+            entity_label=coupon.code,
+            summary=f"Edited {coupon.code}: {', '.join(sorted(changed))}",
+            changes=changed,
+        )
     await db.commit()
     await db.refresh(coupon)
     stats = await _usage_stats(db)
@@ -185,12 +234,28 @@ async def update_coupon(
 
 
 @router.delete("/{coupon_id}", status_code=204, dependencies=[Depends(require_admin)])
-async def delete_coupon(coupon_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)) -> None:
+async def delete_coupon(
+    coupon_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
+) -> None:
     """Delete a coupon. Admin-gated. Safe at any time: `orders.coupon_code` is
     a string snapshot, not a foreign key, so past orders that used this code
     keep their own record of it — deleting the coupon just retires the code
     for future checkouts."""
     coupon = await _get_coupon_or_404(db, coupon_id)
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="coupon.delete",
+        entity_type="coupon",
+        entity_id=coupon.id,
+        entity_label=coupon.code,
+        summary=f"Deleted coupon {coupon.code}",
+        changes={k: {"from": v, "to": None} for k, v in _audited_state(coupon).items()},
+    )
     await db.delete(coupon)
     await db.commit()
 

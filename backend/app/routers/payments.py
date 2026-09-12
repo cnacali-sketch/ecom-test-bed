@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db_session
 from app.models.order import Order
 from app.routers.orders import _resolve_order_email
+from app.services import audit
 from app.services.email import send_order_confirmation_email
 from app.services.razorpay import verify_webhook_signature
 
@@ -109,6 +110,23 @@ async def razorpay_webhook(
             changed = True
 
     if changed:
+        # Attributed to the webhook, never to a signed-in admin: nobody is
+        # signed in when Razorpay calls, and naming whoever logged in most
+        # recently would be a confident lie in the record meant to settle
+        # arguments about money.
+        await audit.record(
+            db,
+            actor=audit.SYSTEM_RAZORPAY,
+            action=f"order.{event.replace('.', '_')}",
+            entity_type="order",
+            entity_id=order.id,
+            entity_label=audit.order_label(order.id),
+            summary=f"Razorpay reported {event} for {audit.order_label(order.id)}",
+            changes={
+                "payment_status": {"from": None, "to": order.payment_status},
+                "refund_amount": {"from": None, "to": order.refund_amount},
+            },
+        )
         await db.commit()
         # Send the confirmation email only when THIS call actually flipped the
         # state — so a fast synchronous /razorpay/verify and a later webhook

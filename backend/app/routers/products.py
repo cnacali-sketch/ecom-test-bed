@@ -10,7 +10,7 @@ Changes from Phase 1:
 """
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +19,32 @@ from sqlalchemy.orm import selectinload
 from app.db import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.product import Product, ProductVariant
+from app.models.user import User
 from app.schemas.product import ProductCreate, ProductRead
+from app.services import audit
 
 router = APIRouter(prefix="/api/products", tags=["products"])
+
+
+def _audited_state(product: Product) -> dict:
+    """The fields worth being able to answer questions about later.
+
+    Price and MRP because they are money; stock and `in_stock` because an
+    unexplained stock movement is the other thing somebody comes to this log
+    to investigate; name and slug because a renamed product is hard to trace
+    afterwards without them. The rest of `attrs` is display copy and would
+    bury the money in noise.
+    """
+    attrs = product.attrs or {}
+    return {
+        "name": product.name,
+        "slug": product.slug,
+        "price": product.price,
+        "mrp": product.mrp,
+        "in_stock": product.in_stock,
+        "stock": attrs.get("stock"),
+        "cost": attrs.get("cost"),
+    }
 
 
 def _q(db: AsyncSession):
@@ -79,7 +102,10 @@ async def get_product(product_id: uuid.UUID, db: AsyncSession = Depends(get_db_s
 
 @router.post("", response_model=ProductRead, status_code=201, dependencies=[Depends(require_admin)])
 async def create_product(
-    payload: ProductCreate, db: AsyncSession = Depends(get_db_session)
+    payload: ProductCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Product:
     """Create a product with its variants in a single transaction."""
     product_data = payload.model_dump(exclude={"variants"})
@@ -87,7 +113,23 @@ async def create_product(
     for v in payload.variants:
         product.variants.append(ProductVariant(**v.model_dump()))
     db.add(product)
+    # Flush, audit and commit share one `try`. Writing an audit entry flushes
+    # the session, so a duplicate SKU now surfaces as an IntegrityError here
+    # rather than at commit — outside this guard it would reach the client as
+    # a 500 instead of the 409 the API promises.
     try:
+        await db.flush()
+        await audit.record(
+            db,
+            actor=actor,
+            request=request,
+            action="product.create",
+            entity_type="product",
+            entity_id=product.id,
+            entity_label=product.name,
+            summary=f"Added {product.name} at {product.price}",
+            changes={k: {"from": None, "to": v} for k, v in _audited_state(product).items()},
+        )
         await db.commit()
     except IntegrityError:
         await db.rollback()
@@ -100,7 +142,9 @@ async def create_product(
 async def update_product(
     product_id: uuid.UUID,
     payload: ProductCreate,
+    request: Request,
     db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> Product:
     """Update an existing product's own fields (admin editor save).
 
@@ -117,11 +161,32 @@ async def update_product(
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    before = _audited_state(product)
     update_data = payload.model_dump(exclude={"variants", "sku", "attrs"})
     for field, value in update_data.items():
         setattr(product, field, value)
     product.attrs = {**product.attrs, **payload.attrs}
+
+    changed = audit.diff(before, _audited_state(product))
+    # Audit and commit share one `try`, for the same reason as `create_product`
+    # above: recording flushes, so a duplicate slug raises here rather than at
+    # commit and must still become a 409.
     try:
+        # A save that moved nothing worth recording writes nothing. The editor
+        # sends the whole product on every save, so without this the log fills
+        # with entries for opening a product and closing it again.
+        if changed:
+            await audit.record(
+                db,
+                actor=actor,
+                request=request,
+                action="product.update",
+                entity_type="product",
+                entity_id=product.id,
+                entity_label=product.name,
+                summary=f"Edited {product.name}: {', '.join(sorted(changed))}",
+                changes=changed,
+            )
         await db.commit()
     except IntegrityError:
         await db.rollback()
@@ -132,12 +197,29 @@ async def update_product(
 
 @router.delete("/{product_id}", status_code=204, dependencies=[Depends(require_admin)])
 async def delete_product(
-    product_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)
+    product_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db_session),
+    actor: User = Depends(require_admin),
 ) -> None:
     """Hard-delete a product and its variants (cascade)."""
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
+
+    # Recorded before the delete: afterwards the name and price are gone, and
+    # an entry saying only that some id was removed answers nothing.
+    await audit.record(
+        db,
+        actor=actor,
+        request=request,
+        action="product.delete",
+        entity_type="product",
+        entity_id=product.id,
+        entity_label=product.name,
+        summary=f"Deleted {product.name} ({product.sku})",
+        changes={k: {"from": v, "to": None} for k, v in _audited_state(product).items()},
+    )
     await db.delete(product)
     await db.commit()

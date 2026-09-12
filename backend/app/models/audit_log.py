@@ -23,6 +23,20 @@ not "what the row looked like".
 **`summary` is written for a person.** "Marked as shipped" beats
 ``status: pending -> shipped`` for the shop owner scrolling this at 11pm. The
 machine-readable diff is right there in `changes` when the detail is needed.
+
+**The rows are chained.** Each entry stores the hash of the entry before it
+and a hash of itself, so the table is a linked list that cannot be edited in
+the middle without every later hash ceasing to match. A database trigger
+already refuses UPDATE and DELETE; the chain is what catches the case the
+trigger cannot — somebody with enough access to drop the trigger, change a
+row, and put it back. Between them: the trigger stops the casual edit, the
+chain proves whether one happened.
+
+The link is stored as `prev_id` and not re-derived from timestamps at
+verification time. Two entries written in the same transaction can share a
+`created_at` to the microsecond, and sorting to rebuild the order would then
+tie-break on a random UUID — producing a fork that looks exactly like
+tampering. Recording which row was actually appended to removes the guess.
 """
 from __future__ import annotations
 
@@ -75,6 +89,16 @@ class AuditLog(Base):
 
     summary: Mapped[str] = mapped_column(String(300))
     changes: Mapped[dict] = mapped_column(JSONType, default=dict, server_default="{}")
+
+    # ---- Tamper evidence ----
+    # The entry this one was appended after. Null on exactly one row: the
+    # first ever written. Indexed because verification walks the chain by
+    # following these links.
+    prev_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
+    # SHA-256 hex, so 64 characters. `prev_hash` is null on the genesis row
+    # for the same reason `prev_id` is.
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entry_hash: Mapped[str] = mapped_column(String(64), default="")
 
     # ---- When and from where ----
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
