@@ -302,9 +302,19 @@ async def test_list_all_orders_as_customer_403(customer_client: AsyncClient) -> 
 
 @pytest.mark.asyncio
 async def test_status_returned_is_valid(admin_client: AsyncClient) -> None:
+    """Still a valid off-ramp -- but only once the goods have actually left.
+
+    This used to jump a brand-new order straight to `returned`, back when the
+    endpoint checked only that the word was a known one. Nothing was dispatched
+    in that scenario, so there was nothing to come back; an order the customer
+    changes their mind about before it ships is `cancelled`.
+    """
     create = await admin_client.post("/api/orders", json=ORDER_PAYLOAD)
     order_id = create.json()["id"]
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=shipped")
+
     resp = await admin_client.patch(f"/api/orders/{order_id}/status?status=returned")
+
     assert resp.status_code == 200
     assert resp.json()["status"] == "returned"
 

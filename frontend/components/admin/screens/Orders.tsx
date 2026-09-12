@@ -118,6 +118,19 @@ interface ReturnRequest {
 }
 
 const STATUS = ["pending", "confirmed", "shipped", "delivered", "cancelled", "returned"];
+
+/** Which moves are legal from each state, as the server defines them.
+ *
+ * Fetched rather than written down here. The rules live in one place because
+ * two copies drift, and a dropdown that offers a move the server refuses --
+ * or quietly hides one it would allow -- is the same silent wrongness the
+ * state machine exists to remove. Until it arrives, every option is offered
+ * and the server stays the authority; the console is a convenience over the
+ * check, never a replacement for it. */
+interface TransitionMap {
+  fulfilment: Record<string, string[]>;
+  payment: Record<string, string[]>;
+}
 // "partially_refunded" is set by recording a refund, never chosen from the
 // dropdown — picking it by hand would claim money went back without saying how
 // much. It still has to appear here so the select can display an order that is
@@ -259,6 +272,8 @@ export function Orders({
   // Not a status — see FILTERS. Kept separate so it composes with search
   // the same way the status tabs do.
   const [abandonedOnly, setAbandonedOnly] = useState(false);
+  /** The server's transition rules. Null until fetched; see TransitionMap. */
+  const [transitions, setTransitions] = useState<TransitionMap | null>(null);
   /** Orders ticked for a bulk action. Ids, not indexes — the list reloads. */
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -314,6 +329,31 @@ export function Orders({
         setReturnRequests((await res.json()) as ReturnRequest[]);
       })
       .catch(() => !cancelled && setPatchError("Return requests couldn't be loaded. Reload to try again."));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetched once. The rules do not change between renders, and re-reading
+  // them per status change would be a request to learn something already
+  // known. A failure is deliberately silent: the dropdown falls back to
+  // offering every status, the server still refuses the illegal ones, and
+  // the shop is left with the behaviour it had before this was added rather
+  // than an error about a feature it never asked for.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const res = await apiFetch("/api/orders/transitions");
+      if (!res?.ok || cancelled) return;
+      const body = (await res.json().catch(() => null)) as TransitionMap | null;
+      // Shape-checked rather than trusted. A 200 carrying something else --
+      // a proxy's error page, a route that silently matched elsewhere -- would
+      // otherwise be read as a map, and the first `fulfilment[status]` lookup
+      // takes the whole Orders screen down. Same lesson as the PATCH handler
+      // below: a usable response and a successful one are different things.
+      if (!body?.fulfilment || !body?.payment) return;
+      setTransitions(body);
+    })();
     return () => {
       cancelled = true;
     };
@@ -874,6 +914,7 @@ export function Orders({
                         value={o.status}
                         options={STATUS}
                         styleMap={STATUS_STYLE}
+                        reachable={transitions?.fulfilment?.[o.status]}
                         onChange={(v) => setStatus(o.id, v)}
                       />
                     </td>
@@ -883,6 +924,7 @@ export function Orders({
                           value={o.payment_status}
                           options={PAYMENT}
                           styleMap={PAYMENT_STYLE}
+                          reachable={transitions?.payment?.[o.payment_status]}
                           labelMap={PAYMENT_LABEL}
                           onChange={(v) => setPayment(o.id, v)}
                         />
@@ -1701,6 +1743,7 @@ function StatusSelect({
   options,
   styleMap,
   labelMap,
+  reachable,
   onChange,
 }: {
   value: string;
@@ -1709,16 +1752,26 @@ function StatusSelect({
   /** Friendlier wording for values whose stored name reads badly — the
    * default `capitalize` would otherwise render "Partially_refunded". */
   labelMap?: Record<string, string>;
+  /** Where this order can actually go from where it is. Undefined until the
+   * map has loaded, which is why the fallback is "offer everything" rather
+   * than "offer nothing": a select with one option in it looks broken, and
+   * the server refuses anything illegal regardless. */
+  reachable?: string[];
   onChange: (v: string) => void;
 }) {
   const label = (opt: string) => labelMap?.[opt] ?? opt;
+  // The current value is always included. It is what the select is showing,
+  // and a <select> whose value is not among its options renders blank.
+  const shown = reachable
+    ? options.filter((opt) => opt === value || reachable.includes(opt))
+    : options;
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={`cursor-pointer rounded-full border-0 px-3 py-1 text-xs font-semibold capitalize outline-none ${styleMap[value] ?? "bg-ink/10 text-ink-soft"}`}
     >
-      {options.map((opt) => (
+      {shown.map((opt) => (
         <option key={opt} value={opt} className="bg-card capitalize text-ink">
           {label(opt)}
         </option>

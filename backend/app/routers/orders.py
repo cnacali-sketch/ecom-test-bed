@@ -554,6 +554,31 @@ async def list_all_orders(
     return list(result.scalars().all())
 
 
+class TransitionMap(BaseModel):
+    """Which moves are legal from each state, for both ladders."""
+
+    fulfilment: dict[str, list[str]]
+    payment: dict[str, list[str]]
+
+
+# Declared BEFORE /{order_id} for the same reason /bulk/status is: FastAPI
+# matches in declaration order, and the parameterised route would otherwise
+# take "transitions" for an order id and fail UUID parsing with a 422.
+@router.get("/transitions", response_model=TransitionMap, dependencies=[Depends(require_staff)])
+async def list_transitions() -> TransitionMap:
+    """The state machine, so the console can stop offering moves it will refuse.
+
+    Served rather than restated in the frontend. Two copies of a transition
+    table drift, and a console that offers a move the server rejects -- or
+    worse, hides one the server would allow -- is the same class of quiet
+    wrongness this endpoint exists to prevent.
+    """
+    return TransitionMap(
+        fulfilment={state: sorted(targets) for state, targets in FULFILMENT_TRANSITIONS.items()},
+        payment={state: sorted(targets) for state, targets in PAYMENT_TRANSITIONS.items()},
+    )
+
+
 @router.get("/{order_id}", response_model=OrderRead)
 async def get_order(order_id: uuid.UUID, db: AsyncSession = Depends(get_db_session)) -> Order:
     """Fetch a single order by id — deliberately public.
@@ -577,6 +602,81 @@ FULFILMENT_STATUSES = {
 # The two that end an order and give its stock back. Everything else means the
 # order is still live and still holding its units.
 ENDED_STATUSES = {"cancelled", "returned"}
+
+# Which fulfilment moves are legal from each state.
+#
+# Until now the only check was that the incoming value was a known word, so
+# `delivered -> pending` and `cancelled -> delivered` were both accepted. The
+# first is merely nonsense; the second silently re-reserves stock for an order
+# somebody already cancelled, which is how a shop oversells without any step
+# looking wrong.
+#
+# Three rules generate this table, and they are worth stating because the
+# alternative -- a machine so strict that staff fight it -- is its own kind of
+# failure:
+#
+#   * **Forward is always allowed.** pending -> delivered skips two steps, but
+#     an order handed over in person really did progress that way, and refusing
+#     it would just teach whoever packs orders to click through three states to
+#     record one fact.
+#   * **One step back is allowed, as an undo.** Mis-clicks happen, and the
+#     honest fix for one is to move back a step, not to edit the database.
+#   * **Nothing comes back from a settled state in one hop.** A cancelled order
+#     is reinstated (-> pending/confirmed) before it can ship again, so the
+#     stock check in `_apply_status` runs at the moment somebody is deciding to
+#     revive it rather than buried inside "mark as delivered".
+#
+# `returned` is reachable only from shipped or delivered: goods that never left
+# cannot come back, and an order cancelled before dispatch is `cancelled`.
+FULFILMENT_TRANSITIONS: dict[str, set[str]] = {
+    "pending": {"confirmed", "shipped", "delivered", "cancelled"},
+    "confirmed": {"pending", "shipped", "delivered", "cancelled"},
+    "shipped": {"confirmed", "delivered", "cancelled", "returned"},
+    "delivered": {"shipped", "returned"},
+    "cancelled": {"pending", "confirmed"},
+    "returned": {"delivered"},
+}
+
+# Payment moves, same idea. The one that matters: an unpaid order cannot go
+# straight to refunded or partially_refunded. Money that never arrived cannot
+# be sent back, and an order marked refunded without a payment reads in every
+# report as a loss the shop never took.
+PAYMENT_TRANSITIONS: dict[str, set[str]] = {
+    "unpaid": {"paid"},
+    "paid": {"unpaid", "partially_refunded", "refunded"},
+    "partially_refunded": {"paid", "refunded"},
+    "refunded": {"paid", "partially_refunded"},
+}
+
+
+def _check_transition(
+    table: dict[str, set[str]], current: str, target: str, what: str, label: str
+) -> None:
+    """Refuse a move the table does not allow.
+
+    Re-applying the state an order is already in is a no-op rather than an
+    error: bulk actions re-send the same status across a batch, and failing
+    the whole batch because one parcel was already marked shipped would make
+    the batch endpoint useless for the case it exists for.
+
+    409 rather than 422 -- the request is well-formed, it conflicts with the
+    state the order is actually in. The message names both the order and the
+    moves that *are* available, because "invalid transition" on its own leaves
+    whoever hit it guessing.
+    """
+    if target == current:
+        return
+    allowed = table.get(current, set())
+    if target not in allowed:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{label} is {current}, so it cannot be marked {target}. "
+                f"From {current} you can set {what} to: {', '.join(sorted(allowed))}."
+                if allowed
+                else f"{label} is {current} and cannot be changed."
+            ),
+        )
 
 # A prepaid checkout either completes within minutes or not at all — the
 # Razorpay modal is open on the page the customer is looking at, and there
@@ -628,6 +728,20 @@ async def _apply_status(db: AsyncSession, order: Order, status: str) -> None:
     twenty orders at a time. Does not commit — the caller decides the
     transaction boundary, which is what makes a bulk update all-or-nothing.
     """
+    # Checked before the stock logic, but not because the data would otherwise
+    # be at risk -- nothing commits on this path, so a reservation made on the
+    # way to a refusal is discarded when the request's session closes.
+    #
+    # It is about which error comes back. Reinstating a cancelled order whose
+    # units have since been sold raises a shortage; so if the stock branch ran
+    # first, `cancelled -> delivered` would be refused for want of stock rather
+    # than for being a move nobody should be offered, and whoever hit it would
+    # go looking for inventory to fix. Checking first also avoids taking
+    # SELECT ... FOR UPDATE locks for a request that is going to be rejected.
+    _check_transition(
+        FULFILMENT_TRANSITIONS, order.status, status, "status", audit.order_label(order.id)
+    )
+
     if status in ENDED_STATUSES and not order.stock_released:
         await stock.release(db, order.items)
         order.stock_released = True
@@ -703,12 +817,34 @@ async def bulk_update_status(
         .where(Order.id.in_(payload.order_ids))
     )
     orders = list(result.scalars().all())
+    # Sorted into the order the caller asked for. `WHERE id IN (...)` returns
+    # rows in whatever order the database finds them, which makes "which order
+    # was rejected first" arbitrary, and any test of partial application a
+    # coin flip.
+    position = {order_id: index for index, order_id in enumerate(payload.order_ids)}
+    orders.sort(key=lambda o: position.get(o.id, len(position)))
     if len(orders) != len(set(payload.order_ids)):
         found = {o.id for o in orders}
         missing = [str(i) for i in set(payload.order_ids) - found]
         raise HTTPException(
             status_code=404,
             detail=f"{len(missing)} of these orders no longer exist: {', '.join(missing[:5])}",
+        )
+
+    # Every order is checked before any order is touched. `_apply_status`
+    # would refuse the illegal one anyway, and the uncommitted transaction
+    # would be discarded when the request's session closes -- but that makes
+    # all-or-nothing a property of the rollback rather than of this endpoint.
+    # Checking first means the batch is rejected before a single unit of stock
+    # has moved, which is also the difference between an error naming the
+    # problem order and one naming whichever order happened to be reached.
+    for order in orders:
+        _check_transition(
+            FULFILMENT_TRANSITIONS,
+            order.status,
+            payload.status,
+            "status",
+            audit.order_label(order.id),
         )
 
     for order in orders:
@@ -798,6 +934,18 @@ async def update_payment_status(
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    # Refusing a refund on an order that was never paid is the point of this
+    # check. The dropdown sat one entry away from "refunded" on every unpaid
+    # COD order in the list, and choosing it recorded money going back that had
+    # never come in -- which then reads as a real loss in every total.
+    _check_transition(
+        PAYMENT_TRANSITIONS,
+        order.payment_status,
+        payment_status,
+        "the payment status",
+        audit.order_label(order.id),
+    )
 
     # Choosing "refunded" from the dropdown is a statement that the whole order
     # came back, so record that as an amount too. Without this the status said

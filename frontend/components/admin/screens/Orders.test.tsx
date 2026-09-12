@@ -71,12 +71,36 @@ function fail(status: number, detail?: string) {
   return { ok: false, status, json: async () => (detail ? { detail } : null) };
 }
 
+/** The server's state machine, as GET /api/orders/transitions returns it.
+ *
+ * Mirrors FULFILMENT_TRANSITIONS / PAYMENT_TRANSITIONS in the backend. The
+ * pairing is asserted server-side against the real constants; here it only
+ * has to be shaped like the real response so the dropdowns filter the way
+ * they will in production. */
+const TRANSITIONS = {
+  fulfilment: {
+    pending: ["cancelled", "confirmed", "delivered", "shipped"],
+    confirmed: ["cancelled", "delivered", "pending", "shipped"],
+    shipped: ["cancelled", "confirmed", "delivered", "returned"],
+    delivered: ["returned", "shipped"],
+    cancelled: ["confirmed", "pending"],
+    returned: ["delivered"],
+  },
+  payment: {
+    unpaid: ["paid"],
+    paid: ["partially_refunded", "refunded", "unpaid"],
+    partially_refunded: ["paid", "refunded"],
+    refunded: ["paid", "partially_refunded"],
+  },
+};
+
 /** Route each call by URL so tests describe data, not call order. */
 function routeApi(handlers: { orders?: unknown[]; onDelete?: () => unknown }) {
   const rows = handlers.orders ?? [order()];
   apiFetch.mockImplementation(async (path: string, init?: { method?: string }) => {
     if (init?.method === "DELETE") return handlers.onDelete?.() ?? ok(null, 204);
     if (path.startsWith("/api/returns")) return ok([]);
+    if (path.startsWith("/api/orders/transitions")) return ok(TRANSITIONS);
     if (path.startsWith("/api/orders/all")) return ok(rows);
     // Every mutating order endpoint answers with the updated order, the way
     // the real API does. Returning a bare null here once corrupted the list
@@ -799,4 +823,99 @@ describe("the abandoned payment tab", () => {
       "false",
     );
   });
+});
+
+
+/**
+ * Offering only the moves the server will accept.
+ *
+ * The dropdown used to list every status, so "mark this delivered order as
+ * pending" was one click away and came back a 409. Filtering is a convenience
+ * over the server's check, never a replacement for it -- which is why the
+ * fallback when the rules have not loaded is to offer everything rather than
+ * nothing.
+ */
+
+function optionsOf(el: HTMLElement): string[] {
+  return [...el.querySelectorAll("option")].map((o) => (o as HTMLOptionElement).value);
+}
+
+test("a delivered order is not offered a move back to pending", async () => {
+  routeApi({ orders: [order({ status: "delivered" })] });
+  render(<Orders />);
+  await screen.findByText(/#/);
+
+  await waitFor(() => {
+    const status = screen.getAllByRole("combobox")[0];
+    expect(optionsOf(status)).not.toContain("pending");
+  });
+});
+
+test("it still offers the moves that order can legitimately make", async () => {
+  routeApi({ orders: [order({ status: "delivered" })] });
+  render(<Orders />);
+  await screen.findByText(/#/);
+
+  await waitFor(() => {
+    const opts = optionsOf(screen.getAllByRole("combobox")[0]);
+    expect(opts).toContain("shipped");
+    expect(opts).toContain("returned");
+  });
+});
+
+test("the status the order is already in stays in the list", async () => {
+  /** A <select> whose value is not among its options renders blank, so the
+   * current state has to survive the filter even though "delivered ->
+   * delivered" is not a move. */
+  routeApi({ orders: [order({ status: "delivered" })] });
+  render(<Orders />);
+  await screen.findByText(/#/);
+
+  await waitFor(() => {
+    expect(optionsOf(screen.getAllByRole("combobox")[0])).toContain("delivered");
+  });
+});
+
+test("an unpaid order is not offered refunded", async () => {
+  routeApi({ orders: [order({ payment_status: "unpaid" })] });
+  render(<Orders />);
+  await screen.findByText(/#/);
+
+  await waitFor(() => {
+    const payment = screen.getAllByRole("combobox")[1];
+    expect(optionsOf(payment)).not.toContain("refunded");
+    expect(optionsOf(payment)).toContain("paid");
+  });
+});
+
+test("every option is offered when the rules cannot be loaded", async () => {
+  /** Degrading to the old behaviour is the right failure: the server still
+   * refuses illegal moves, so the worst case is a 409 the admin already had.
+   * Degrading to an empty dropdown would take away moves that are legal. */
+  apiFetch.mockImplementation(async (path: string) => {
+    if (path.startsWith("/api/orders/transitions")) return fail(500);
+    if (path.startsWith("/api/returns")) return ok([]);
+    if (path.startsWith("/api/orders/all")) return ok([order({ status: "delivered" })]);
+    return ok(null);
+  });
+  render(<Orders />);
+  await screen.findByText(/#/);
+
+  expect(optionsOf(screen.getAllByRole("combobox")[0])).toContain("pending");
+});
+
+test("a 200 that is not a transition map does not take the screen down", async () => {
+  /** The failure this actually hit during development: any /api/orders/ path
+   * answering with an order object meant `fulfilment[status]` read a property
+   * of undefined and crashed the whole list. */
+  apiFetch.mockImplementation(async (path: string) => {
+    if (path.startsWith("/api/orders/transitions")) return ok({ nonsense: true });
+    if (path.startsWith("/api/returns")) return ok([]);
+    if (path.startsWith("/api/orders/all")) return ok([order({ status: "delivered" })]);
+    return ok(null);
+  });
+  render(<Orders />);
+
+  expect(await screen.findByText(/#/)).toBeInTheDocument();
+  expect(optionsOf(screen.getAllByRole("combobox")[0])).toContain("pending");
 });
