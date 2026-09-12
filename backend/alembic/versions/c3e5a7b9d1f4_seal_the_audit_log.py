@@ -41,22 +41,28 @@ UUIDType = postgresql.UUID(as_uuid=True).with_variant(sa.Uuid(), "sqlite")
 # BEFORE, not AFTER: the exception has to fire before the row is touched.
 # FOR EACH ROW so the message names the operation that was attempted rather
 # than a statement that may have matched nothing.
-_CREATE_GUARD = """
+#
+# One statement per string, executed separately. asyncpg sends DDL as a
+# prepared statement and refuses more than one command in it -- so the
+# function and the trigger cannot be shipped as a single script the way psql
+# would accept. Keeping them apart is what makes this run under the driver
+# the application actually uses.
+_CREATE_FUNCTION = """
 CREATE OR REPLACE FUNCTION audit_logs_no_mutate() RETURNS trigger AS $$
 BEGIN
     RAISE EXCEPTION 'audit_logs is append-only: % is not permitted', TG_OP;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
+"""
 
+_CREATE_TRIGGER = """
 CREATE TRIGGER audit_logs_immutable
 BEFORE UPDATE OR DELETE ON audit_logs
-FOR EACH ROW EXECUTE FUNCTION audit_logs_no_mutate();
+FOR EACH ROW EXECUTE FUNCTION audit_logs_no_mutate()
 """
 
-_DROP_GUARD = """
-DROP TRIGGER IF EXISTS audit_logs_immutable ON audit_logs;
-DROP FUNCTION IF EXISTS audit_logs_no_mutate();
-"""
+_DROP_TRIGGER = "DROP TRIGGER IF EXISTS audit_logs_immutable ON audit_logs"
+_DROP_FUNCTION = "DROP FUNCTION IF EXISTS audit_logs_no_mutate()"
 
 
 def upgrade() -> None:
@@ -73,7 +79,8 @@ def upgrade() -> None:
     op.create_index("ix_audit_logs_prev_id", "audit_logs", ["prev_id"])
 
     if op.get_bind().dialect.name == "postgresql":
-        op.execute(_CREATE_GUARD)
+        op.execute(_CREATE_FUNCTION)
+        op.execute(_CREATE_TRIGGER)
 
 
 def downgrade() -> None:
@@ -81,7 +88,8 @@ def downgrade() -> None:
     # these drops — but leaving a trigger behind pointing at columns that no
     # longer exist is how a later migration fails for an unrelated reason.
     if op.get_bind().dialect.name == "postgresql":
-        op.execute(_DROP_GUARD)
+        op.execute(_DROP_TRIGGER)
+        op.execute(_DROP_FUNCTION)
 
     op.drop_index("ix_audit_logs_prev_id", table_name="audit_logs")
     op.drop_column("audit_logs", "entry_hash")

@@ -380,8 +380,14 @@ async def test_the_trigger_refuses_to_let_the_log_be_rewritten() -> None:
                     "entry_hash varchar(64) NOT NULL DEFAULT '')"
                 )
             )
-            # Verbatim, straight out of the migration that ships.
-            await conn.execute(text(migration._CREATE_GUARD))
+            # Verbatim, straight out of the migration that ships -- and
+            # executed one statement per call, exactly as Alembic does. That
+            # detail is the test: asyncpg refuses more than one command in a
+            # prepared statement, so a migration that bundles the function and
+            # the trigger into a single script runs fine under psql and fails
+            # on deploy. This test reproduces the driver, not just the SQL.
+            await conn.execute(text(migration._CREATE_FUNCTION))
+            await conn.execute(text(migration._CREATE_TRIGGER))
 
         async with engine.begin() as conn:
             await conn.execute(text(f"SET search_path TO {schema}"))
