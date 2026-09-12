@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { products as bundledProducts } from "@/content/catalog";
 import { trackEvent } from "@/lib/analytics";
 import { formatPrice } from "@/lib/format";
+import { fetchProductSearch } from "@/lib/api";
 import { MIN_QUERY_LENGTH, searchProducts } from "@/lib/search";
 import type { Product } from "@/lib/types";
 
@@ -34,7 +35,33 @@ export function SearchOverlay({ catalog, isCatalogLoading, onClose }: SearchOver
   const router = useRouter();
 
   const activeCatalog = catalog ?? bundledProducts;
-  const matches = useMemo(() => searchProducts(activeCatalog, query), [activeCatalog, query]);
+
+  /** The last answer the database gave, together with the query it answered.
+   *
+   * Stored as a pair rather than a bare list so the results can be matched
+   * against the query on screen. Keeping just the list meant the previous
+   * query's results stayed visible for a keystroke while the next request was
+   * in flight, and it forced the effect to clear them synchronously -- which
+   * is the cascading-render pattern the lint rule exists to catch. */
+  const [serverResult, setServerResult] = useState<{
+    query: string;
+    items: Product[];
+  } | null>(null);
+
+  // Matching in the browser is the fallback now, not the primary path, and
+  // the difference is not cosmetic: substring matching cannot stem, so typing
+  // "scrunchies" found nothing while the shop sells a Scrunchie. The dropdown
+  // said "no results" and the shopper stopped there.
+  const localMatches = useMemo(
+    () => searchProducts(activeCatalog, query),
+    [activeCatalog, query],
+  );
+  // The server's answer is used only when it is an answer to *this* query.
+  // Anything else falls through to browser-side matching, which covers both
+  // "still loading" and "backend unreachable" without either being a state
+  // anyone has to set.
+  const matches =
+    serverResult && serverResult.query === query.trim() ? serverResult.items : localMatches;
   const preview = matches.slice(0, PREVIEW_LIMIT);
   const isSearching = query.trim().length >= MIN_QUERY_LENGTH;
   const resultsUrl = `/search?q=${encodeURIComponent(query.trim())}`;
@@ -53,6 +80,29 @@ export function SearchOverlay({ catalog, isCatalogLoading, onClose }: SearchOver
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Debounced, for the same reason the tracking below is: a request per
+  // keystroke would be four round trips to spell "clip", and the browser-side
+  // matches are already on screen in the meantime, so nothing looks stalled.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < MIN_QUERY_LENGTH) return;
+    let cancelled = false;
+    const id = setTimeout(() => {
+      void (async () => {
+        const found = await fetchProductSearch(q);
+        // A null answer means the backend could not be reached; recording it
+        // as an empty result for this query would render an empty shop. Left
+        // unrecorded, the query no longer matches what is stored and
+        // browser-side matching takes over.
+        if (!cancelled && found) setServerResult({ query: q, items: found });
+      })();
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(id);
+    };
+  }, [query]);
 
   // Debounced: track the settled query (including zero-result ones — those
   // are the most useful signal for catalog/copy gaps), not every keystroke.

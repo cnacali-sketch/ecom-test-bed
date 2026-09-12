@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { fetchCollectionBySlug, fetchCollections, fetchProducts, fetchProductsByCollectionSlug, fetchSiteContent } from "./api";
+import { fetchCollectionBySlug, fetchCollections, fetchProducts, fetchProductSearch, fetchProductsByCollectionSlug, fetchSiteContent } from "./api";
 import type { BackendProduct } from "./backend-adapter";
 import { collections as mockCollections, getCollectionBySlug as getMockCollectionBySlug, products as mockProducts } from "./mock-data";
 
@@ -253,5 +253,70 @@ describe("fetchSiteContent", () => {
     vi.unstubAllEnvs();
 
     expect(await fetchSiteContent()).toBeNull();
+  });
+});
+
+describe("fetchProductSearch", () => {
+  /**
+   * Search moved from the browser to the database. What the caller has to be
+   * able to tell apart is "the shop has nothing matching" from "the backend
+   * could not answer" -- the first is a real result to render, the second has
+   * to fall back to matching the bundled catalogue, or an unreachable API
+   * turns every search into an empty shop.
+   */
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:8000");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  test("sends the query to the server rather than filtering locally", async () => {
+    const fetchMock = mockFetchOnce({ ok: true, json: () => Promise.resolve([]) });
+
+    await fetchProductSearch("silk scrunchie");
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("q=silk%20scrunchie");
+  });
+
+  test("maps results through the same adapter the catalogue uses", async () => {
+    /** So a search result always resolves to a real product page. */
+    mockFetchOnce({ ok: true, json: () => Promise.resolve([backendProduct()]) });
+
+    const found = await fetchProductSearch("clip");
+
+    expect(found?.[0].slug).toBe("live-product");
+  });
+
+  test("an empty result is a real answer, not a failure", async () => {
+    mockFetchOnce({ ok: true, json: () => Promise.resolve([]) });
+
+    expect(await fetchProductSearch("helicopter")).toEqual([]);
+  });
+
+  test("an unreachable backend returns null so the caller can fall back", async () => {
+    /** null and [] must not be the same value here. Collapsing them would
+     * make a backend outage indistinguishable from "no matches", and the
+     * search page would show an empty shop instead of offline results. */
+    mockFetchOnce(null);
+
+    expect(await fetchProductSearch("clip")).toBeNull();
+  });
+
+  test("a blank query does not hit the network at all", async () => {
+    const fetchMock = mockFetchOnce({ ok: true, json: () => Promise.resolve([]) });
+
+    expect(await fetchProductSearch("   ")).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("a query with characters that need escaping is encoded", async () => {
+    const fetchMock = mockFetchOnce({ ok: true, json: () => Promise.resolve([]) });
+
+    await fetchProductSearch("gold & silk");
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("q=gold%20%26%20silk");
   });
 });

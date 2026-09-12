@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { siteConfig } from "@/content/site.config";
-import { fetchProducts } from "@/lib/api";
+import { fetchProductSearch, fetchProducts } from "@/lib/api";
 import { MIN_QUERY_LENGTH, searchProducts } from "@/lib/search";
 
 // Internal search results are deliberately kept out of the index. Google's own
@@ -22,10 +22,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q } = await searchParams;
   const query = (q ?? "").trim();
 
-  // Same source the PLP and PDP render from, so a result here always resolves
-  // to a real product page.
-  const catalog = await fetchProducts();
-  const matches = query.length >= MIN_QUERY_LENGTH ? searchProducts(catalog, query) : [];
+  // Searched in the database, which is what gives stemming and relevance
+  // ordering. `null` means the backend could not answer -- not that nothing
+  // matched -- so the bundled catalogue is matched in the browser instead and
+  // the page still returns results rather than an empty shop.
+  const live = query.length >= MIN_QUERY_LENGTH ? await fetchProductSearch(query) : [];
+  const matches =
+    live ??
+    (query.length >= MIN_QUERY_LENGTH ? searchProducts(await fetchProducts(), query) : []);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">

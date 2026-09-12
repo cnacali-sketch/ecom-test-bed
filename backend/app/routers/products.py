@@ -11,7 +11,8 @@ Changes from Phase 1:
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import select
+from sqlalchemy import Text, func, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,7 +22,7 @@ from app.dependencies.auth import require_admin
 from app.models.product import Product, ProductVariant
 from app.models.user import User
 from app.schemas.product import ProductCreate, ProductRead
-from app.services import audit
+from app.services import audit, search
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 
@@ -89,31 +90,70 @@ def _q(db: AsyncSession):
     return select(Product).options(selectinload(Product.variants))
 
 
+def _collection_clause(statement, db: AsyncSession, collection: str):
+    """Restrict to one collection, in SQL rather than in Python.
+
+    `attrs.collectionSlugs` is a JSON array. Postgres can ask whether it
+    contains a value directly; SQLite has no equivalent that works through the
+    ORM, so it falls back to matching the serialised array text. That fallback
+    is quoted deliberately -- searching for `"jewellery"` with the quotes
+    cannot match a longer slug that merely starts with it, which an unquoted
+    LIKE would.
+    """
+    if search.is_postgres(db):
+        return statement.where(
+            Product.attrs["collectionSlugs"].contains(func.cast(collection, JSONB))
+        )
+    # json_extract narrows to the one field. Matching the whole attrs blob
+    # instead would put any product *tagged* "jewellery" into the jewellery
+    # *collection* -- a quieter wrong answer than returning nothing, and one
+    # Postgres would never give, so the two paths would disagree about what a
+    # collection is.
+    return statement.where(
+        func.coalesce(
+            func.json_extract(Product.attrs, "$.collectionSlugs"), ""
+        ).like(f'%"{collection}"%')
+    )
+
+
 @router.get("", response_model=list[ProductRead])
 async def list_products(
+    q: str | None = Query(None, description="Full-text search across name, type, material, tags and description"),
     collection: str | None = Query(None, description="Filter by collection slug (attrs.collectionSlugs)"),
     in_stock: bool | None = Query(None),
     limit: int = Query(48, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db_session),
 ) -> list[Product]:
-    """List products with optional collection/stock filters and pagination."""
-    stmt = _q(db).order_by(Product.created_at.desc()).limit(limit).offset(offset)
+    """List products, optionally searched and filtered.
+
+    `q` searches server-side. It used to be impossible: the storefront
+    downloaded the whole catalogue and substring-matched it in the browser,
+    which meant every consumer had to reimplement search and every visitor who
+    opened the box paid for the entire catalogue.
+    """
+    stmt = _q(db)
 
     if in_stock is not None:
         stmt = stmt.where(Product.in_stock == in_stock)
 
-    # ponytail: collection filter via JSON containment — good enough until a
-    # proper collections table ships. Upgrade when collection joins are needed.
     if collection is not None:
-        from sqlalchemy import cast, func
-        from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
-        # SQLite fallback: Python-side filter (tests only).
-        result = await db.execute(stmt)
-        products = list(result.scalars().all())
-        return [p for p in products if collection in (p.attrs.get("collectionSlugs") or [])]
+        stmt = _collection_clause(stmt, db, collection)
 
-    result = await db.execute(stmt)
+    if q:
+        # Applied before the ordering below so the relevance ordering it adds
+        # is the primary sort; newest-first only decides ties.
+        stmt = search.apply_search(stmt, db, q)
+
+    stmt = stmt.order_by(Product.created_at.desc())
+
+    # Limit and offset go on last, and that ordering is the whole fix for a
+    # real bug: the collection filter used to run in Python *after* the page
+    # had already been cut to 48 rows, so asking for one collection returned
+    # only its members that happened to be among the 48 newest products, and
+    # silently dropped the rest. Invisible at thirty-three products, wrong at
+    # a hundred.
+    result = await db.execute(stmt.limit(limit).offset(offset))
     return list(result.scalars().all())
 
 

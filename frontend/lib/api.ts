@@ -65,6 +65,28 @@ export async function fetchProducts(): Promise<Product[]> {
   return (await fetchLiveProducts()) ?? mockProducts;
 }
 
+/**
+ * Search the catalogue on the server.
+ *
+ * Matching used to happen in the browser over the whole downloaded catalogue.
+ * The database does it now -- with stemming, so "scrunchies" finds the
+ * scrunchie, and with weighting, so a search for "silk" leads with the silk
+ * product rather than one whose description mentions silk in passing. Neither
+ * is expressible as a substring match.
+ *
+ * Returns null when the backend is unreachable or answers with an unexpected
+ * shape, so the caller can tell that apart from "found nothing" and fall back
+ * to matching the bundled catalogue offline. An empty array is a real answer.
+ */
+export async function fetchProductSearch(query: string): Promise<Product[] | null> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const data = await fetchJson<BackendProduct[]>(
+    `/api/products?limit=200&q=${encodeURIComponent(trimmed)}`,
+  );
+  return Array.isArray(data) ? data.map(adaptProduct) : null;
+}
+
 // Backend Collection rows (see backend/app/routers/collections.py). Only the
 // fields the storefront actually needs -- id/seoDescription/productIds have
 // no backend column (collections are seed-script-managed only, no admin UI
