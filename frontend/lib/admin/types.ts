@@ -33,6 +33,30 @@ export interface AdminBadge {
   opacity: number;
 }
 
+/**
+ * One variant, as the editor holds it.
+ *
+ * The optional fields use `""` rather than `null` for "not set", because that
+ * is what an empty form input produces and converting at the boundary is one
+ * place to get wrong instead of three. `adapt.ts` turns them back into nulls,
+ * which is what the API reads as "take the product's answer".
+ */
+export interface AdminVariant {
+  /** Identity. Matched on by the API, so renaming one creates and deletes. */
+  sku: string;
+  color: string;
+  colorHex: string;
+  image: string;
+  inStock: boolean;
+  /** "" when the variant has no size, which is all fifty existing ones. */
+  size: string;
+  /** "" means the product's price applies. */
+  price: number | "";
+  mrp: number | "";
+  /** "" means nobody is counting this variant, which is not the same as 0. */
+  stockQuantity: number | "";
+}
+
 export interface AdminProduct {
   /** Backend product UUID when it came from the API; a temp local id for a brand-new draft. */
   id: string;
@@ -47,6 +71,15 @@ export interface AdminProduct {
   slug: string;
   /** True until this product has been saved to the backend at least once. */
   isLocalOnly: boolean;
+  /**
+   * The product's variants.
+   *
+   * Carried for the same reason `images` is: the editor used to send
+   * `variants: []` on every save because it had no variant UI, and the only
+   * thing that stopped fifty of them being deleted was the API ignoring the
+   * field. Now that it does not, the editor has to send the real set.
+   */
+  variants: AdminVariant[];
   name: string;
   category: string;
   price: number;

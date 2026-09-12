@@ -26,6 +26,43 @@ from app.services import audit
 router = APIRouter(prefix="/api/products", tags=["products"])
 
 
+def _reconcile_variants(product: Product, incoming) -> dict[str, list[str]]:
+    """Bring a product's variants in line with what the editor sent.
+
+    Matched on SKU rather than on id or list position. The SKU is the thing a
+    person actually types and the thing the rest of the system already treats
+    as a variant's identity; matching on position would rename every variant
+    below a deleted row, and matching on id would make a variant created in the
+    browser impossible to express.
+
+    Returns what moved, so the audit entry can say "removed Tortoise" instead
+    of "variants changed".
+    """
+    by_sku = {variant.sku: variant for variant in product.variants}
+    sent = {item.sku for item in incoming}
+
+    added: list[str] = []
+    updated: list[str] = []
+    for item in incoming:
+        fields = item.model_dump()
+        existing = by_sku.get(item.sku)
+        if existing is None:
+            product.variants.append(ProductVariant(**fields))
+            added.append(item.sku)
+            continue
+        if any(getattr(existing, name) != value for name, value in fields.items()):
+            for name, value in fields.items():
+                setattr(existing, name, value)
+            updated.append(item.sku)
+
+    removed = sorted(sku for sku in by_sku if sku not in sent)
+    for sku in removed:
+        # delete-orphan on the relationship turns this into a DELETE.
+        product.variants.remove(by_sku[sku])
+
+    return {"added": sorted(added), "updated": sorted(updated), "removed": removed}
+
+
 def _audited_state(product: Product) -> dict:
     """The fields worth being able to answer questions about later.
 
@@ -110,7 +147,7 @@ async def create_product(
     """Create a product with its variants in a single transaction."""
     product_data = payload.model_dump(exclude={"variants"})
     product = Product(**product_data)
-    for v in payload.variants:
+    for v in payload.variants or []:
         product.variants.append(ProductVariant(**v.model_dump()))
     db.add(product)
     # Flush, audit and commit share one `try`. Writing an audit entry flushes
@@ -167,7 +204,15 @@ async def update_product(
         setattr(product, field, value)
     product.attrs = {**product.attrs, **payload.attrs}
 
+    # An empty or absent list leaves the variants alone. Only a list with
+    # something in it is treated as the new set -- see ProductCreate.variants
+    # for why an empty one cannot safely mean "delete them all".
+    variant_moves = _reconcile_variants(product, payload.variants) if payload.variants else {}
+
     changed = audit.diff(before, _audited_state(product))
+    for kind, skus in variant_moves.items():
+        if skus:
+            changed[f"variants_{kind}"] = {"from": None, "to": skus}
     # Audit and commit share one `try`, for the same reason as `create_product`
     # above: recording flushes, so a duplicate slug raises here rather than at
     # commit and must still become a 409.

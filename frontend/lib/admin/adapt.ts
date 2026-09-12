@@ -85,6 +85,17 @@ export function toAdmin(p: BackendProduct): AdminProduct {
     sku: p.sku,
     slug: p.slug,
     isLocalOnly: false,
+    variants: (p.variants ?? []).map((v) => ({
+      sku: v.sku,
+      color: v.color,
+      colorHex: v.color_hex,
+      image: v.image ?? "",
+      inStock: v.in_stock,
+      size: v.size ?? "",
+      price: v.price == null ? "" : Number(v.price),
+      mrp: v.mrp == null ? "" : Number(v.mrp),
+      stockQuantity: v.stock_quantity == null ? "" : Number(v.stock_quantity),
+    })),
     name: p.name,
     category: attrStr(attrs, "type") || collectionSlugs[0] || "",
     price: Number(p.price),
@@ -172,6 +183,20 @@ export function toBackendPayload(p: AdminProduct): Record<string, unknown> {
       // a blank dims form never blanks the PDP's Measurements section.
       ...(measurements ? { measurements } : {}),
     },
-    variants: [],
+    // The real set now, not an empty list. An empty one is read by the API as
+    // "leave them alone" rather than "delete them" -- deliberately, because
+    // this is exactly the payload every old console build sends -- so sending
+    // [] here would quietly make variants uneditable rather than dangerous.
+    variants: p.variants.map((v) => ({
+      sku: v.sku,
+      color: v.color,
+      color_hex: v.colorHex,
+      image: v.image || null,
+      in_stock: v.inStock,
+      size: v.size || null,
+      price: v.price === "" ? null : Number(v.price),
+      mrp: v.mrp === "" ? null : Number(v.mrp),
+      stock_quantity: v.stockQuantity === "" ? null : Number(v.stockQuantity),
+    })),
   };
 }

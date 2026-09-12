@@ -16,6 +16,7 @@ import {
   BADGE_FG,
   type AdminCategory,
   type AdminProduct,
+  type AdminVariant,
 } from "@/lib/admin/types";
 import type { BadgeAnimation, StockMode } from "@/lib/types";
 import { DiscountBadge, Field, HelpTip, ShowToggle, Toggle, inputCls } from "../atoms";
@@ -61,6 +62,34 @@ export function ProductEditor({
     setDraft({ ...draft, show: { ...draft.show, [k]: v } });
   const setDim = (k: keyof AdminProduct["dims"], v: string) =>
     setDraft({ ...draft, dims: { ...draft.dims, [k]: v } });
+  const setVariant = (index: number, patch: Partial<AdminVariant>) =>
+    setDraft({
+      ...draft,
+      variants: draft.variants.map((v, i) => (i === index ? { ...v, ...patch } : v)),
+    });
+  const addVariant = () =>
+    setDraft({
+      ...draft,
+      variants: [
+        ...draft.variants,
+        {
+          // Suggested, not fixed. The SKU is what the API matches on, so it
+          // has to be unique and editable; a blank one would collide with the
+          // next blank one and silently merge two variants into one.
+          sku: `${draft.sku || "NEW"}-${draft.variants.length + 1}`,
+          color: "",
+          colorHex: "#1f6f6b",
+          image: "",
+          inStock: true,
+          size: "",
+          price: "",
+          mrp: "",
+          stockQuantity: "",
+        },
+      ],
+    });
+  const removeVariant = (index: number) =>
+    setDraft({ ...draft, variants: draft.variants.filter((_, i) => i !== index) });
   const setBadge = <K extends keyof AdminProduct["badge"]>(k: K, v: AdminProduct["badge"][K]) =>
     setDraft({ ...draft, badge: { ...draft.badge, [k]: v } });
 
@@ -371,6 +400,114 @@ export function ProductEditor({
             </div>
 
             <ImageDrop value={draft.image} onChange={(v) => set("image", v)} />
+
+            {/* Variants.
+              *
+              * There are fifty of these in the shop already and nothing has
+              * ever been able to edit them -- the console had no UI, so every
+              * save posted an empty list and the API had to ignore the field
+              * to keep them alive.
+              *
+              * Blank price and quantity mean "use the product's", not zero.
+              * That distinction is the whole reason those columns are
+              * nullable, so the inputs stay empty rather than pre-filling a 0
+              * that would read as free and sold out. */}
+            <div>
+              <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-ink">
+                Variants <span className="text-xs font-normal text-ink-soft/60">({draft.variants.length})</span>
+                <HelpTip text="Colours, finishes or sizes of this product. Leave price and quantity blank to use the product's own." />
+                <button
+                  type="button"
+                  onClick={addVariant}
+                  className="ml-auto rounded-lg border border-ink/20 px-2.5 py-1 text-xs font-semibold text-ink-soft hover:border-teal hover:text-teal"
+                >
+                  Add variant
+                </button>
+              </div>
+
+              {draft.variants.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-ink/15 px-3 py-4 text-center text-xs text-ink-soft/70">
+                  No variants. The product is sold as one option.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {draft.variants.map((v, i) => (
+                    <div key={i} className="rounded-lg border border-ink/12 bg-ink/[0.02] p-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          aria-label={`Variant ${i + 1} colour`}
+                          placeholder="Colour"
+                          className={inputCls + " min-w-24 flex-1"}
+                          value={v.color}
+                          onChange={(e) => setVariant(i, { color: e.target.value })}
+                        />
+                        <input
+                          aria-label={`Variant ${i + 1} swatch`}
+                          type="color"
+                          className="h-9 w-10 shrink-0 cursor-pointer rounded-lg border border-ink/20 bg-card"
+                          value={v.colorHex}
+                          onChange={(e) => setVariant(i, { colorHex: e.target.value })}
+                        />
+                        <input
+                          aria-label={`Variant ${i + 1} size`}
+                          placeholder="Size"
+                          className={inputCls + " w-20"}
+                          value={v.size}
+                          onChange={(e) => setVariant(i, { size: e.target.value })}
+                        />
+                        <Toggle
+                          on={v.inStock}
+                          onChange={(on) => setVariant(i, { inStock: on })}
+                          label={v.inStock ? "In stock" : "Sold out"}
+                        />
+                        <button
+                          type="button"
+                          aria-label={`Remove variant ${i + 1}`}
+                          onClick={() => removeVariant(i)}
+                          className="ml-auto rounded-lg p-1.5 text-ink-soft/60 hover:bg-sale/10 hover:text-sale"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <input
+                          aria-label={`Variant ${i + 1} SKU`}
+                          placeholder="SKU"
+                          className={inputCls + " min-w-32 flex-1 font-mono text-xs"}
+                          value={v.sku}
+                          onChange={(e) => setVariant(i, { sku: e.target.value })}
+                        />
+                        <input
+                          aria-label={`Variant ${i + 1} price`}
+                          type="number"
+                          placeholder="Price"
+                          className={inputCls + " w-24"}
+                          value={v.price}
+                          onChange={(e) =>
+                            setVariant(i, { price: e.target.value === "" ? "" : Number(e.target.value) })
+                          }
+                        />
+                        <input
+                          aria-label={`Variant ${i + 1} units`}
+                          type="number"
+                          placeholder="Units"
+                          className={inputCls + " w-24"}
+                          value={v.stockQuantity}
+                          onChange={(e) =>
+                            setVariant(i, {
+                              stockQuantity: e.target.value === "" ? "" : Number(e.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-xs text-ink-soft/70">
+                    Blank price or units means this variant uses the product&rsquo;s own.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <div>
               <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-ink">

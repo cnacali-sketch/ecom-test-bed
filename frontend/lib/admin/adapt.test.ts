@@ -129,3 +129,126 @@ describe("admin product round-trip", () => {
     expect(saved.sku).toBe("SIT-CLIP-001");
   });
 });
+
+describe("variants", () => {
+  /**
+   * The console posted `variants: []` on every save for its whole life,
+   * because it had no variant editor. Fifty variants in production survived
+   * only because the API ignored the field. Now that it does not, this mapping
+   * is the thing standing between a price edit and fifty deleted rows.
+   */
+  const withVariants = (): BackendProduct =>
+    backendProduct({
+      variants: [
+        {
+          id: "v1",
+          sku: "SIT-CLIP-TOR",
+          color: "Tortoise",
+          color_hex: "#6b4423",
+          image: "/media/tortoise.webp",
+          in_stock: true,
+        },
+        {
+          id: "v2",
+          sku: "SIT-CLIP-GLD",
+          color: "Gold",
+          color_hex: "#d4af37",
+          image: null,
+          in_stock: false,
+          size: "Large",
+          price: "650.00",
+          mrp: "800.00",
+          stock_quantity: 4,
+        },
+      ],
+    });
+
+  test("a product's variants survive the round trip", () => {
+    const payload = toBackendPayload(toAdmin(withVariants()));
+
+    expect(payload.variants).toEqual([
+      {
+        sku: "SIT-CLIP-TOR",
+        color: "Tortoise",
+        color_hex: "#6b4423",
+        image: "/media/tortoise.webp",
+        in_stock: true,
+        size: null,
+        price: null,
+        mrp: null,
+        stock_quantity: null,
+      },
+      {
+        sku: "SIT-CLIP-GLD",
+        color: "Gold",
+        color_hex: "#d4af37",
+        image: null,
+        in_stock: false,
+        size: "Large",
+        price: 650,
+        mrp: 800,
+        stock_quantity: 4,
+      },
+    ]);
+  });
+
+  test("a save no longer sends an empty list for a product that has variants", () => {
+    /** The specific regression: `variants: []` used to be hardcoded here, and
+     * it is the payload that would delete all fifty if the API read an empty
+     * list as "these are all of them". */
+    const payload = toBackendPayload(toAdmin(withVariants()));
+
+    expect(payload.variants).toHaveLength(2);
+  });
+
+  test("an unset price stays unset rather than becoming zero", () => {
+    /** Null means "use the product's price". Zero would mean the variant is
+     * free, and a rounding of absent to 0 here would put the whole catalogue
+     * on sale for nothing. */
+    const admin = toAdmin(withVariants());
+
+    expect(admin.variants[0].price).toBe("");
+    expect(admin.variants[0].stockQuantity).toBe("");
+    expect((toBackendPayload(admin).variants as unknown[])[0]).toMatchObject({
+      price: null,
+      stock_quantity: null,
+    });
+  });
+
+  test("a variant with no image round-trips as null, not as an empty string", () => {
+    /** The API's column is nullable; "" would be a real value meaning "this
+     * variant has an image whose URL is blank". */
+    const payload = toBackendPayload(toAdmin(withVariants()));
+
+    expect((payload.variants as { image: unknown }[])[1].image).toBeNull();
+  });
+
+  test("a product with no variants maps to an empty list", () => {
+    const payload = toBackendPayload(toAdmin(backendProduct({ variants: [] })));
+
+    expect(payload.variants).toEqual([]);
+  });
+
+  test("a zero quantity is kept, because sold out is a fact", () => {
+    /** The classic falsy bug in the other direction: 0 must not be flattened
+     * back to "not counted". */
+    const admin = toAdmin(
+      backendProduct({
+        variants: [
+          {
+            id: "v1",
+            sku: "S",
+            color: "C",
+            color_hex: "#000",
+            image: null,
+            in_stock: false,
+            stock_quantity: 0,
+          },
+        ],
+      }),
+    );
+
+    expect(admin.variants[0].stockQuantity).toBe(0);
+    expect((toBackendPayload(admin).variants as { stock_quantity: unknown }[])[0].stock_quantity).toBe(0);
+  });
+});

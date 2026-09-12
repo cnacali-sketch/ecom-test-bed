@@ -136,6 +136,10 @@ function newDraft(): AdminProduct {
     sku: "",
     slug: "",
     isLocalOnly: true,
+    // A new product starts with no variants. The editor adds them; the API
+    // reads an empty list as "no change", which for a product that has none
+    // is the same thing.
+    variants: [],
     name: "",
     category: "",
     price: 0,

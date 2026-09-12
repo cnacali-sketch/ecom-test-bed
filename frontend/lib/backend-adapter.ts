@@ -14,6 +14,10 @@ export interface BackendProductVariant {
   color_hex: string;
   image: string | null;
   in_stock: boolean;
+  size?: string | null;
+  price?: string | null;
+  mrp?: string | null;
+  stock_quantity?: number | null;
 }
 
 export interface BackendProduct {

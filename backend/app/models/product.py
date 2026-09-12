@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import TYPE_CHECKING
@@ -53,12 +53,23 @@ class Product(Base):
 
 
 class ProductVariant(Base):
-    """A purchasable variant of a `Product` (e.g. colour/finish).
+    """A purchasable variant of a `Product` (e.g. colour/finish, size).
 
-    Variants inherit price/mrp from the parent Product; they only carry
-    colour, stock status, and a single swatch image.  Ponytail: removed
-    duplicate price/mrp/description/images columns — add them back only
-    when per-variant pricing ships.
+    Everything added here is nullable, and null means "take the parent's
+    answer". That is what makes this additive: the fifty variants already in
+    the database say nothing about size, price or quantity, and they go on
+    behaving exactly as they did -- colour and a swatch, priced by the product.
+
+    **`price` and `mrp` move together on purpose.** A variant with its own
+    price but the parent's MRP would render a discount percentage computed from
+    two unrelated numbers, which is worse than showing no discount at all: the
+    shop would be advertising a saving it never offered. If one is set the other
+    should be too, and both being null is the normal case.
+
+    **`stock_quantity` is nullable rather than zero-by-default.** Null means
+    nobody is counting this variant, which is the honest state for fifty rows
+    that were never counted; zero would mean "sold out" and would take the whole
+    catalogue off sale the moment this column existed.
     """
 
     __tablename__ = "product_variants"
@@ -70,6 +81,12 @@ class ProductVariant(Base):
     color_hex: Mapped[str] = mapped_column(String(16))
     image: Mapped[str | None] = mapped_column(Text(), nullable=True)
     in_stock: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # ---- Added in Phase 10; null everywhere until an admin fills them in ----
+    size: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    mrp: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    stock_quantity: Mapped[int | None] = mapped_column(Integer(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
