@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { siteConfig } from "@/content/site.config";
-import { fetchHomepageContent } from "@/lib/api";
+import { getSiteContent } from "@/lib/site-content";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
@@ -9,13 +8,7 @@ import { Reveal } from "@/components/ui/Reveal";
  * overridden by the admin Homepage editor (GET /api/sections) when set.
  */
 export async function SeoContentBlock() {
-  const defaults = siteConfig.home.seo;
-  const override = await fetchHomepageContent();
-  const seo = {
-    brandStory: override?.seo_brand_story || defaults.brandStory,
-    categories: override?.seo_categories?.length ? override.seo_categories : defaults.categories,
-    faqs: override?.seo_faqs?.length ? override.seo_faqs : defaults.faqs,
-  };
+  const { seo } = (await getSiteContent()).home;
 
   return (
     <section className="border-t border-ink/10 bg-paper-tint">

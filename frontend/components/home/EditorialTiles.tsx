@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { siteConfig } from "@/content/site.config";
-import { fetchHomepageContent } from "@/lib/api";
+import { getSiteContent } from "@/lib/site-content";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
@@ -10,8 +9,7 @@ import { Reveal } from "@/components/ui/Reveal";
  * Whole-list override from the admin Homepage editor when set.
  */
 export async function EditorialTiles() {
-  const override = await fetchHomepageContent();
-  const tiles = override?.editorial_tiles?.length ? override.editorial_tiles : siteConfig.home.editorialTiles;
+  const tiles = (await getSiteContent()).home.editorialTiles;
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">

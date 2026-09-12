@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ProductGrid } from "@/components/product/ProductGrid";
-import { siteConfig } from "@/content/site.config";
+import { getSiteContent } from "@/lib/site-content";
 import { fetchProductSearch, fetchProducts } from "@/lib/api";
 import { MIN_QUERY_LENGTH, searchProducts } from "@/lib/search";
 
@@ -20,6 +20,7 @@ interface SearchPageProps {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q } = await searchParams;
+  const content = await getSiteContent();
   const query = (q ?? "").trim();
 
   // Searched in the database, which is what gives stemming and relevance
@@ -65,7 +66,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               : `Nothing matches “${query}”.`}
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
-            {siteConfig.nav.map((item) => (
+            {content.nav.map((item) => (
               <Link
                 key={item.label}
                 href={item.href}

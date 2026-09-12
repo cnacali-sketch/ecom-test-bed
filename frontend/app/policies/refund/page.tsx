@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 import { PolicyPage } from "@/components/policies/PolicyPage";
-import { siteConfig } from "@/content/site.config";
+import { getSiteContent } from "@/lib/site-content";
 
 export const metadata: Metadata = { title: "Refund & Cancellation Policy" };
 
-export default function RefundPolicyPage() {
-  const { updated, sections } = siteConfig.policies.refund;
+export default async function RefundPolicyPage() {
+  const { updated, sections } = (await getSiteContent()).policies.refund;
   return <PolicyPage title="Refund & Cancellation Policy" updated={updated} sections={sections} />;
 }

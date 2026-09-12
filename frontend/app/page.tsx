@@ -7,18 +7,17 @@ import { SpecimenRanges } from "@/components/home/SpecimenRanges";
 import { ProductCard } from "@/components/product/ProductCard";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { Reveal } from "@/components/ui/Reveal";
-import { siteConfig } from "@/content/site.config";
-import { fetchHomepageContent, fetchProducts } from "@/lib/api";
+import { fetchProducts } from "@/lib/api";
+import { getSiteContent } from "@/lib/site-content";
 import { faqJsonLd } from "@/lib/seo";
 
 export default async function HomePage() {
-  const [products, override] = await Promise.all([fetchProducts(), fetchHomepageContent()]);
+  const [products, content] = await Promise.all([fetchProducts(), getSiteContent()]);
   const newInProducts = products.filter((product) => product.isNew);
-  const newInHeading = override?.new_in_heading || siteConfig.home.newInHeading;
-  const newInSub = override?.new_in_sub || siteConfig.home.newInSub;
+  const { newInHeading, newInSub } = content.home;
   // Already authored and admin-editable (Homepage editor -> seo_faqs); this
   // just makes them machine-readable for the FAQ rich result.
-  const faqs = override?.seo_faqs ?? siteConfig.home.seo.faqs;
+  const faqs = content.home.seo.faqs;
 
   return (
     <>

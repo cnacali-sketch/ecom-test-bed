@@ -1,30 +1,21 @@
 import Image from "next/image";
 import Link from "next/link";
-import { siteConfig } from "@/content/site.config";
-import { fetchHomepageContent } from "@/lib/api";
+import { getSiteContent } from "@/lib/site-content";
 
 /**
  * Signature hero: two full-bleed images side by side (a diptych) with the
  * brand mark overlaid dead-centre across the seam, and a plain caption
  * below. Pairs with Header's transparent-over-hero state — see Header.tsx.
- * Copy/images come from content/site.config.ts by default, per-field
- * overridden by the admin Homepage editor (GET /api/sections) when set.
+ * Copy and images come from the site content document.
+ *
+ * `imageRight`/`imageRightAlt` had no override path in the old per-field
+ * merge -- they were config-only because the flat /api/sections projection has
+ * no column for them. Reading the document gives them one for free.
  */
 export async function HeroBanner() {
-  const defaults = siteConfig.home.hero;
-  const override = await fetchHomepageContent();
-  const hero = {
-    accentWord: override?.hero_accent_word || defaults.accentWord,
-    headline: override?.hero_headline || defaults.headline,
-    subline: override?.hero_subline || defaults.subline,
-    ctaLabel: override?.hero_cta_label || defaults.ctaLabel,
-    ctaHref: override?.hero_cta_href || defaults.ctaHref,
-    image: override?.hero_image || defaults.image,
-    imageAlt: override?.hero_image_alt || defaults.imageAlt,
-    imageRight: defaults.imageRight,
-    imageRightAlt: defaults.imageRightAlt,
-  };
-  const { logo } = siteConfig.brand;
+  const content = await getSiteContent();
+  const hero = content.home.hero;
+  const { logo } = content.brand;
 
   return (
     <section className="relative">

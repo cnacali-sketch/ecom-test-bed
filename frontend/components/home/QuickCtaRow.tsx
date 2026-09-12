@@ -1,16 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { siteConfig } from "@/content/site.config";
-import { fetchHomepageContent } from "@/lib/api";
+import { getSiteContent } from "@/lib/site-content";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
- * Category shortcut tiles under the hero. Whole-list override from the
- * admin Homepage editor (GET /api/sections) when set, else site.config.ts.
+ * Category shortcut tiles under the hero, from the site content document.
  */
 export async function QuickCtaRow() {
-  const override = await fetchHomepageContent();
-  const quickCtas = override?.quick_ctas?.length ? override.quick_ctas : siteConfig.home.quickCtas;
+  const { quickCtas } = (await getSiteContent()).home;
 
   return (
     <section className="border-y border-ink/10 bg-paper-tint">

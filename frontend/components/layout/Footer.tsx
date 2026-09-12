@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { siteConfig } from "@/content/site.config";
+import { getSiteContent } from "@/lib/site-content";
 import { NewsletterForm } from "./NewsletterForm";
 
 /**
@@ -11,8 +11,9 @@ import { NewsletterForm } from "./NewsletterForm";
  * unchanged, just restyled for the dark surface), three link columns with
  * socials under Help, then a legal rule. All copy/links from site config.
  */
-export function Footer() {
-  const { footer } = siteConfig;
+export async function Footer() {
+  const content = await getSiteContent();
+  const { footer } = content;
 
   return (
     <footer className="relative isolate overflow-hidden bg-specimen px-4 pb-10 text-white sm:px-6">
@@ -104,7 +105,7 @@ export function Footer() {
 
         <div className="mt-6 flex flex-wrap justify-between gap-4 border-t border-white/[0.14] pt-5 text-[13px] text-white/60">
           <span>
-            © {new Date().getFullYear()} {siteConfig.brand.name}
+            © {new Date().getFullYear()} {content.brand.name}
             {footer.fineprint ? `. ${footer.fineprint}` : ""}
           </span>
           <span className="flex flex-wrap gap-2">

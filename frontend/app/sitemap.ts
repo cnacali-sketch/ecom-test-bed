@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteConfig } from "@/content/site.config";
+import { getSiteContent } from "@/lib/site-content";
 import { fetchCollections, fetchProducts } from "@/lib/api";
 
 /** Static pages worth indexing. Anything behind auth or mid-funnel is in
@@ -18,8 +18,12 @@ const STATIC_PATHS = [
 // would claim every page changed on every crawl. Google discounts a lastmod
 // it finds untrustworthy, so an absent one is worth more than a wrong one.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const [products, collections] = await Promise.all([fetchProducts(), fetchCollections()]);
-  const base = siteConfig.brand.url;
+  const [products, collections, content] = await Promise.all([
+    fetchProducts(),
+    fetchCollections(),
+    getSiteContent(),
+  ]);
+  const base = content.brand.url;
 
   return [
     ...STATIC_PATHS.map(({ path, priority }) => ({

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { siteConfig } from "@/content/site.config";
+import { getSiteContent } from "@/lib/site-content";
 
 // Everything here is either private (an account or admin surface), a step in a
 // funnel that means nothing without session state (cart/checkout), or an
@@ -22,14 +22,17 @@ const PRIVATE_PATHS = [
 // pages with real search intent ("savvy in teal track order") and no private
 // data — the order id is the credential. Both carry their own canonical.
 
-export default function robots(): MetadataRoute.Robots {
+// Async because the canonical host now comes from the content document.
+// A `robots` default export is allowed to return a Promise.
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const { brand } = await getSiteContent();
   return {
     rules: {
       userAgent: "*",
       allow: "/",
       disallow: PRIVATE_PATHS,
     },
-    sitemap: `${siteConfig.brand.url}/sitemap.xml`,
-    host: siteConfig.brand.url,
+    sitemap: `${brand.url}/sitemap.xml`,
+    host: brand.url,
   };
 }

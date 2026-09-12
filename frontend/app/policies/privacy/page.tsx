@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 
 import { PolicyPage } from "@/components/policies/PolicyPage";
-import { siteConfig } from "@/content/site.config";
+import { getSiteContent } from "@/lib/site-content";
 
 export const metadata: Metadata = { title: "Privacy Policy" };
 
-export default function PrivacyPolicyPage() {
-  const { updated, sections } = siteConfig.policies.privacy;
+export default async function PrivacyPolicyPage() {
+  const { updated, sections } = (await getSiteContent()).policies.privacy;
   return <PolicyPage title="Privacy Policy" updated={updated} sections={sections} />;
 }
