@@ -8,7 +8,7 @@
 // /account.
 
 import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, Pencil, ShieldOff, Trash2, Users } from "lucide-react";
+import { ChevronDown, ChevronRight, Package, Pencil, ShieldOff, Trash2, Users } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -56,6 +56,97 @@ const ROLE_BLURB: Record<string, string> = {
   staff: "Works the order queue: pick, pack, dispatch. No money, no catalogue.",
   customer: "Shops. No access to the back office.",
 };
+
+/** The slice of an order this screen needs. The Orders screen owns the full
+ * shape; support opening a customer wants to know what, when, and how much. */
+interface CustomerOrder {
+  id: string;
+  status: string;
+  payment_status: string;
+  total_amount: string;
+  created_at: string;
+}
+
+const rupee = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+
+/**
+ * A customer's purchase history, loaded when their row is opened.
+ *
+ * Fetched per-customer rather than pulled from a full order list, because the
+ * Customers screen has no reason to hold every order in the shop in memory to
+ * show five of them. `customer_id` is matched exactly by the server, which
+ * also covers anything bought as a guest under the same email before the
+ * account existed.
+ */
+function OrderHistory({ customerId }: { customerId: string }) {
+  const [orders, setOrders] = useState<CustomerOrder[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(`/api/orders/all?customer_id=${encodeURIComponent(customerId)}`)
+      .then(async (res) => {
+        if (cancelled) return;
+        // Distinguished from "no orders": an empty list is a fact about the
+        // customer, a failed load is a fact about the console. Showing the
+        // first when the second happened tells support this person has never
+        // bought anything, which may be the opposite of the truth.
+        if (!res?.ok) return setFailed(true);
+        setOrders((await res.json()) as CustomerOrder[]);
+      })
+      .catch(() => !cancelled && setFailed(true));
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
+  const total = (orders ?? []).reduce((sum, o) => sum + Number(o.total_amount), 0);
+
+  return (
+    <div className="mt-5 border-t border-ink/10 pt-4">
+      <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-ink-soft">
+        <Package className="h-3.5 w-3.5" /> Order history
+        {orders && orders.length > 0 && (
+          <span className="font-normal normal-case tracking-normal">
+            — {orders.length} {orders.length === 1 ? "order" : "orders"}, {rupee(total)} lifetime
+          </span>
+        )}
+      </h4>
+
+      {failed ? (
+        <p className="mt-2 text-xs text-sale">
+          Couldn&apos;t load this customer&apos;s orders. Reload to try again.
+        </p>
+      ) : orders === null ? (
+        <p className="mt-2 text-xs text-ink-soft">Loading orders…</p>
+      ) : orders.length === 0 ? (
+        <p className="mt-2 text-xs text-ink-soft">
+          No orders yet — this account has never checked out.
+        </p>
+      ) : (
+        <ul className="mt-2 divide-y divide-ink/5">
+          {orders.map((o) => (
+            <li key={o.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5 text-xs">
+              <span className="font-mono text-ink-soft">#{o.id.slice(0, 8)}</span>
+              <span className="text-ink-soft">
+                {new Date(o.created_at).toLocaleDateString("en-IN", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+              <span className="capitalize text-ink">{o.status}</span>
+              <span className="capitalize text-ink-soft">{o.payment_status.replace("_", " ")}</span>
+              <span className="ml-auto font-semibold tabular-nums text-ink">
+                {rupee(Number(o.total_amount))}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function oneLine(a: Address): string {
   const parts = [a.line1, a.line2, a.city, a.state, a.postcode, a.country].filter(Boolean);
@@ -332,6 +423,7 @@ export function Customers() {
                           }}
                           onCancel={() => setExpandedId(null)}
                         />
+                        <OrderHistory customerId={c.id} />
                       </td>
                     </tr>
                   )}

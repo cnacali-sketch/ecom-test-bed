@@ -155,3 +155,107 @@ test("every assignable role is offered", async () => {
     "admin",
   ]);
 });
+
+/**
+ * Order history in the expanded row. Support's first question on any call is
+ * "what have you ordered before", and the console could not answer it — the
+ * two screens had no link between them.
+ */
+
+function order(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "295b817f-e50a-4cdc-a371-7b5afd4b88c1",
+    status: "delivered",
+    payment_status: "paid",
+    total_amount: "1499.00",
+    created_at: "2026-09-03T10:00:00Z",
+    ...overrides,
+  };
+}
+
+/** Route by URL so a test describes data rather than call order. */
+function routeCustomers(orders: unknown[] | { fail: number }) {
+  apiFetch.mockImplementation(async (path: string) => {
+    if (path.startsWith("/api/orders/all")) {
+      if (!Array.isArray(orders)) return { ok: false, status: orders.fail, json: async () => ({}) };
+      return ok(orders);
+    }
+    return ok([customer()]);
+  });
+}
+
+async function expandFirstCustomer() {
+  await userEvent.click(await screen.findByRole("button", { name: "Edit profile" }));
+}
+
+test("opening a customer shows what they have bought", async () => {
+  routeCustomers([order()]);
+  render(<Customers />);
+  await expandFirstCustomer();
+
+  expect(await screen.findByText("#295b817f")).toBeInTheDocument();
+  expect(screen.getByText("delivered")).toBeInTheDocument();
+});
+
+test("asks for that customer's orders by id, not by searching their email", async () => {
+  /** `q` is a substring search across the address blob, so an email appearing
+   * in somebody else's order would attach it to this customer's history. */
+  routeCustomers([order()]);
+  render(<Customers />);
+  await expandFirstCustomer();
+
+  await waitFor(() => {
+    const asked = apiFetch.mock.calls.map((c) => String(c[0]));
+    expect(asked.some((p) => p.includes("customer_id=cust-1"))).toBe(true);
+    expect(asked.some((p) => p.includes("q="))).toBe(false);
+  });
+});
+
+test("summarises how many orders and how much they have spent", async () => {
+  /** Lifetime value is the number that decides how hard to work a complaint. */
+  routeCustomers([order(), order({ id: "b2", total_amount: "501.00" })]);
+  render(<Customers />);
+  await expandFirstCustomer();
+
+  expect(await screen.findByText(/2 orders, ₹2,000 lifetime/)).toBeInTheDocument();
+});
+
+test("one order is not called 'orders'", async () => {
+  routeCustomers([order()]);
+  render(<Customers />);
+  await expandFirstCustomer();
+
+  expect(await screen.findByText(/1 order,/)).toBeInTheDocument();
+});
+
+test("a customer who has never ordered says so plainly", async () => {
+  routeCustomers([]);
+  render(<Customers />);
+  await expandFirstCustomer();
+
+  expect(await screen.findByText(/never checked out/)).toBeInTheDocument();
+});
+
+test("a failed load is not shown as 'no orders'", async () => {
+  /** The dangerous confusion: an empty list is a fact about the customer, a
+   * failed load is a fact about the console. Showing the first when the
+   * second happened tells support this person has never bought anything. */
+  routeCustomers({ fail: 500 });
+  render(<Customers />);
+  await expandFirstCustomer();
+
+  expect(await screen.findByText(/Couldn't load this customer's orders/)).toBeInTheDocument();
+  expect(screen.queryByText(/never checked out/)).not.toBeInTheDocument();
+});
+
+test("history is not fetched until the row is opened", async () => {
+  /** The directory lists every account; fetching each one's orders on load
+   * would be a request per customer for data nobody has asked to see. */
+  routeCustomers([order()]);
+  render(<Customers />);
+  await screen.findByText("priya@example.com");
+
+  expect(apiFetch.mock.calls.map((c) => String(c[0])).some((p) => p.includes("/api/orders"))).toBe(
+    false,
+  );
+});

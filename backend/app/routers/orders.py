@@ -6,7 +6,9 @@
   GET   /api/orders/{id}          — fetch a single order (public: this is the
                                      "secret" a guest needs for order tracking)
   GET   /api/orders               — the CALLER's own orders (auth required)
-  GET   /api/orders/all           — every order (staff)
+  GET   /api/orders/all           — every order (staff); filter by status,
+                                     search, abandoned payments, or one
+                                     customer's history
   PATCH /api/orders/{id}/status   — fulfilment status (staff)
   PATCH /api/orders/bulk/status   — several at once (staff)
   PATCH /api/orders/{id}/shipping — courier + tracking number (staff)
@@ -24,7 +26,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, computed_field
-from sqlalchemy import Text, and_, cast, or_, select
+from sqlalchemy import Text, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -452,6 +454,7 @@ async def list_all_orders(
     q: str | None = None,
     status: str | None = None,
     abandoned: bool = False,
+    customer_id: uuid.UUID | None = None,
     db: AsyncSession = Depends(get_db_session),
 ) -> list[Order]:
     """Every order, newest first — the admin console Orders screen. Admin-gated.
@@ -477,6 +480,29 @@ async def list_all_orders(
     # abandoned_payment_clause for why this is not just "pending".
     if abandoned:
         statement = statement.where(abandoned_payment_clause())
+
+    # One account's order history, for the Customers screen.
+    #
+    # Matched exactly rather than through `q`, because `q` is a substring
+    # search across the address blob: an email appearing anywhere in
+    # somebody else's order would attach that order to this customer's
+    # history. Showing one person's purchases under another person's name
+    # is worse than showing none.
+    #
+    # Two identities, not one. A registered account's orders carry its
+    # UUID as user_id, but anything bought before they signed up carries
+    # the email they typed at guest checkout. Matching only the UUID would
+    # tell a returning customer's support call that they have no history.
+    if customer_id is not None:
+        account = (
+            await db.execute(select(User).where(User.id == customer_id))
+        ).scalar_one_or_none()
+        identities = [Order.user_id == str(customer_id)]
+        if account is not None:
+            # Guest checkout takes the email from a free-text field, so its
+            # casing is whatever was typed; the account's is normalised.
+            identities.append(func.lower(Order.user_id) == account.email.lower())
+        statement = statement.where(or_(*identities))
 
     # The morning question — "what still needs shipping?" — could not be asked
     # at all before this. Several statuses can be passed comma-separated, so
