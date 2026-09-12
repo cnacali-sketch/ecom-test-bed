@@ -27,7 +27,8 @@ So the name outranks the material, which outranks the description:
 """
 from __future__ import annotations
 
-from sqlalchemy import Text, func, text
+from sqlalchemy import Text, func, literal_column
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.product import Product
@@ -112,7 +113,11 @@ def apply_search(statement, db: AsyncSession, query: str):
             statement = statement.where(clause)
         return statement
 
-    vector = text(f"({SEARCH_VECTOR_SQL})")
+    # literal_column, not text(): a TextClause is an opaque fragment with no
+    # column semantics, so it has no `bool_op` and the @@ operator cannot be
+    # built from it. Typing it as TSVECTOR also lets SQLAlchemy render the
+    # comparison without casting.
+    vector = literal_column(f"({SEARCH_VECTOR_SQL})", TSVECTOR)
     # websearch_to_tsquery rather than plainto_tsquery: it understands quoted
     # phrases and a leading minus, which is what people already type into a
     # search box, and it never raises on malformed input the way to_tsquery
