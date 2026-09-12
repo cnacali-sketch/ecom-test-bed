@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { fetchCollectionBySlug, fetchCollections, fetchProducts, fetchProductsByCollectionSlug } from "./api";
+import { fetchCollectionBySlug, fetchCollections, fetchProducts, fetchProductsByCollectionSlug, fetchSiteContent } from "./api";
 import type { BackendProduct } from "./backend-adapter";
 import { collections as mockCollections, getCollectionBySlug as getMockCollectionBySlug, products as mockProducts } from "./mock-data";
 
@@ -203,5 +203,55 @@ describe("fetchCollectionBySlug", () => {
     const result = await fetchCollectionBySlug("hair-accessories");
 
     expect(result).toEqual(getMockCollectionBySlug("hair-accessories"));
+  });
+});
+
+describe("fetchSiteContent", () => {
+  /**
+   * The call a second storefront would be built on. It has to return the whole
+   * document -- brand, nav, footer, policies, homepage -- because anything it
+   * leaves out is something that frontend would have to get by copying
+   * content/site.config.ts, which is the coupling this endpoint removes.
+   */
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:8000");
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  test("returns the document a storefront renders from", async () => {
+    mockFetchOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          key: "site",
+          version: 3,
+          updated_at: "2026-09-12T10:00:00Z",
+          document: { brand: { name: "Savvy In Teal" }, nav: [{ label: "New In" }] },
+        }),
+    });
+
+    const content = await fetchSiteContent();
+
+    expect(content?.version).toBe(3);
+    expect(content?.document.brand).toEqual({ name: "Savvy In Teal" });
+  });
+
+  test("returns null rather than throwing when the backend is unreachable", async () => {
+    /** Every other call in this module falls back instead of crashing the
+     * render, and content is the one a page cannot even partially draw
+     * without -- so it has to fail the same quiet way. */
+    mockFetchOnce(null);
+
+    expect(await fetchSiteContent()).toBeNull();
+  });
+
+  test("returns null when the backend is not configured at all", async () => {
+    vi.unstubAllEnvs();
+
+    expect(await fetchSiteContent()).toBeNull();
   });
 });

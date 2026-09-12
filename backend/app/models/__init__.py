@@ -18,6 +18,7 @@ from app.models.product import Product, ProductVariant
 from app.models.recommendation import Recommendation
 from app.models.refresh_token import RefreshToken
 from app.models.return_request import ReturnRequest
+from app.models.site_content import SiteContent
 from app.models.user import User
 from app.models.user_event import UserEvent
 
@@ -40,6 +41,7 @@ __all__ = [
     "Recommendation",
     "RefreshToken",
     "ReturnRequest",
+    "SiteContent",
     "User",
     "UserEvent",
 ]

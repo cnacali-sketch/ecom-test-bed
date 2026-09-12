@@ -151,3 +151,34 @@ export interface HomepageContentOverride {
 export const fetchHomepageContent = cache(
   async (): Promise<HomepageContentOverride | null> => fetchJson<HomepageContentOverride>("/api/sections", 30),
 );
+
+/**
+ * The whole content document, as the backend now owns it.
+ *
+ * `GET /api/content/site` returns everything a storefront needs to render --
+ * brand, navigation, footer, policy copy, homepage content, SEO defaults --
+ * rather than the thin layer of homepage overrides `fetchHomepageContent`
+ * reads. That difference is the point: a second storefront can be written
+ * against this and never needs a copy of `content/site.config.ts`.
+ *
+ * This storefront has not moved over yet. Its components still merge
+ * `fetchHomepageContent()` over the bundled config, which works and is not
+ * worth breaking to prove an architectural point; migrating them is follow-on
+ * work. `site.config.ts` remains the offline fallback for when the API is
+ * unreachable, which is exactly the role it should end up in.
+ *
+ * Shaped loosely on purpose. The document is content, and pinning a type to
+ * every nested field here would mean editing the frontend every time the shop
+ * adds an FAQ — the coupling this whole change exists to remove.
+ */
+export interface SiteContentDocument {
+  key: string;
+  version: number;
+  updated_at: string | null;
+  document: Record<string, unknown>;
+}
+
+export const fetchSiteContent = cache(
+  async (): Promise<SiteContentDocument | null> =>
+    fetchJson<SiteContentDocument>("/api/content/site", 30),
+);

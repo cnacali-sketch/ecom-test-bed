@@ -1,0 +1,622 @@
+{
+  "trustBadges": [
+    {
+      "icon": "✓",
+      "label": "100% Guaranteed",
+      "description": "Quality checked"
+    },
+    {
+      "icon": "🔒",
+      "label": "Secure Checkout",
+      "description": "Encrypted payments"
+    },
+    {
+      "icon": "↺",
+      "label": "Easy Returns",
+      "description": "15-day return window"
+    },
+    {
+      "icon": "🚚",
+      "label": "Fast Shipping",
+      "description": "Dispatched in 2 days"
+    }
+  ],
+  "brand": {
+    "name": "Savvy In Teal",
+    "url": "https://savvyinteal.com",
+    "logo": {
+      "src": "/brand/logo.webp",
+      "srcLarge": "/brand/logo-lg.webp",
+      "width": 560,
+      "height": 175,
+      "alt": "Savvy In Teal"
+    },
+    "logoAccent": "in teal",
+    "tagline": "Hair accessories & everyday jewellery",
+    "description": "Claw clips, barrettes, silk scrunchies and everyday jewellery built for daily wear. Considered, sturdy, easy to love — signed in teal.",
+    "locale": "en-IN",
+    "currency": "INR",
+    "taxLine": "MRP incl. of all taxes"
+  },
+  "seo": {
+    "verification": {
+      "google": "",
+      "facebook": "",
+      "pinterest": "",
+      "bing": ""
+    },
+    "merchant": {
+      "shipsToCountry": "IN",
+      "freeShippingOver": 1499,
+      "shippingRate": null,
+      "handlingDays": {
+        "min": 1,
+        "max": 2
+      },
+      "transitDays": {
+        "min": 2,
+        "max": 7
+      },
+      "returnDays": 15,
+      "googleProductCategory": ""
+    }
+  },
+  "contact": {
+    "address": {
+      "line1": "12 Agah Abdullah Street",
+      "line2": "Richmond Town",
+      "city": "Bengaluru",
+      "state": "Karnataka",
+      "postcode": "560025",
+      "country": "India"
+    },
+    "phone": "+91 99801 81106",
+    "email": "savvyinteal@gmail.com"
+  },
+  "announcement": {
+    "enabled": true,
+    "messages": [
+      "Free shipping on orders over ₹1,499",
+      "Easy 15-day returns",
+      "New drop: the Teal Edit",
+      "Silk scrunchies restocked"
+    ]
+  },
+  "nav": [
+    {
+      "label": "New In",
+      "href": "/collections/hair-accessories",
+      "megaMenu": {
+        "columns": [
+          {
+            "heading": "Just Landed",
+            "links": [
+              {
+                "label": "Hair Accessories",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "Jewellery",
+                "href": "/collections/jewellery"
+              }
+            ]
+          },
+          {
+            "heading": "Trending",
+            "links": [
+              {
+                "label": "The Tortoise Edit",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "Silk Scrunchies",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "Everyday Gold",
+                "href": "/collections/jewellery"
+              }
+            ]
+          }
+        ],
+        "promoImage": "https://images.pexels.com/photos/31854724/pexels-photo-31854724.jpeg?auto=compress&cs=tinysrgb&w=480&h=480&fit=crop",
+        "promoLabel": "This Week's Drop",
+        "promoHref": "/collections/hair-accessories"
+      }
+    },
+    {
+      "label": "Hair Accessories",
+      "href": "/collections/hair-accessories",
+      "megaMenu": {
+        "columns": [
+          {
+            "heading": "Shop by Type",
+            "links": [
+              {
+                "label": "Claw Clips",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "Barrettes",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "Scrunchies & Ties",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "Pins & Combs",
+                "href": "/collections/hair-accessories"
+              }
+            ]
+          },
+          {
+            "heading": "Shop by Hair",
+            "links": [
+              {
+                "label": "For Thick Hair",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "For Fine Hair",
+                "href": "/collections/hair-accessories"
+              },
+              {
+                "label": "Grab & Go",
+                "href": "/collections/hair-accessories"
+              }
+            ]
+          }
+        ],
+        "promoImage": "https://images.pexels.com/photos/33343186/pexels-photo-33343186.jpeg?auto=compress&cs=tinysrgb&w=480&h=480&fit=crop",
+        "promoLabel": "The Neutral Shelf",
+        "promoHref": "/collections/hair-accessories"
+      }
+    },
+    {
+      "label": "Jewellery",
+      "href": "/collections/jewellery",
+      "megaMenu": {
+        "columns": [
+          {
+            "heading": "Shop by Type",
+            "links": [
+              {
+                "label": "Earrings",
+                "href": "/collections/jewellery"
+              },
+              {
+                "label": "Necklaces",
+                "href": "/collections/jewellery"
+              }
+            ]
+          },
+          {
+            "heading": "Shop by Finish",
+            "links": [
+              {
+                "label": "Gold Tone",
+                "href": "/collections/jewellery"
+              },
+              {
+                "label": "Pearl & Stone",
+                "href": "/collections/jewellery"
+              }
+            ]
+          }
+        ],
+        "promoImage": "https://images.pexels.com/photos/12144990/pexels-photo-12144990.jpeg?auto=compress&cs=tinysrgb&w=480&h=480&fit=crop",
+        "promoLabel": "Everyday Gold",
+        "promoHref": "/collections/jewellery"
+      }
+    },
+    {
+      "label": "Charms",
+      "href": "/collections/charms",
+      "megaMenu": {
+        "columns": [
+          {
+            "heading": "Shop by Type",
+            "links": [
+              {
+                "label": "Bag Charms",
+                "href": "/collections/charms"
+              },
+              {
+                "label": "Zip Charms",
+                "href": "/collections/charms"
+              }
+            ]
+          },
+          {
+            "heading": "Shop by Style",
+            "links": [
+              {
+                "label": "Tassels",
+                "href": "/collections/charms"
+              },
+              {
+                "label": "Enamel & Pearl",
+                "href": "/collections/charms"
+              }
+            ]
+          }
+        ],
+        "promoImage": "https://images.pexels.com/photos/7723760/pexels-photo-7723760.jpeg?auto=compress&cs=tinysrgb&w=480&h=480&fit=crop",
+        "promoLabel": "New: Bag & Zip Charms",
+        "promoHref": "/collections/charms"
+      }
+    },
+    {
+      "label": "Sale",
+      "href": "/collections/hair-accessories"
+    }
+  ],
+  "home": {
+    "hero": {
+      "accentWord": "Held",
+      "headline": "in place, beautifully.",
+      "subline": "Claw clips, barrettes and silk that treat a Tuesday like an occasion. The new drop is here.",
+      "ctaLabel": "Shop the drop",
+      "ctaHref": "/collections/hair-accessories",
+      "image": "https://images.pexels.com/photos/22469099/pexels-photo-22469099.jpeg?auto=compress&cs=tinysrgb&w=1000&h=1330&fit=crop",
+      "imageAlt": "Sunlight on long hair held with a clip",
+      "imageRight": "https://images.pexels.com/photos/33617637/pexels-photo-33617637.jpeg?auto=compress&cs=tinysrgb&w=1000&h=1330&fit=crop",
+      "imageRightAlt": "Back view of a woman with hair clips against greenery"
+    },
+    "quickCtas": [
+      {
+        "label": "Claw Clips",
+        "href": "/collections/hair-accessories",
+        "image": "https://images.pexels.com/photos/33343186/pexels-photo-33343186.jpeg?auto=compress&cs=tinysrgb&w=640&h=640&fit=crop"
+      },
+      {
+        "label": "Scrunchies",
+        "href": "/collections/hair-accessories",
+        "image": "https://images.pexels.com/photos/37195179/pexels-photo-37195179.jpeg?auto=compress&cs=tinysrgb&w=640&h=640&fit=crop"
+      },
+      {
+        "label": "Barrettes",
+        "href": "/collections/hair-accessories",
+        "image": "https://images.pexels.com/photos/20166056/pexels-photo-20166056.jpeg?auto=compress&cs=tinysrgb&w=640&h=640&fit=crop"
+      },
+      {
+        "label": "Jewellery",
+        "href": "/collections/jewellery",
+        "image": "https://images.pexels.com/photos/12144990/pexels-photo-12144990.jpeg?auto=compress&cs=tinysrgb&w=640&h=640&fit=crop"
+      }
+    ],
+    "specimenExploreLabel": "Explore",
+    "specimenSectionEyebrow": "Considered Accessories to Hold the Day Together",
+    "specimenSectionSub": "Three materials we trust — cellulose acetate for grip, mulberry silk for gentleness, brass and steel for pieces that outlast trends.",
+    "specimenRanges": [
+      {
+        "word": "Tortoise",
+        "productId": "prod-claw-tortoise",
+        "exploreHref": "/collections/hair-accessories",
+        "badge": "Bestseller",
+        "caption": "A wide steel spring and long interlocking teeth, for thick or curly hair"
+      },
+      {
+        "word": "Mulberry",
+        "productId": "prod-scrunchie-silk",
+        "exploreHref": "/collections/hair-accessories",
+        "badge": "Restocked",
+        "caption": "Silk glides instead of gripping — overnight buns come down crease-free"
+      },
+      {
+        "word": "Heritage",
+        "productId": "prod-drops-heritage",
+        "exploreHref": "/collections/jewellery",
+        "badge": "Wedding season",
+        "caption": "Waterproof plating and hypoallergenic posts — made for stacking, not storing"
+      }
+    ],
+    "newInHeading": "New In",
+    "newInSub": "Fresh from the studio — restocked weekly.",
+    "campaign": {
+      "eyebrow": "The Teal Edit",
+      "titleItalic": "Signed",
+      "title": "in our colour.",
+      "copy": "A capsule of clips, silk and gold picked around the shade we're named after. Limited run, restocked never.",
+      "ctaLabel": "Explore the edit",
+      "ctaHref": "/collections/hair-accessories",
+      "image": "https://images.pexels.com/photos/33617637/pexels-photo-33617637.jpeg?auto=compress&cs=tinysrgb&w=1000&h=1250&fit=crop",
+      "imageAlt": "Back view of a woman with hair clips against greenery"
+    },
+    "editorialTiles": [
+      {
+        "eyebrow": "The Edit",
+        "title": "Worn, not stored",
+        "copy": "Pieces made for actual days — school runs, standing fans, monsoon commutes.",
+        "href": "/collections/hair-accessories",
+        "image": "https://images.pexels.com/photos/7450827/pexels-photo-7450827.jpeg?auto=compress&cs=tinysrgb&w=900&h=1125&fit=crop",
+        "imageAlt": "Barrettes worn in curly hair, portrait"
+      },
+      {
+        "eyebrow": "Materials",
+        "title": "Acetate, silk, steel",
+        "copy": "Cellulose acetate that won't snap, mulberry silk that won't crease your hair.",
+        "href": "/collections/hair-accessories",
+        "image": "https://images.pexels.com/photos/6044137/pexels-photo-6044137.jpeg?auto=compress&cs=tinysrgb&w=900&h=1125&fit=crop",
+        "imageAlt": "Hair ties with flowers on a decorative box"
+      },
+      {
+        "eyebrow": "Jewellery",
+        "title": "Everyday gold",
+        "copy": "Hoops and pendants with waterproof plating — wear them in, not just out.",
+        "href": "/collections/jewellery",
+        "image": "https://images.pexels.com/photos/15787782/pexels-photo-15787782.jpeg?auto=compress&cs=tinysrgb&w=900&h=1125&fit=crop",
+        "imageAlt": "Golden earrings resting on an open book"
+      }
+    ],
+    "seo": {
+      "brandStory": "Savvy makes hair accessories and jewellery for everyday wear — pieces that hold up to real days and still look considered. We design around three materials we trust: cellulose acetate for grip and shine, mulberry silk for gentleness, and steel or brass cores for pieces that outlast trends. Everything ships from our Bengaluru studio with easy 15-day returns.",
+      "categories": [
+        {
+          "title": "Hair Accessories",
+          "copy": "Claw clips sized for thick and fine hair, French barrettes with steel spring closures, and silk scrunchies that skip the crease. If it goes in your hair, it's built to stay put.",
+          "href": "/collections/hair-accessories"
+        },
+        {
+          "title": "Jewellery",
+          "copy": "Gold-tone hoops, pearl-detail pins and pendants with waterproof plating — everyday pieces designed for stacking, layering and forgetting you have them on.",
+          "href": "/collections/jewellery"
+        }
+      ],
+      "faqs": [
+        {
+          "q": "Do the claw clips work for thick hair?",
+          "a": "Yes — our large claw clips use a wider spring and longer teeth designed for thick or curly hair. Product pages note the recommended hair type for every clip."
+        },
+        {
+          "q": "Is the jewellery plating waterproof?",
+          "a": "Our everyday jewellery line uses PVD gold-tone plating that resists water and sweat. We still recommend keeping perfume and chlorine away from any plated piece."
+        },
+        {
+          "q": "What is your return policy?",
+          "a": "15-day easy returns on unused items in original packaging. Start a return from your order confirmation email or write to us — we make it painless."
+        }
+      ]
+    }
+  },
+  "footer": {
+    "returnToTop": "Return to top",
+    "brandMark": {
+      "src": "/brand/logo-lg.webp",
+      "alt": "Savvy In Teal"
+    },
+    "headline": "Made for real days, shipped from Bengaluru.",
+    "actions": [
+      {
+        "label": "Shop the drop",
+        "href": "/collections/hair-accessories",
+        "style": "filled"
+      },
+      {
+        "label": "The Teal Edit",
+        "href": "/collections/hair-accessories",
+        "style": "outline"
+      }
+    ],
+    "newsletter": {
+      "heading": "First dibs on drops",
+      "copy": "One email a week. New pieces, restocks, and the occasional studio note.",
+      "placeholder": "Your email",
+      "buttonLabel": "Sign up"
+    },
+    "columns": [
+      {
+        "heading": "Shop",
+        "links": [
+          {
+            "label": "Hair Accessories",
+            "href": "/collections/hair-accessories"
+          },
+          {
+            "label": "Jewellery",
+            "href": "/collections/jewellery"
+          },
+          {
+            "label": "Charms",
+            "href": "/collections/charms"
+          }
+        ]
+      },
+      {
+        "heading": "Help",
+        "links": [
+          {
+            "label": "Track Order",
+            "href": "/track-order"
+          },
+          {
+            "label": "Returns & Exchanges",
+            "href": "/policies/returns"
+          },
+          {
+            "label": "Refund & Cancellation Policy",
+            "href": "/policies/refund"
+          },
+          {
+            "label": "Contact",
+            "href": "/contact"
+          },
+          {
+            "label": "FAQ",
+            "href": "/coming-soon"
+          }
+        ]
+      },
+      {
+        "heading": "Company",
+        "links": [
+          {
+            "label": "Privacy",
+            "href": "/policies/privacy"
+          },
+          {
+            "label": "Terms",
+            "href": "/policies/terms"
+          }
+        ]
+      }
+    ],
+    "socials": [
+      {
+        "label": "Instagram",
+        "href": "https://instagram.com"
+      },
+      {
+        "label": "Facebook",
+        "href": "https://facebook.com"
+      },
+      {
+        "label": "WhatsApp",
+        "href": "https://wa.me/"
+      }
+    ],
+    "legal": [
+      {
+        "label": "Terms",
+        "href": "/policies/terms"
+      },
+      {
+        "label": "Privacy",
+        "href": "/policies/privacy"
+      },
+      {
+        "label": "Refund & Cancellation",
+        "href": "/policies/refund"
+      },
+      {
+        "label": "Returns",
+        "href": "/policies/returns"
+      },
+      {
+        "label": "Staff sign in",
+        "href": "/admin/login"
+      }
+    ],
+    "fineprint": "Free shipping over ₹1,499"
+  },
+  "policies": {
+    "termsVersion": "2026-07-27",
+    "terms": {
+      "updated": "27 July 2026",
+      "sections": [
+        {
+          "heading": "About Savvy In Teal",
+          "body": "Savvy In Teal sells hair accessories and jewellery online, shipped from our studio in Bengaluru, India. These Terms govern your use of this website and any order you place with us."
+        },
+        {
+          "heading": "Eligibility",
+          "body": "You must be at least 18 years old, or place your order with the involvement of a parent or guardian, to use this site."
+        },
+        {
+          "heading": "Orders & pricing",
+          "body": "All prices are shown in INR and include applicable taxes unless stated otherwise. We reserve the right to cancel any order where a listed price or stock level was incorrect; if we cancel your order for this reason, you receive a full refund."
+        },
+        {
+          "heading": "Payment",
+          "body": "We currently accept Cash on Delivery. Online payment via UPI, cards, and net banking, processed securely through Razorpay, is being added. We never see or store your card, UPI, or bank details — these are handled directly by Razorpay."
+        },
+        {
+          "heading": "Cancellations & refunds",
+          "body": "See our Refund & Cancellation Policy for how to cancel an order and how refunds are processed."
+        },
+        {
+          "heading": "Limitation of liability",
+          "body": "To the maximum extent permitted by law, Savvy In Teal is not liable for indirect or consequential losses arising from your use of this site or your order. Our total liability for any claim is limited to the amount you paid for the relevant order."
+        },
+        {
+          "heading": "Governing law & disputes",
+          "body": "These Terms are governed by the laws of India. Courts located in Bangalore, Karnataka shall have exclusive jurisdiction over any dispute arising from these Terms."
+        },
+        {
+          "heading": "Contact",
+          "body": "Questions about these Terms? Write to us at savvyinteal@gmail.com."
+        }
+      ]
+    },
+    "refund": {
+      "updated": "27 July 2026",
+      "sections": [
+        {
+          "heading": "Cancellation",
+          "body": "Orders can be cancelled free of charge any time before they are shipped. Once shipped, cancellation is no longer possible — please use our return process instead (see our Returns & Exchanges policy)."
+        },
+        {
+          "heading": "Refund window",
+          "body": "Once we approve a return or cancellation, refunds are processed within 5–7 business days."
+        },
+        {
+          "heading": "Refund method",
+          "body": "Cash on Delivery orders are refunded via UPI or bank transfer to the details you provide. Prepaid (online payment) orders are refunded to the original payment method through Razorpay."
+        },
+        {
+          "heading": "Non-refundable items",
+          "body": "All items are eligible for return under our 15-day returns window (see Returns & Exchanges), provided they are unused, unworn, and in original packaging. There are no final-sale items at this time."
+        }
+      ]
+    },
+    "returns": {
+      "updated": "27 July 2026",
+      "sections": [
+        {
+          "heading": "Return window",
+          "body": "We accept return requests within 15 days of delivery, matching the returns policy already shown across the site."
+        },
+        {
+          "heading": "Condition",
+          "body": "Items must be unused, unworn, and returned in their original packaging with any tags or protective film intact."
+        },
+        {
+          "heading": "How to start a return",
+          "body": "Sign in and open Your Orders to request a return on an eligible order."
+        },
+        {
+          "heading": "Pickup",
+          "body": "We don't yet offer reverse pickup — please ship the item back to us using a courier of your choice. Once we receive and inspect it, your refund is processed per our Refund & Cancellation Policy."
+        }
+      ]
+    },
+    "privacy": {
+      "updated": "27 July 2026",
+      "sections": [
+        {
+          "heading": "What we collect",
+          "body": "When you create an account, place an order, or browse this site, we may collect your name, email, phone number, shipping and billing address, and order/payment status. We never see or store your card, UPI, or bank details — these are handled directly by our payment partner, Razorpay. With your consent, we also collect anonymous browsing behaviour (pages viewed, device/browser type) to help us improve the site."
+        },
+        {
+          "heading": "How we use it",
+          "body": "We use this information to process and deliver your orders, provide customer support, and prevent fraud — and, only with your consent, to understand how shoppers use our site. We do not sell your data to anyone."
+        },
+        {
+          "heading": "Who we share it with",
+          "body": "We share order and payment details with Razorpay (to process payment) and our courier partners (to deliver your order). We do not share your data with advertisers or any other third party."
+        },
+        {
+          "heading": "Cookies",
+          "body": "We use essential cookies to keep you signed in and your cart working. Optional analytics cookies are set only if you accept them, and you can decline them at any time."
+        },
+        {
+          "heading": "Where your data is stored",
+          "body": "This website and its data are hosted on servers located in India."
+        },
+        {
+          "heading": "Your rights",
+          "body": "You can view or update your profile from your account page at any time. To request a copy of your data, or ask us to delete your account, write to us at savvyinteal@gmail.com."
+        },
+        {
+          "heading": "Grievance officer",
+          "body": "For any privacy or data-related complaint, contact our Grievance Officer: Savvy In Teal Support Team, savvyinteal@gmail.com."
+        },
+        {
+          "heading": "Changes to this policy",
+          "body": "We may update this policy from time to time. The date above shows when it was last revised."
+        }
+      ]
+    }
+  }
+}

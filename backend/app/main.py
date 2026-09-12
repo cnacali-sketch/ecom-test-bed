@@ -14,6 +14,7 @@ from app.routers import (
     categories,
     collections,
     contact,
+    content,
     coupons,
     customers,
     error_logs,
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(media.router)
     fastapi_app.include_router(invoices.router)
     fastapi_app.include_router(sections.router)
+    fastapi_app.include_router(content.router)
     fastapi_app.include_router(audit.router)
     fastapi_app.include_router(error_logs.router)
     fastapi_app.include_router(contact.router)
