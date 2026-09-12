@@ -227,6 +227,9 @@ export function Orders({
   // The morning work queue. Server-side like the search, so it filters every
   // order rather than the page already on screen.
   const [statusFilter, setStatusFilter] = useState("");
+  // Not a status — see FILTERS. Kept separate so it composes with search
+  // the same way the status tabs do.
+  const [abandonedOnly, setAbandonedOnly] = useState(false);
   /** Orders ticked for a bulk action. Ids, not indexes — the list reloads. */
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -249,6 +252,7 @@ export function Orders({
       const params = new URLSearchParams();
       if (term) params.set("q", term);
       if (statusFilter) params.set("status", statusFilter);
+      if (abandonedOnly) params.set("abandoned", "true");
       const qs = params.toString();
       apiFetch(`/api/orders/all${qs ? `?${qs}` : ""}`)
         .then(async (res) => {
@@ -268,7 +272,7 @@ export function Orders({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query, statusFilter]);
+  }, [query, statusFilter, abandonedOnly]);
 
   useEffect(() => {
     let cancelled = false;
@@ -561,26 +565,35 @@ export function Orders({
 
   // "Open" is the working queue: everything still owed to a customer. The rest
   // map one-to-one onto a fulfilment status.
-  const FILTERS: { value: string; label: string }[] = [
+  const FILTERS: { value: string; label: string; abandoned?: boolean }[] = [
     { value: "", label: "All" },
     { value: "pending,confirmed", label: "Open" },
     { value: "pending", label: "Pending" },
     { value: "shipped", label: "Shipped" },
     { value: "delivered", label: "Delivered" },
     { value: "cancelled,returned", label: "Cancelled / returned" },
+    // Not a status, which is the point of it. A prepaid order left unpaid is
+    // a sale that did not happen; a COD order left unpaid is a sale that did
+    // and still needs packing. Both sit at pending/unpaid and are
+    // indistinguishable under "Pending".
+    { value: "abandoned", label: "Abandoned payment", abandoned: true },
   ];
 
   const filterTabs = (
     <div className="flex flex-wrap gap-1" role="group" aria-label="Filter orders by status">
       {FILTERS.map((f) => {
-        const active = statusFilter === f.value;
+        const active = f.abandoned ? abandonedOnly : !abandonedOnly && statusFilter === f.value;
         return (
           <button
             key={f.value || "all"}
             type="button"
             aria-pressed={active}
             onClick={() => {
-              setStatusFilter(f.value);
+              // The two are mutually exclusive: "abandoned" already implies
+              // pending, and sending both would ask for orders that are
+              // shipped and never paid for.
+              setAbandonedOnly(Boolean(f.abandoned));
+              setStatusFilter(f.abandoned ? "" : f.value);
               // Selection is meaningless once the visible set changes.
               setSelected(new Set());
             }}
@@ -646,12 +659,21 @@ export function Orders({
               </p>
             </>
           ) : (
+            abandonedOnly ? (
+            <>
+              <p className="mt-3 text-sm text-ink-soft">No abandoned payments.</p>
+              <p className="mt-1 text-xs text-ink-soft/60">
+                Every prepaid checkout either completed or has been closed off.
+              </p>
+            </>
+          ) : (
             <>
               <p className="mt-3 text-sm text-ink-soft">No orders yet.</p>
               <p className="mt-1 text-xs text-ink-soft/60">
                 Orders appear here once customers check out.
               </p>
             </>
+          )
           )}
         </div>
       </div>
@@ -672,6 +694,12 @@ export function Orders({
         </h3>
         {searchBox}
       </div>
+      {abandonedOnly && (
+        <p className="border-b border-gold/20 bg-gold/5 px-5 py-2.5 text-xs text-ink-soft">
+          Checkouts where the customer opened the payment page and left. Nothing
+          to pack — either chase them, or cancel the order to close it off.
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink/10 px-5 py-3">
         {filterTabs}
         {selected.size > 0 && (

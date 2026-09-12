@@ -707,3 +707,96 @@ describe("a staff session", () => {
     expect(screen.getAllByRole("combobox").length).toBeGreaterThan(1);
   });
 });
+
+describe("the abandoned payment tab", () => {
+  /**
+   * "Abandoned" is not a fulfilment status, and that is the whole point: a
+   * prepaid order left unpaid is a sale that did not happen, while a COD
+   * order left unpaid is a sale that did and still needs packing. Both sit at
+   * pending/unpaid. The server draws the line; these cover the screen asking
+   * for it correctly and saying what it is showing.
+   */
+  test("asks the server for abandoned checkouts, not for a status", async () => {
+    routeApi({});
+    render(<Orders />);
+    await screen.findByText("praveen@example.com");
+
+    await userEvent.click(screen.getByRole("button", { name: "Abandoned payment" }));
+
+    await waitFor(() => {
+      const asked = apiFetch.mock.calls.map((c) => String(c[0]));
+      expect(asked.some((p) => p.includes("abandoned=true"))).toBe(true);
+    });
+    const last = String(apiFetch.mock.calls.at(-1)?.[0]);
+    expect(last).not.toContain("status=");
+  });
+
+  test("leaving the tab drops the filter instead of stacking it", async () => {
+    /** Sending both would ask for orders that are shipped and never paid
+     * for — a set that should always be empty. */
+    routeApi({});
+    render(<Orders />);
+    await screen.findByText("praveen@example.com");
+
+    await userEvent.click(screen.getByRole("button", { name: "Abandoned payment" }));
+    await waitFor(() =>
+      expect(String(apiFetch.mock.calls.at(-1)?.[0])).toContain("abandoned=true"),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Shipped" }));
+
+    await waitFor(() => {
+      const last = String(apiFetch.mock.calls.at(-1)?.[0]);
+      expect(last).toContain("status=shipped");
+      expect(last).not.toContain("abandoned");
+    });
+  });
+
+  test("explains what the list is and what to do with it", async () => {
+    /** The label alone does not tell the reader there is nothing to pack. */
+    routeApi({});
+    render(<Orders />);
+    await screen.findByText("praveen@example.com");
+
+    await userEvent.click(screen.getByRole("button", { name: "Abandoned payment" }));
+
+    expect(await screen.findByText(/Nothing\s+to pack/)).toBeInTheDocument();
+  });
+
+  test("an empty tab does not claim the shop has no orders", async () => {
+    /** Working the list down to zero should read as success, not as an empty
+     * shop — which is what the default "No orders yet" would say. */
+    apiFetch.mockImplementation(async (path: string) => {
+      if (path.startsWith("/api/returns")) return ok([]);
+      if (path.includes("abandoned=true")) return ok([]);
+      if (path.startsWith("/api/orders/all")) return ok([order()]);
+      return ok(null);
+    });
+    render(<Orders />);
+    await screen.findByText("praveen@example.com");
+
+    await userEvent.click(screen.getByRole("button", { name: "Abandoned payment" }));
+
+    expect(await screen.findByText("No abandoned payments.")).toBeInTheDocument();
+    expect(screen.queryByText("No orders yet.")).not.toBeInTheDocument();
+  });
+
+  test("only one tab reads as selected at a time", async () => {
+    routeApi({});
+    render(<Orders />);
+    await screen.findByText("praveen@example.com");
+
+    await userEvent.click(screen.getByRole("button", { name: "Abandoned payment" }));
+
+    expect(screen.getByRole("button", { name: "Abandoned payment" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    // "All" is the empty status value, so a naive check would show it pressed
+    // alongside the abandoned tab.
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});

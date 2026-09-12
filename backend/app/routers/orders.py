@@ -19,12 +19,12 @@ Staff may move an order through fulfilment; only an admin may move money
 or destroy the record of a sale.
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, computed_field
-from sqlalchemy import Text, cast, or_, select
+from sqlalchemy import Text, and_, cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -451,6 +451,7 @@ async def list_orders(
 async def list_all_orders(
     q: str | None = None,
     status: str | None = None,
+    abandoned: bool = False,
     db: AsyncSession = Depends(get_db_session),
 ) -> list[Order]:
     """Every order, newest first — the admin console Orders screen. Admin-gated.
@@ -471,6 +472,11 @@ async def list_all_orders(
     filtering in the browser would only ever search the page already loaded.
     """
     statement = select(Order).options(selectinload(Order.items))
+
+    # Narrows to checkouts the customer started paying for and left. See
+    # abandoned_payment_clause for why this is not just "pending".
+    if abandoned:
+        statement = statement.where(abandoned_payment_clause())
 
     # The morning question — "what still needs shipping?" — could not be asked
     # at all before this. Several statuses can be passed comma-separated, so
@@ -545,6 +551,33 @@ FULFILMENT_STATUSES = {
 # The two that end an order and give its stock back. Everything else means the
 # order is still live and still holding its units.
 ENDED_STATUSES = {"cancelled", "returned"}
+
+# A prepaid checkout either completes within minutes or not at all — the
+# Razorpay modal is open on the page the customer is looking at, and there
+# is no later step that could finish it. Two hours is well past any
+# realistic retry, and short enough that the list is actionable the same
+# day. Deliberately not the 24h the console uses for unattended orders:
+# those two numbers answer different questions.
+ABANDONED_PAYMENT_AFTER = timedelta(hours=2)
+
+
+def abandoned_payment_clause():
+    """Orders where the customer walked away from the payment page.
+
+    Worth naming once rather than spelling out at each call site, because
+    the distinction it draws is the whole point: an unpaid *prepaid* order
+    is a sale that did not happen and there is nothing to pack, whereas an
+    unpaid *COD* order is a sale that did happen and is waiting on someone
+    to pack it. Both sit at pending/unpaid and look identical in a list.
+    Acting on one as though it were the other is either shipping goods
+    nobody paid for, or ignoring an order that was placed."""
+    cutoff = datetime.now(timezone.utc) - ABANDONED_PAYMENT_AFTER
+    return and_(
+        Order.payment_method == "prepaid",
+        Order.payment_status == "unpaid",
+        Order.status == "pending",
+        Order.created_at < cutoff,
+    )
 
 
 def _money_state(order: Order) -> dict:
