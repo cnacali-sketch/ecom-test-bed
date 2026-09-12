@@ -1,6 +1,9 @@
 """FastAPI application entrypoint."""
 import logging
 import mimetypes
+from pathlib import Path
+
+from starlette.exceptions import HTTPException
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +34,55 @@ from app.routers import (
     returns,
     sections,
 )
+
+
+class _MediaFiles(StaticFiles):
+    """Serve the original when a requested derivative does not exist.
+
+    The storefront's image loader rewrites every /media URL into a
+    `__w<width>.webp` derivative, because it runs in the browser and cannot
+    know which files actually have them. Plenty legitimately do not: anything
+    uploaded before derivatives existed, images too small to be worth
+    resizing, and animated GIFs, which are skipped rather than silently
+    flattened to a still.
+
+    A missing candidate in a srcset is not a soft failure. The browser does
+    not fall back to `src` -- it renders a broken image. Falling back here
+    turns that into "the visitor gets the full-size original", which is
+    exactly the behaviour before any of this existed.
+    """
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except HTTPException as exc:
+            # Starlette *raises* for a missing file rather than returning a
+            # 404 response, so this has to be a caught exception and not a
+            # status-code check -- which is how the first version of this
+            # silently never fired.
+            if exc.status_code != 404:
+                raise
+            fallback = self._original_for(path)
+            if fallback is None:
+                raise
+            return await super().get_response(fallback, scope)
+
+    def _original_for(self, path: str) -> str | None:
+        """The source file a `__w<width>.webp` derivative was made from."""
+        stem, _, extension = path.rpartition(".")
+        if "__w" not in stem:
+            return None
+        base, _, width = stem.rpartition("__w")
+        if not width.isdigit():
+            return None
+
+        # The derivative is always .webp; the original keeps whatever
+        # extension it was stored under, so each candidate is tried.
+        for candidate_ext in ("png", "jpg", "jpeg", "webp", "gif"):
+            candidate = f"{base}.{candidate_ext}"
+            if (Path(self.directory) / candidate).is_file():
+                return candidate
+        return None
 
 
 def create_app() -> FastAPI:
@@ -101,7 +153,9 @@ def create_app() -> FastAPI:
     mimetypes.add_type("image/webp", ".webp")
     mimetypes.add_type("image/avif", ".avif")
 
-    fastapi_app.mount("/media", StaticFiles(directory=media.UPLOAD_DIR), name="media")
+    fastapi_app.mount(
+        "/media", _MediaFiles(directory=media.UPLOAD_DIR), name="media"
+    )
 
     return fastapi_app
 
