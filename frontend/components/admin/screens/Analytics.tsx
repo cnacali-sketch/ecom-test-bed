@@ -6,8 +6,8 @@
 // most-viewed products. Starts empty until real traffic (with consent) flows
 // through lib/analytics.ts.
 
-import { useEffect, useState } from "react";
-import { BarChart3, Laptop, MapPin, TrendingUp } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { BarChart3, CalendarRange, Laptop, MapPin, TrendingUp } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
 
@@ -22,6 +22,11 @@ interface LocationCount {
   order_count: number;
 }
 interface EventSummary {
+  /** The window the figures describe, echoed back by the server. Null means
+   * all time. Read from the response rather than from local state so the
+   * heading can never claim a period the numbers do not cover. */
+  start: string | null;
+  end: string | null;
   counts: Record<string, number>;
   top_products: TopProduct[];
   total_events: number;
@@ -55,6 +60,36 @@ function BreakdownList({ data }: { data: Record<string, number> }) {
   );
 }
 
+/** Days back from today, or null for all time. Presets rather than a date
+ * picker: "how did last week go" is the question actually being asked, and a
+ * pair of date inputs makes the common case slower without making the rare
+ * one possible — the API takes explicit dates when that day comes. */
+const RANGES: { days: number | null; label: string }[] = [
+  { days: 7, label: "Last 7 days" },
+  { days: 30, label: "Last 30 days" },
+  { days: 90, label: "Last 90 days" },
+  { days: null, label: "All time" },
+];
+
+/** YYYY-MM-DD in local time.
+ *
+ * `toISOString()` would convert to UTC first, which in IST lands on the
+ * previous day for any time before 05:30 — so "last 7 days" would silently
+ * become eight, once a day, for five and a half hours. */
+function isoDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function rangeParams(days: number | null): string {
+  if (days === null) return "";
+  const end = new Date();
+  const start = new Date();
+  // Inclusive of both ends, so "last 7 days" covers today and the six before
+  // it — seven days, not eight.
+  start.setDate(start.getDate() - (days - 1));
+  return `?start=${isoDay(start)}&end=${isoDay(end)}`;
+}
+
 const FUNNEL_STEPS: { key: string; label: string }[] = [
   { key: "page_view", label: "Page views" },
   { key: "product_view", label: "Product views" },
@@ -66,20 +101,26 @@ const FUNNEL_STEPS: { key: string; label: string }[] = [
 export function Analytics() {
   const [summary, setSummary] = useState<EventSummary | null>(null);
   const [error, setError] = useState(false);
+  // 30 days rather than all time: the default view should answer "how are we
+  // doing", and an all-time total stops moving once a shop has any history.
+  const [days, setDays] = useState<number | null>(30);
 
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch("/api/events/summary")
-      .then(async (res) => {
-        if (cancelled) return;
-        if (!res?.ok) return setError(true);
-        setSummary((await res.json()) as EventSummary);
-      })
-      .catch(() => !cancelled && setError(true));
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async (window: number | null) => {
+    const res = await apiFetch(`/api/events/summary${rangeParams(window)}`);
+    if (!res?.ok) {
+      setError(true);
+      return;
+    }
+    setSummary((await res.json()) as EventSummary);
+    setError(false);
   }, []);
+
+  // `load` awaits before it touches state, so nothing is set synchronously
+  // here. The rule cannot see past the call, so it flags the pattern anyway.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+    void load(days);
+  }, [days, load]);
 
   if (error)
     return <p className="p-8 text-sm text-sale">Couldn&apos;t load analytics. Check you&apos;re signed in as an admin.</p>;
@@ -94,15 +135,48 @@ export function Analytics() {
   // don't hide it just because no one has opted into event tracking yet.
   const hasEventData = summary.total_events > 0;
 
+  const rangeTabs = (
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Reporting period">
+      <CalendarRange className="h-3.5 w-3.5 text-ink-soft" />
+      {RANGES.map((r) => (
+        <button
+          key={r.label}
+          type="button"
+          aria-pressed={days === r.days}
+          onClick={() => setDays(r.days)}
+          className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            days === r.days
+              ? "bg-teal text-white"
+              : "bg-ink/5 text-ink-soft hover:bg-ink/10 hover:text-ink"
+          }`}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-ink/10 bg-card px-5 py-3 shadow-sm">
+        {rangeTabs}
+        {/* Taken from the response, not from `days` — if the two ever
+            disagree, the figures are the truth and the label should say so. */}
+        <span className="text-xs text-ink-soft">
+          {summary.start ? `${summary.start} to ${summary.end}` : "All time"}
+        </span>
+      </div>
       {!hasEventData && (
         <div className="rounded-2xl border border-dashed border-ink/20 bg-card p-8 text-center">
           <BarChart3 className="mx-auto h-8 w-8 text-ink-soft/40" />
-          <p className="mt-3 text-sm text-ink-soft">No behavior data yet.</p>
+          <p className="mt-3 text-sm text-ink-soft">
+            {summary.start ? "No behavior data in this period." : "No behavior data yet."}
+          </p>
           <p className="mt-1 text-xs text-ink-soft/60">
-            The funnel and device/browser breakdown fill in as shoppers browse the storefront (with
-            their consent). Order locations below don't depend on this.
+            {summary.start
+              ? "Try a longer period. The funnel and device breakdown only cover the dates selected above."
+              : "The funnel and device/browser breakdown fill in as shoppers browse the storefront (with their consent)."}{" "}
+            Order locations below cover the same period.
           </p>
         </div>
       )}

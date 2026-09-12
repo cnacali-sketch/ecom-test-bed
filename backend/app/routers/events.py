@@ -8,10 +8,10 @@ id generated client-side, so behavior is attributable without requiring login.
 """
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +109,49 @@ async def record_event(payload: EventCreate, request: Request, db: AsyncSession 
     await db.commit()
 
 
+def _window(start: date | None, end: date | None) -> tuple[datetime | None, datetime | None]:
+    """Turn two calendar dates into the half-open instant range to filter on.
+
+    Both bounds are inclusive *as a person means them*: "1st to 30th" includes
+    everything that happened on the 30th. That is expressed as `< 1st of the
+    next day` rather than `<= 30th`, because a `<=` against a date would stop
+    at midnight and silently drop a whole day of that day's activity — the
+    kind of error that makes a month look 3% quieter than it was.
+
+    Dates are read as UTC, matching how every timestamp in this database is
+    stored. A shop in IST asking for "today" before 05:30 will therefore see
+    yesterday's tail; that is a real limitation, and the honest fix is a shop
+    timezone setting rather than guessing an offset here.
+    """
+    if start and end and start > end:
+        raise HTTPException(
+            status_code=422, detail="The start date cannot be after the end date."
+        )
+    start_at = datetime.combine(start, time.min, tzinfo=timezone.utc) if start else None
+    end_at = (
+        datetime.combine(end + timedelta(days=1), time.min, tzinfo=timezone.utc)
+        if end
+        else None
+    )
+    return start_at, end_at
+
+
+def _within(statement, column, start_at: datetime | None, end_at: datetime | None):
+    """Apply the window to a query.
+
+    Takes the column rather than assuming one: this screen reports on two
+    different tables — behaviour from user_events and shipping locations from
+    orders — and both have to be narrowed by the same window. Filtering one
+    and not the other puts last week's funnel next to all-time locations on
+    the same screen, with nothing saying they disagree.
+    """
+    if start_at is not None:
+        statement = statement.where(column >= start_at)
+    if end_at is not None:
+        statement = statement.where(column < end_at)
+    return statement
+
+
 class TopProduct(BaseModel):
     product_id: str
     name: str
@@ -122,6 +165,10 @@ class LocationCount(BaseModel):
 
 
 class EventSummary(BaseModel):
+    # Echoed back so the screen can label the figures with the window they
+    # describe. A number under the wrong heading is worse than no number.
+    start: date | None = None
+    end: date | None = None
     counts: dict[str, int]
     top_products: list[TopProduct]
     total_events: int
@@ -137,15 +184,35 @@ class EventSummary(BaseModel):
 
 
 @router.get("/summary", response_model=EventSummary, dependencies=[Depends(require_admin)])
-async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSummary:
+async def events_summary(
+    start: date | None = Query(default=None, description="First day to include (UTC)."),
+    end: date | None = Query(default=None, description="Last day to include, inclusive (UTC)."),
+    db: AsyncSession = Depends(get_db_session),
+) -> EventSummary:
     """Aggregate counts only — never returns raw per-user event rows.
     Feeds the admin Analytics screen: event-type funnel + most-viewed products.
+
+    Both dates are optional and independent: omitting them reports on all time,
+    which is what this did before the window existed. Every figure below is
+    narrowed by the same window, including the shipping locations, which come
+    from a different table.
     """
-    counts_rows = await db.execute(select(UserEvent.event_type, func.count()).group_by(UserEvent.event_type))
+    start_at, end_at = _window(start, end)
+
+    counts_rows = await db.execute(
+        _within(
+            select(UserEvent.event_type, func.count()).group_by(UserEvent.event_type),
+            UserEvent.created_at,
+            start_at,
+            end_at,
+        )
+    )
     counts = {row[0]: row[1] for row in counts_rows.all()}
     total = sum(counts.values())
 
-    ua_rows = await db.execute(select(UserEvent.user_agent))
+    ua_rows = await db.execute(
+        _within(select(UserEvent.user_agent), UserEvent.created_at, start_at, end_at)
+    )
     device_counts: dict[str, int] = {}
     browser_counts: dict[str, int] = {}
     for (user_agent,) in ua_rows.all():
@@ -159,7 +226,9 @@ async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSum
     # .title() only smooths casing ("india" -> "India"); it can't merge an
     # abbreviation with a full name ("IN" vs "India" still count separately)
     # since the address form is free text, not a fixed country/state picker.
-    location_rows = await db.execute(select(Order.shipping_address))
+    location_rows = await db.execute(
+        _within(select(Order.shipping_address), Order.created_at, start_at, end_at)
+    )
     location_tally: dict[tuple[str, str], int] = {}
     state_tally: dict[str, int] = {}
     country_tally: dict[str, int] = {}
@@ -185,7 +254,14 @@ async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSum
     # json_extract) — at this event volume, pulling product_view rows and
     # aggregating in Python is simpler and more portable than a dialect-
     # specific JSON query.
-    view_rows = await db.execute(select(UserEvent.payload).where(UserEvent.event_type == "product_view"))
+    view_rows = await db.execute(
+        _within(
+            select(UserEvent.payload).where(UserEvent.event_type == "product_view"),
+            UserEvent.created_at,
+            start_at,
+            end_at,
+        )
+    )
     tally: dict[str, int] = {}
     for (event_payload,) in view_rows.all():
         product_id = event_payload.get("product_id") if event_payload else None
@@ -208,6 +284,8 @@ async def events_summary(db: AsyncSession = Depends(get_db_session)) -> EventSum
     ]
 
     return EventSummary(
+        start=start,
+        end=end,
         counts=counts,
         top_products=top_products,
         total_events=total,
