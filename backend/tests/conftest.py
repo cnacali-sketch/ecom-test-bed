@@ -5,11 +5,13 @@ test suite runs without live infrastructure.
 """
 from collections.abc import AsyncGenerator, Generator
 
+import os
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool, StaticPool
 
 from app.config import get_settings
 from app.db import Base, get_db_session
@@ -46,15 +48,40 @@ def _http_test_cookies() -> "Generator[None, None, None]":
     settings.cookie_secure, settings.cookie_samesite = saved
 
 
+#: When set, the whole suite runs against this PostgreSQL database instead of
+#: in-memory SQLite.
+#:
+#: Not a nicety. SQLite cannot express a tsvector, a GIN index, a plpgsql
+#: trigger or JSONB containment, so every test touching those takes a fallback
+#: path and passes against code the production database never runs. That is not
+#: theoretical: `GET /api/products?q=` shipped a 500 because the PostgreSQL
+#: branch of the search builder had never been executed by anything, while 645
+#: tests reported green.
+#:
+#: Marking individual tests for PostgreSQL is not enough on its own either --
+#: a mark controls whether a test runs, not which database it runs against.
+TEST_POSTGRES_URL = os.getenv("TEST_POSTGRES_URL")
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    if TEST_POSTGRES_URL:
+        engine = create_async_engine(TEST_POSTGRES_URL, poolclass=NullPool)
+        # Dropped as well as created: a real database persists between tests,
+        # where the in-memory one is new every time. Without this the first
+        # test to insert a product makes every later assertion about counts
+        # depend on what ran before it.
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+    else:
+        engine = create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
     factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
