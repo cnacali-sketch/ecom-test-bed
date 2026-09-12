@@ -53,14 +53,33 @@ jobs:
         working-directory: backend
         run: pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run tests (SQLite)
         working-directory: backend
         env:
-          # Presence of this is what un-skips the PostgreSQL-only tests.
+          JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+          FRAUD_HASH_SECRET: ci-only-fraud-secret-not-used-elsewhere-0123456789
+        # The whole suite, on in-memory SQLite, as it has always run.
+        run: pytest -q
+
+      - name: Run the dialect-sensitive tests against PostgreSQL
+        working-directory: backend
+        env:
           TEST_POSTGRES_URL: postgresql+asyncpg://savvy:savvy@localhost:5432/savvy_test
           JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
           FRAUD_HASH_SECRET: ci-only-fraud-secret-not-used-elsewhere-0123456789
-        run: pytest -q
+        # Only these files, not the whole suite.
+        #
+        # SQLite cannot express a tsvector, a GIN index or a plpgsql trigger,
+        # so tests covering those take a fallback path and pass against code
+        # production never runs -- which is exactly how a 500 in the search
+        # builder shipped with the suite green.
+        #
+        # The rest of the suite is *not* PostgreSQL-clean yet. Running it there
+        # today produces a large number of dialect failures that have nothing
+        # to do with the change under test, and a red pipeline nobody can act
+        # on is worse than a narrow green one. Widening this list as files are
+        # made dialect-agnostic is the way that gap closes.
+        run: pytest tests/test_product_search.py tests/test_audit_chain.py -q
 
       - name: Fail if a PostgreSQL-only test was skipped
         working-directory: backend
@@ -72,9 +91,9 @@ jobs:
         # anyway — a renamed env var, a dropped fixture — the suite still
         # reports success, and the protection quietly stops being checked.
         run: |
-          if pytest tests/test_audit_chain.py -q -rs 2>&1 | grep -q "SKIPPED"; then
+          if pytest tests/test_audit_chain.py tests/test_product_search.py -q -rs 2>&1 | grep -q "SKIPPED"; then
             echo "::error::A PostgreSQL-only test skipped despite a database being available."
-            pytest tests/test_audit_chain.py -q -rs 2>&1 | grep "SKIPPED" || true
+            pytest tests/test_audit_chain.py tests/test_product_search.py -q -rs 2>&1 | grep "SKIPPED" || true
             exit 1
           fi
 
