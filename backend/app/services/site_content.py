@@ -41,6 +41,10 @@ HOMEPAGE_PATHS: dict[str, tuple[str, ...]] = {
     "hero_cta_href": ("home", "hero", "ctaHref"),
     "hero_image": ("home", "hero", "image"),
     "hero_image_alt": ("home", "hero", "imageAlt"),
+    # The hero's second image. It has rendered since the hero was built and has
+    # never had an override path -- HeroBanner.tsx says so in a comment.
+    "hero_image_right": ("home", "hero", "imageRight"),
+    "hero_image_right_alt": ("home", "hero", "imageRightAlt"),
     "quick_ctas": ("home", "quickCtas"),
     "new_in_heading": ("home", "newInHeading"),
     "new_in_sub": ("home", "newInSub"),
@@ -53,6 +57,13 @@ HOMEPAGE_PATHS: dict[str, tuple[str, ...]] = {
     "campaign_image": ("home", "campaign", "image"),
     "campaign_image_alt": ("home", "campaign", "imageAlt"),
     "editorial_tiles": ("home", "editorialTiles"),
+    # "Shop by range" -- a whole section that renders on the homepage and had
+    # no editor at all. Named `ranges_*` to match what the layout builder calls
+    # it, so the two screens do not use different words for one section.
+    "ranges_eyebrow": ("home", "specimenSectionEyebrow"),
+    "ranges_sub": ("home", "specimenSectionSub"),
+    "ranges_explore_label": ("home", "specimenExploreLabel"),
+    "ranges_items": ("home", "specimenRanges"),
     "seo_brand_story": ("home", "seo", "brandStory"),
     "seo_categories": ("home", "seo", "categories"),
     "seo_faqs": ("home", "seo", "faqs"),

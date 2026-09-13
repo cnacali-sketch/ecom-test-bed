@@ -18,7 +18,7 @@
 // honest "not built yet."
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Plus, Trash2 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
 import { moveEntry } from "@/lib/reorder";
@@ -31,6 +31,14 @@ interface QuickCta {
   label: string;
   href: string;
   image: string;
+}
+
+/** One "Shop by range" entry. `productId` points the tile at a real product,
+ * which is why this section could never be faked with free text. */
+interface RangeItem {
+  word: string;
+  productId: string;
+  exploreHref: string;
 }
 
 interface EditorialTile {
@@ -78,6 +86,12 @@ interface HomepageContent {
   seo_brand_story: string | null;
   seo_categories: SeoCategory[] | null;
   seo_faqs: SeoFaq[] | null;
+  hero_image_right: string | null;
+  hero_image_right_alt: string | null;
+  ranges_eyebrow: string | null;
+  ranges_sub: string | null;
+  ranges_explore_label: string | null;
+  ranges_items: RangeItem[] | null;
 }
 
 /** The site's actual current copy — what a visitor sees right now with no override saved. */
@@ -106,6 +120,12 @@ const DEFAULTS: HomepageContent = {
   seo_brand_story: siteConfig.home.seo.brandStory,
   seo_categories: siteConfig.home.seo.categories.map((c) => ({ ...c })),
   seo_faqs: siteConfig.home.seo.faqs.map((f) => ({ ...f })),
+  hero_image_right: siteConfig.home.hero.imageRight,
+  hero_image_right_alt: siteConfig.home.hero.imageRightAlt,
+  ranges_eyebrow: siteConfig.home.specimenSectionEyebrow,
+  ranges_sub: siteConfig.home.specimenSectionSub,
+  ranges_explore_label: siteConfig.home.specimenExploreLabel,
+  ranges_items: siteConfig.home.specimenRanges.map((r) => ({ ...r })),
 };
 
 /** Fetched row (all-null on a fresh install) merged over DEFAULTS, field by field. */
@@ -137,6 +157,12 @@ function fillWithDefaults(fetched: HomepageContent): HomepageContent {
     seo_brand_story: fetched.seo_brand_story || DEFAULTS.seo_brand_story,
     seo_categories: fetched.seo_categories?.length ? fetched.seo_categories : DEFAULTS.seo_categories,
     seo_faqs: fetched.seo_faqs?.length ? fetched.seo_faqs : DEFAULTS.seo_faqs,
+    hero_image_right: fetched.hero_image_right || DEFAULTS.hero_image_right,
+    hero_image_right_alt: fetched.hero_image_right_alt || DEFAULTS.hero_image_right_alt,
+    ranges_eyebrow: fetched.ranges_eyebrow || DEFAULTS.ranges_eyebrow,
+    ranges_sub: fetched.ranges_sub || DEFAULTS.ranges_sub,
+    ranges_explore_label: fetched.ranges_explore_label || DEFAULTS.ranges_explore_label,
+    ranges_items: fetched.ranges_items?.length ? fetched.ranges_items : DEFAULTS.ranges_items,
   };
 }
 
@@ -149,6 +175,57 @@ type FieldSpec<T> = {
 };
 
 /** Shared add/edit/remove list editor for the four repeating homepage sections. */
+/**
+ * One collapsible block of the editor.
+ *
+ * The screen was a single scroll of every field on the homepage, which made
+ * finding one line of copy an exercise in scrolling past nine others. Titles
+ * deliberately match the names in the layout builder -- a shop owner who hides
+ * "Shop by range" there should not have to work out that it is called
+ * "specimen ranges" here.
+ *
+ * Open state is per-session and intentionally not persisted: it is a reading
+ * aid, not a preference, and restoring a half-collapsed screen days later
+ * hides fields somebody is looking for.
+ */
+function Section({
+  title,
+  hint,
+  defaultOpen = false,
+  right,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  defaultOpen?: boolean;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-2xl border border-ink/10 bg-card shadow-sm">
+      <div className="flex items-center gap-3 px-6 py-4">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          className="flex flex-1 items-center gap-2 text-left"
+        >
+          <ChevronRight
+            className={`h-4 w-4 shrink-0 text-ink-soft transition-transform ${open ? "rotate-90" : ""}`}
+          />
+          <span>
+            <span className="block text-lg font-bold text-ink">{title}</span>
+            {hint && <span className="block text-xs text-ink-soft">{hint}</span>}
+          </span>
+        </button>
+        {right}
+      </div>
+      {open && <div className="border-t border-ink/10 px-6 py-5">{children}</div>}
+    </div>
+  );
+}
+
 function RepeatableList<T extends object>({
   items,
   setItems,
@@ -310,11 +387,11 @@ export function SectionEditor() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-ink">Announcement bar</h2>
-          <Toggle on={content.announcement_enabled ?? true} onChange={(v) => set("announcement_enabled", v)} />
-        </div>
+      <Section
+        title="Announcement bar"
+        hint="The scrolling ribbon above the header"
+        right={<Toggle on={content.announcement_enabled ?? true} onChange={(v) => set("announcement_enabled", v)} />}
+      >
         <div className="space-y-2">
           {messages.map((msg, i) => (
             <div key={i} className="flex items-center gap-2">
@@ -342,10 +419,9 @@ export function SectionEditor() {
             <Plus className="h-3.5 w-3.5" /> Add message
           </button>
         </div>
-      </div>
+      </Section>
 
-      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-bold text-ink">Hero banner</h2>
+      <Section title="Hero banner" hint="The first thing a visitor sees">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <input className={inputCls} value={content.hero_accent_word ?? ""} onChange={(e) => set("hero_accent_word", e.target.value)} placeholder="Accent word (e.g. New drop)" />
           <input className={inputCls} value={content.hero_headline ?? ""} onChange={(e) => set("hero_headline", e.target.value)} placeholder="Headline" />
@@ -356,11 +432,17 @@ export function SectionEditor() {
             <ImageDrop value={content.hero_image ?? ""} onChange={(v) => set("hero_image", v)} compact spec={IMG_SPECS.hero} />
           </div>
           <input className={inputCls + " sm:col-span-2"} value={content.hero_image_alt ?? ""} onChange={(e) => set("hero_image_alt", e.target.value)} placeholder="Image alt text (for screen readers)" />
+          {/* The hero renders two images. This one has been on the live site
+              since the hero was built and had no way to change it. */}
+          <div className="sm:col-span-2">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-soft">Second image</p>
+            <ImageDrop value={content.hero_image_right ?? ""} onChange={(v) => set("hero_image_right", v)} compact spec={IMG_SPECS.hero} />
+          </div>
+          <input className={inputCls + " sm:col-span-2"} value={content.hero_image_right_alt ?? ""} onChange={(e) => set("hero_image_right_alt", e.target.value)} placeholder="Second image alt text" />
         </div>
-      </div>
+      </Section>
 
-      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-bold text-ink">Quick CTA tiles</h2>
+      <Section title="Quick links" hint="The small tiles under the hero">
         <RepeatableList<QuickCta>
           items={content.quick_ctas ?? []}
           setItems={(next) => set("quick_ctas", next)}
@@ -372,19 +454,42 @@ export function SectionEditor() {
             { key: "image", placeholder: "Image", type: "image", imageSpec: IMG_SPECS.tile },
           ]}
         />
-      </div>
+      </Section>
 
-      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-bold text-ink">"New In" section heading</h2>
+      <Section title="New in" hint="Heading above the newest products">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <input className={inputCls} value={content.new_in_heading ?? ""} onChange={(e) => set("new_in_heading", e.target.value)} placeholder="Heading (e.g. New In)" />
           <input className={inputCls} value={content.new_in_sub ?? ""} onChange={(e) => set("new_in_sub", e.target.value)} placeholder="Subheading" />
         </div>
         <p className="mt-3 text-xs text-ink-soft">The products shown below this heading come from Inventory, not from here.</p>
-      </div>
+      </Section>
 
-      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-bold text-ink">Campaign band</h2>
+      <Section title="Shop by range" hint="The three material ranges, each linked to a real product">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <input className={inputCls} value={content.ranges_eyebrow ?? ""} onChange={(e) => set("ranges_eyebrow", e.target.value)} placeholder="Section heading" />
+          <input className={inputCls} value={content.ranges_explore_label ?? ""} onChange={(e) => set("ranges_explore_label", e.target.value)} placeholder="Link label (e.g. Explore)" />
+          <textarea className={inputCls + " sm:col-span-2"} rows={2} value={content.ranges_sub ?? ""} onChange={(e) => set("ranges_sub", e.target.value)} placeholder="Sub-line under the heading" />
+        </div>
+        <div className="mt-4">
+          <RepeatableList<RangeItem>
+            items={content.ranges_items ?? []}
+            setItems={(next) => set("ranges_items", next)}
+            itemLabel="Range"
+            makeEmpty={() => ({ word: "", productId: "", exploreHref: "" })}
+            fields={[
+              { key: "word", placeholder: "Range name (e.g. Tortoise)" },
+              { key: "productId", placeholder: "Product id this range shows" },
+              { key: "exploreHref", placeholder: "Link (e.g. /collections/hair-accessories)" },
+            ]}
+          />
+          <p className="mt-2 text-xs text-ink-soft">
+            A range whose product id matches nothing is skipped on the storefront rather than
+            rendered empty, so a typo here hides that tile instead of breaking the page.
+          </p>
+        </div>
+      </Section>
+
+      <Section title="Campaign band" hint="The full-width promotional band">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <input className={inputCls} value={content.campaign_eyebrow ?? ""} onChange={(e) => set("campaign_eyebrow", e.target.value)} placeholder="Eyebrow (e.g. The Teal Edit)" />
           <input className={inputCls} value={content.campaign_title_italic ?? ""} onChange={(e) => set("campaign_title_italic", e.target.value)} placeholder="Large italic word (e.g. Signed)" />
@@ -397,10 +502,9 @@ export function SectionEditor() {
           </div>
           <input className={inputCls + " sm:col-span-2"} value={content.campaign_image_alt ?? ""} onChange={(e) => set("campaign_image_alt", e.target.value)} placeholder="Image alt text" />
         </div>
-      </div>
+      </Section>
 
-      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-bold text-ink">Editorial tiles</h2>
+      <Section title="Editorial tiles" hint="The three story tiles">
         <RepeatableList<EditorialTile>
           items={content.editorial_tiles ?? []}
           setItems={(next) => set("editorial_tiles", next)}
@@ -415,10 +519,9 @@ export function SectionEditor() {
             { key: "imageAlt", placeholder: "Image alt text" },
           ]}
         />
-      </div>
+      </Section>
 
-      <div className="rounded-2xl border border-ink/10 bg-card p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-bold text-ink">Brand story &amp; FAQ</h2>
+      <Section title="SEO copy" hint="Brand story, category blurbs and FAQs — read by search engines">
         <textarea
           className={inputCls}
           rows={4}
@@ -449,7 +552,7 @@ export function SectionEditor() {
             { key: "a", placeholder: "Answer", type: "textarea" },
           ]}
         />
-      </div>
+      </Section>
 
       <p className="text-xs text-ink-soft">Clear any field to blank and save to revert it to the site's default.</p>
 
