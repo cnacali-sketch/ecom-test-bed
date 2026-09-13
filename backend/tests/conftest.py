@@ -10,6 +10,7 @@ import os
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool, StaticPool
 
@@ -76,17 +77,77 @@ def _http_test_cookies() -> "Generator[None, None, None]":
 TEST_POSTGRES_URL = os.getenv("TEST_POSTGRES_URL")
 
 
+#: Set once the PostgreSQL schema exists for this pytest process.
+_postgres_schema_ready = False
+_pg_engine = None
+
+
+def _postgres_engine():
+    """One engine for the whole run, still one connection per test."""
+    global _pg_engine
+    if _pg_engine is None:
+        _pg_engine = create_async_engine(TEST_POSTGRES_URL, poolclass=NullPool)
+    return _pg_engine
+
+
+async def _empty_postgres(engine) -> None:
+    """Hand the next test an empty database, without rebuilding the schema.
+
+    A real database persists between tests where the in-memory one is new every
+    time, so something has to clear it or the first test to insert a product
+    makes every later assertion about counts depend on what ran before it.
+
+    That used to be `drop_all` + `create_all` per test: 22 tables with their
+    indexes and constraints, built and torn down 652 times. Emptying the tables
+    instead gets to the same place for a fraction of the work, and building the
+    schema once is the right shape regardless of what it saves.
+
+    Safe here specifically because no test alters this schema: the append-only
+    trigger test builds its own private schema, and the migration test runs
+    against its own throwaway SQLite file. If that ever stops being true, this
+    has to go back to recreating.
+
+    DELETE rather than TRUNCATE, which is the opposite of the usual advice and
+    was measured, not assumed. These tables hold a handful of rows each, so
+    there is nothing for TRUNCATE's file-level work to pay off against, while
+    it still takes an ACCESS EXCLUSIVE lock on all 22. On one file: 84.75s per
+    test-recreate, 74.39s with DELETE, 70.58s once the engine stopped being
+    rebuilt per test.
+
+    What this did *not* fix is worth recording, because both were the obvious
+    suspect and both were wrong. The per-test DDL was not the dominant cost --
+    removing it took the full suite from 16m28s to 13m10s, not to anything near
+    SQLite's two minutes. Nor was commit fsync: `synchronous_commit = off` on
+    the test database changed a 74.39s file to 73.31s, which is noise. The full
+    suite now runs 652 tests against real PostgreSQL in 11m29s, a 30% cut, and
+    the remaining gap over SQLite is spread across connection setup and
+    per-statement overhead rather than sitting anywhere that can be removed.
+
+    So this is why CI still names a file list rather than running everything
+    here: 11m29s per push is a real cost, and the files SQLite genuinely cannot
+    speak for are a small subset of the suite.
+    """
+    global _postgres_schema_ready
+
+    async with engine.begin() as conn:
+        if not _postgres_schema_ready:
+            # Dropped as well as created: the database may be left over from a
+            # run of older code, and a stale column is a worse failure than a
+            # slow one because it looks like a bug in the test.
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+            _postgres_schema_ready = True
+            return  # freshly created, so already empty
+
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(text(f'DELETE FROM "{table.name}"'))
+
+
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     if TEST_POSTGRES_URL:
-        engine = create_async_engine(TEST_POSTGRES_URL, poolclass=NullPool)
-        # Dropped as well as created: a real database persists between tests,
-        # where the in-memory one is new every time. Without this the first
-        # test to insert a product makes every later assertion about counts
-        # depend on what ran before it.
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
+        engine = _postgres_engine()
+        await _empty_postgres(engine)
     else:
         engine = create_async_engine(
             "sqlite+aiosqlite:///:memory:",
@@ -100,7 +161,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with factory() as session:
         yield session
 
-    await engine.dispose()
+    if not TEST_POSTGRES_URL:
+        await engine.dispose()
 
 
 @pytest_asyncio.fixture

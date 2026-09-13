@@ -69,12 +69,13 @@ jobs:
           FRAUD_HASH_SECRET: ci-only-fraud-secret-not-used-elsewhere-0123456789
         # These files, not the whole suite -- and the reason is now runtime,
         # not correctness. The whole suite has been run against real
-        # PostgreSQL and passes: 652 passed, 0 failed. It takes 16m28s,
-        # because the `db_session` fixture drops and recreates every table per
-        # test, which SQLite does in memory for free and PostgreSQL does not.
-        # Adding that to every push would buy less than it costs; a
-        # session-scoped schema with truncation between tests is what would
-        # make running everything here affordable.
+        # PostgreSQL and passes: 652 passed, 0 failed, in 11m29s. That is
+        # already after building the schema once per run instead of per test
+        # and emptying the tables between them, which took it down from
+        # 16m28s; see the note in tests/conftest.py for what else was tried
+        # and did not help. The remainder is connection and per-statement
+        # overhead, not anything left to remove, so 11m29s is the honest price
+        # of running everything here and it is more than this buys per push.
         #
         # So this list is the subset where the engines genuinely disagree:
         #
