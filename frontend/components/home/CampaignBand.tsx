@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getSiteContent } from "@/lib/site-content";
+import { resolveToggles } from "@/lib/home-toggles";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
@@ -12,7 +13,9 @@ import { Reveal } from "@/components/ui/Reveal";
  * way instead of each re-deciding what "unset" means.
  */
 export async function CampaignBand() {
-  const { campaign } = (await getSiteContent()).home;
+  const home = (await getSiteContent()).home;
+  const { campaign } = home;
+  const show = resolveToggles(home.show);
 
   return (
     <section className="bg-teal text-white">
@@ -28,12 +31,14 @@ export async function CampaignBand() {
             </span>
           </h2>
           <p className="mt-6 max-w-md text-sm leading-relaxed text-white/80">{campaign.copy}</p>
-          <Link
-            href={campaign.ctaHref}
-            className="mt-8 inline-block border border-white/70 px-8 py-3.5 text-xs uppercase tracking-[0.18em] text-white transition-colors hover:bg-white hover:text-teal"
-          >
-            {campaign.ctaLabel}
-          </Link>
+        {show.campaignCta && campaign.ctaLabel && (
+            <Link
+              href={campaign.ctaHref}
+              className="mt-8 inline-block border border-white/70 px-8 py-3.5 text-xs uppercase tracking-[0.18em] text-white transition-colors hover:bg-white hover:text-teal"
+            >
+              {campaign.ctaLabel}
+            </Link>
+        )}
         </Reveal>
         <Reveal delay={120}>
           <div className="relative aspect-[4/5] w-full overflow-hidden">

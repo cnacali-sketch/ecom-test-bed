@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSiteContent } from "@/lib/site-content";
+import { resolveToggles } from "@/lib/home-toggles";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
@@ -8,7 +9,9 @@ import { Reveal } from "@/components/ui/Reveal";
  * overridden by the admin Homepage editor (GET /api/sections) when set.
  */
 export async function SeoContentBlock() {
-  const { seo } = (await getSiteContent()).home;
+  const home = (await getSiteContent()).home;
+  const { seo } = home;
+  const show = resolveToggles(home.show);
 
   return (
     <section className="border-t border-ink/10 bg-paper-tint">
@@ -20,6 +23,7 @@ export async function SeoContentBlock() {
           </p>
         </Reveal>
 
+        {show.seoCategories && (
         <div className="mt-12 grid grid-cols-1 gap-10 md:grid-cols-2">
           {seo.categories.map((category, index) => (
             <Reveal key={category.title} delay={index * 80}>
@@ -34,7 +38,9 @@ export async function SeoContentBlock() {
             </Reveal>
           ))}
         </div>
+        )}
 
+        {show.seoFaqs && (
         <Reveal className="mt-14">
           <h3 className="text-sm uppercase tracking-[0.16em] text-ink">Questions, answered</h3>
           <div className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
@@ -49,6 +55,7 @@ export async function SeoContentBlock() {
             ))}
           </div>
         </Reveal>
+        )}
       </div>
     </section>
   );

@@ -60,6 +60,13 @@ HOMEPAGE_PATHS: dict[str, tuple[str, ...]] = {
     # "Shop by range" -- a whole section that renders on the homepage and had
     # no editor at all. Named `ranges_*` to match what the layout builder calls
     # it, so the two screens do not use different words for one section.
+    # Optional pieces inside sections. Whole-section visibility lives in
+    # home.layout and has its own screen.
+    "show_hero_second_image": ("home", "show", "heroSecondImage"),
+    "show_hero_cta": ("home", "show", "heroCta"),
+    "show_campaign_cta": ("home", "show", "campaignCta"),
+    "show_seo_categories": ("home", "show", "seoCategories"),
+    "show_seo_faqs": ("home", "show", "seoFaqs"),
     "ranges_eyebrow": ("home", "specimenSectionEyebrow"),
     "ranges_sub": ("home", "specimenSectionSub"),
     "ranges_explore_label": ("home", "specimenExploreLabel"),

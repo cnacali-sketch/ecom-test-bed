@@ -92,6 +92,11 @@ interface HomepageContent {
   ranges_sub: string | null;
   ranges_explore_label: string | null;
   ranges_items: RangeItem[] | null;
+  show_hero_second_image: boolean | null;
+  show_hero_cta: boolean | null;
+  show_campaign_cta: boolean | null;
+  show_seo_categories: boolean | null;
+  show_seo_faqs: boolean | null;
 }
 
 /** The site's actual current copy — what a visitor sees right now with no override saved. */
@@ -126,6 +131,11 @@ const DEFAULTS: HomepageContent = {
   ranges_sub: siteConfig.home.specimenSectionSub,
   ranges_explore_label: siteConfig.home.specimenExploreLabel,
   ranges_items: siteConfig.home.specimenRanges.map((r) => ({ ...r })),
+  show_hero_second_image: siteConfig.home.show.heroSecondImage,
+  show_hero_cta: siteConfig.home.show.heroCta,
+  show_campaign_cta: siteConfig.home.show.campaignCta,
+  show_seo_categories: siteConfig.home.show.seoCategories,
+  show_seo_faqs: siteConfig.home.show.seoFaqs,
 };
 
 /** Fetched row (all-null on a fresh install) merged over DEFAULTS, field by field. */
@@ -163,6 +173,14 @@ function fillWithDefaults(fetched: HomepageContent): HomepageContent {
     ranges_sub: fetched.ranges_sub || DEFAULTS.ranges_sub,
     ranges_explore_label: fetched.ranges_explore_label || DEFAULTS.ranges_explore_label,
     ranges_items: fetched.ranges_items?.length ? fetched.ranges_items : DEFAULTS.ranges_items,
+    // Only an explicit false is an instruction to hide; null means "never set",
+    // which is shown. `?? true` rather than `|| DEFAULTS...` on purpose --
+    // `false || true` is true, and would make the toggle impossible to turn off.
+    show_hero_second_image: fetched.show_hero_second_image ?? true,
+    show_hero_cta: fetched.show_hero_cta ?? true,
+    show_campaign_cta: fetched.show_campaign_cta ?? true,
+    show_seo_categories: fetched.show_seo_categories ?? true,
+    show_seo_faqs: fetched.show_seo_faqs ?? true,
   };
 }
 
@@ -188,6 +206,30 @@ type FieldSpec<T> = {
  * aid, not a preference, and restoring a half-collapsed screen days later
  * hides fields somebody is looking for.
  */
+/** A labelled on/off row, for the optional pieces inside a section. Reads as a
+ * sentence so it is obvious what switching it off removes from the page. */
+function ToggleRow({
+  label,
+  hint,
+  on,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  on: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-ink/10 px-4 py-3">
+      <span>
+        <span className="block text-sm text-ink">{label}</span>
+        {hint && <span className="block text-xs text-ink-soft">{hint}</span>}
+      </span>
+      <Toggle on={on} onChange={onChange} />
+    </div>
+  );
+}
+
 function Section({
   title,
   hint,
@@ -331,6 +373,11 @@ function RepeatableList<T extends object>({
 
 export function SectionEditor() {
   const [content, setContent] = useState<HomepageContent>(DEFAULTS);
+  // The last state the server confirmed. Dirtiness is derived by comparing
+  // against this rather than tracked by a flag, because a flag has to be set
+  // on every edit path and the one that gets forgotten is the one that loses
+  // somebody's work.
+  const [savedContent, setSavedContent] = useState<HomepageContent>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -340,7 +387,9 @@ export function SectionEditor() {
     apiFetch("/api/sections")
       .then(async (res) => {
         if (!res?.ok) return setError("Couldn't load homepage content.");
-        setContent(fillWithDefaults((await res.json()) as HomepageContent));
+        const loaded = fillWithDefaults((await res.json()) as HomepageContent);
+        setContent(loaded);
+        setSavedContent(loaded);
       })
       .catch(() => setError("Couldn't load homepage content."))
       .finally(() => setLoading(false));
@@ -352,6 +401,18 @@ export function SectionEditor() {
   const messages = content.announcement_messages ?? [];
   const setMessages = (next: string[]) => set("announcement_messages", next);
 
+  // Cheap and exact: the shape is JSON already, and it is what gets PUT.
+  const dirty = JSON.stringify(content) !== JSON.stringify(savedContent);
+
+  useEffect(() => {
+    if (!dirty) return;
+    // The only thing a browser lets a page say before it is closed. Registered
+    // only while there is something to lose, so a clean screen never nags.
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   async function save() {
     setSaving(true);
     setError(null);
@@ -362,7 +423,9 @@ export function SectionEditor() {
     });
     setSaving(false);
     if (res?.ok) {
-      setContent(fillWithDefaults((await res.json()) as HomepageContent));
+      const confirmed = fillWithDefaults((await res.json()) as HomepageContent);
+      setContent(confirmed);
+      setSavedContent(confirmed);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       return;
@@ -439,6 +502,19 @@ export function SectionEditor() {
             <ImageDrop value={content.hero_image_right ?? ""} onChange={(v) => set("hero_image_right", v)} compact spec={IMG_SPECS.hero} />
           </div>
           <input className={inputCls + " sm:col-span-2"} value={content.hero_image_right_alt ?? ""} onChange={(e) => set("hero_image_right_alt", e.target.value)} placeholder="Second image alt text" />
+          <div className="space-y-2 sm:col-span-2">
+            <ToggleRow
+              label="Show the second hero image"
+              hint="Off, the first image fills the full width instead of leaving a gap."
+              on={content.show_hero_second_image ?? true}
+              onChange={(v) => set("show_hero_second_image", v)}
+            />
+            <ToggleRow
+              label="Show the hero button"
+              on={content.show_hero_cta ?? true}
+              onChange={(v) => set("show_hero_cta", v)}
+            />
+          </div>
         </div>
       </Section>
 
@@ -501,6 +577,13 @@ export function SectionEditor() {
             <ImageDrop value={content.campaign_image ?? ""} onChange={(v) => set("campaign_image", v)} compact spec={IMG_SPECS.campaign} />
           </div>
           <input className={inputCls + " sm:col-span-2"} value={content.campaign_image_alt ?? ""} onChange={(e) => set("campaign_image_alt", e.target.value)} placeholder="Image alt text" />
+          <div className="sm:col-span-2">
+            <ToggleRow
+              label="Show the campaign button"
+              on={content.show_campaign_cta ?? true}
+              onChange={(v) => set("show_campaign_cta", v)}
+            />
+          </div>
         </div>
       </Section>
 
@@ -529,6 +612,13 @@ export function SectionEditor() {
           onChange={(e) => set("seo_brand_story", e.target.value)}
           placeholder="Brand story paragraph"
         />
+        <div className="mt-6">
+          <ToggleRow
+            label="Show the category blurbs"
+            on={content.show_seo_categories ?? true}
+            onChange={(v) => set("show_seo_categories", v)}
+          />
+        </div>
         <h3 className="mb-2 mt-6 text-sm font-semibold text-ink">Category blurbs</h3>
         <RepeatableList<SeoCategory>
           items={content.seo_categories ?? []}
@@ -541,6 +631,14 @@ export function SectionEditor() {
             { key: "href", placeholder: "Link" },
           ]}
         />
+        <div className="mt-6">
+          <ToggleRow
+            label="Show the FAQ list"
+            hint="Also removes the FAQ rich-result markup, so Google is never told about questions a visitor cannot see."
+            on={content.show_seo_faqs ?? true}
+            onChange={(v) => set("show_seo_faqs", v)}
+          />
+        </div>
         <h3 className="mb-2 mt-6 text-sm font-semibold text-ink">FAQs</h3>
         <RepeatableList<SeoFaq>
           items={content.seo_faqs ?? []}
@@ -556,14 +654,28 @@ export function SectionEditor() {
 
       <p className="text-xs text-ink-soft">Clear any field to blank and save to revert it to the site's default.</p>
 
-      <button
-        type="button"
-        onClick={save}
-        disabled={saving}
-        className="bg-teal px-6 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-teal-deep disabled:opacity-60"
-      >
-        {saving ? "Saving…" : saved ? "Saved" : "Save changes"}
-      </button>
+      <div className="sticky bottom-0 -mx-1 flex items-center gap-3 border-t border-ink/10 bg-card/95 px-1 py-3 backdrop-blur">
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving || !dirty}
+          className="bg-teal px-6 py-2.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-teal-deep disabled:opacity-60"
+        >
+          {saving ? "Saving…" : saved ? "Saved" : "Save changes"}
+        </button>
+        {dirty && !saving && (
+          <>
+            <span className="text-xs text-ink-soft">Unsaved changes</span>
+            <button
+              type="button"
+              onClick={() => setContent(savedContent)}
+              className="text-xs uppercase tracking-wide text-ink-soft underline hover:text-ink"
+            >
+              Discard
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

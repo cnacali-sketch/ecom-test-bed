@@ -331,6 +331,19 @@ export const siteConfig = {
       },
     ],
 
+    /** Optional pieces INSIDE sections. Whole sections are ordered and hidden
+     *  from the Homepage layout screen; these are the parts within them where
+     *  blanking the text either does not hide anything (an image, a button
+     *  that is not conditional on its label) or leaves a stray heading behind.
+     *  Absent reads as shown -- see lib/home-toggles.ts. */
+    show: {
+      heroSecondImage: true,
+      heroCta: true,
+      campaignCta: true,
+      seoCategories: true,
+      seoFaqs: true,
+    },
+
     newInHeading: "New In",
     newInSub: "Fresh from the studio — restocked weekly.",
     /** Full-bleed teal campaign band mid-page. */

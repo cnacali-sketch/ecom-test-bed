@@ -58,6 +58,11 @@ class HomepageContentRead(BaseModel):
     campaign_image: str | None = None
     campaign_image_alt: str | None = None
     editorial_tiles: list[dict] | None = None
+    show_hero_second_image: bool | None = None
+    show_hero_cta: bool | None = None
+    show_campaign_cta: bool | None = None
+    show_seo_categories: bool | None = None
+    show_seo_faqs: bool | None = None
     ranges_eyebrow: str | None = None
     ranges_sub: str | None = None
     ranges_explore_label: str | None = None

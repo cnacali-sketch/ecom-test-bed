@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { getSiteContent } from "@/lib/site-content";
+import { resolveToggles } from "@/lib/home-toggles";
 
 /**
  * Signature hero: two full-bleed images side by side (a diptych) with the
@@ -15,6 +16,7 @@ import { getSiteContent } from "@/lib/site-content";
 export async function HeroBanner() {
   const content = await getSiteContent();
   const hero = content.home.hero;
+  const show = resolveToggles(content.home.show);
   const { logo } = content.brand;
 
   return (
@@ -51,7 +53,11 @@ export async function HeroBanner() {
           />
         </div>
 
-        <div className="grid h-[min(100svh,1040px)] grid-cols-1 gap-0.5 lg:grid-cols-2">
+        <div
+          className={`grid h-[min(100svh,1040px)] grid-cols-1 gap-0.5 ${
+            show.heroSecondImage ? "lg:grid-cols-2" : ""
+          }`}
+        >
           {/* No header-height offset here: the header is position:fixed and
               overlaid (transparent) on the homepage, so it never occupies
               in-flow space above this hero. */}
@@ -65,15 +71,17 @@ export async function HeroBanner() {
               className="object-cover"
             />
           </div>
-          <div className="relative hidden bg-paper-tint lg:block">
-            <Image
-              src={hero.imageRight}
-              alt={hero.imageRightAlt}
-              fill
-              sizes="50vw"
-              className="object-cover"
-            />
-          </div>
+          {show.heroSecondImage && (
+            <div className="relative hidden bg-paper-tint lg:block">
+              <Image
+                src={hero.imageRight}
+                alt={hero.imageRightAlt}
+                fill
+                sizes="50vw"
+                className="object-cover"
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -83,12 +91,17 @@ export async function HeroBanner() {
         )}
         <h1 className="text-[13px] uppercase tracking-[0.18em] text-ink">{hero.headline}</h1>
         <p className="mt-3.5 text-[15px] leading-relaxed text-ink-soft">{hero.subline}</p>
-        <Link
-          href={hero.ctaHref}
-          className="mt-6 inline-block bg-teal px-9 py-4 text-xs uppercase tracking-[0.2em] text-white transition-colors hover:bg-teal-deep"
-        >
-          {hero.ctaLabel}
-        </Link>
+        {/* Gated on the toggle AND on there being a label: neither button on
+            this page was conditional on its text, so clearing the label used to
+            render an empty coloured rectangle. */}
+        {show.heroCta && hero.ctaLabel && (
+          <Link
+            href={hero.ctaHref}
+            className="mt-6 inline-block bg-teal px-9 py-4 text-xs uppercase tracking-[0.2em] text-white transition-colors hover:bg-teal-deep"
+          >
+            {hero.ctaLabel}
+          </Link>
+        )}
       </div>
     </section>
   );
