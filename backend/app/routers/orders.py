@@ -44,7 +44,9 @@ from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import ROLE_ADMIN, User
 from app.schemas.auth import Address
-from app.services import audit, login_throttle, stock
+from app.models.site_content import SITE_KEY
+from app.routers import content, waitlist
+from app.services import audit, login_throttle, serviceability, stock
 from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
 from app.services.razorpay import (
@@ -287,6 +289,47 @@ async def _resolve_order_email(db: AsyncSession, order: Order) -> str | None:
 
 # ---- Endpoints ----
 
+async def _require_deliverable(db: AsyncSession, address: Address | None) -> None:
+    """Refuse an order the shop cannot deliver, and say what to do instead.
+
+    The shop is starting in Bengaluru. Someone outside it is not told "no" and
+    left there -- the 409 carries the waitlist route, and the storefront turns
+    that into a form rather than a dead end.
+
+    409 rather than 422 on purpose: nothing about the address is malformed.
+    It is a perfectly good address in a place that is not served yet, and the
+    difference matters to the shopper reading it.
+
+    Three ways through, in order of cost: the limit is off; a human has already
+    approved this postcode; or the postcode is inside the area. Approval is
+    checked before the postal lookup because it is one indexed read against a
+    small table, and because an exception granted by a person should not be
+    second-guessed by a dataset.
+    """
+    postcode = (address.postcode if address else "") or ""
+
+    document = (await content.get_or_seed(db, SITE_KEY)).document
+    area = serviceability.area_from_document(document)
+    if not area.limited:
+        return
+
+    if await waitlist.is_postcode_approved(db, postcode.strip()):
+        return
+
+    decision = serviceability.check(postcode, area)
+    if decision.deliverable:
+        return
+
+    where = decision.district or "your area"
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"We don't deliver to {where} yet — we're starting in Bengaluru. "
+            "Join the waitlist and we'll tell you as soon as we reach you."
+        ),
+    )
+
+
 @router.post("", response_model=None, status_code=201)
 async def create_order(
     payload: OrderCreate,
@@ -336,6 +379,14 @@ async def create_order(
             status_code=422,
             detail="You must accept the Terms & Conditions to place an order.",
         )
+
+    # Is this address somewhere the shop delivers to?
+    #
+    # Checked before pricing and before stock, because a refusal here reserves
+    # nothing and rolls nothing back. Skipped for admins along with the T&C gate
+    # above -- an admin placing a phone order has already decided to deliver it.
+    if not is_admin_caller:
+        await _require_deliverable(db, payload.shipping_address)
 
     # Validate + price BEFORE touching stock — an order referencing an unknown
     # product is rejected outright, so there's nothing to roll back.

@@ -530,6 +530,17 @@
     ],
     "fineprint": "Free shipping over ₹1,499"
   },
+  "serviceability": {
+    "limitedArea": true,
+    "districts": [
+      "Bengaluru",
+      "Bangalore Rural"
+    ],
+    "outOfAreaHeading": "We don't deliver to you just yet",
+    "outOfAreaBody": "We're starting in Bengaluru while we get deliveries right. Leave your details and we'll tell you the moment we reach your area — and if you'd still like this order, we may be able to make an exception.",
+    "waitlistCta": "Tell me when you deliver here",
+    "waitlistDone": "Thank you — you're on the list. We'll be in touch when we start delivering to your area."
+  },
   "checkout": {
     "codDialog": {
       "heading": "Confirm your Cash on Delivery order",

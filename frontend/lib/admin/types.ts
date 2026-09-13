@@ -135,6 +135,7 @@ export type AdminView =
   | "dashboard"
   | "home"
   | "layout"
+  | "deliveryArea"
   | "products"
   | "editor"
   | "inventory"

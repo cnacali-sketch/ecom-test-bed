@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { CodConfirmDialog } from "@/components/checkout/CodConfirmDialog";
+import { WaitlistInvite } from "@/components/checkout/WaitlistInvite";
 import { AddressFields, seedAddress } from "@/components/ui/AddressFields";
 import { useSiteContent } from "@/lib/site-content-context";
 import { trackEvent } from "@/lib/analytics";
@@ -23,7 +24,7 @@ export default function CheckoutPage() {
   // Same reason as the contact page: importing the config directly ships
   // all of it to the browser. Read here rather than in the handler below,
   // because a hook cannot be called from inside an event callback.
-  const { brand, policies, checkout } = useSiteContent();
+  const { brand, policies, checkout, serviceability } = useSiteContent();
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
   const router = useRouter();
@@ -56,6 +57,10 @@ export default function CheckoutPage() {
   // rather than offered against a guessed amount.
   const [codDeposit, setCodDeposit] = useState<number | null>(null);
   const [showCodDialog, setShowCodDialog] = useState(false);
+  // Set when the backend answers 409: this address is fine, the shop just does
+  // not reach it yet. Held separately from `error` because it is not an error
+  // the shopper can fix by editing a field -- it replaces the form.
+  const [outOfArea, setOutOfArea] = useState<string | null>(null);
   const codAvailable = codDeposit !== null && isCodAvailable(total, codDeposit);
 
   useEffect(() => {
@@ -129,6 +134,7 @@ export default function CheckoutPage() {
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    setOutOfArea(null);
     if (!validate()) return;
 
     if (paymentMethod === "cod" && codAvailable) {
@@ -193,6 +199,12 @@ export default function CheckoutPage() {
 
       if (!response) {
         setError("Cannot reach the server. Please try again.");
+        return;
+      }
+      if (response.status === 409) {
+        // Not a validation failure and not retryable: the address is good and
+        // the shop does not deliver there yet. Swap the form for the waitlist.
+        setOutOfArea(await errorMessage(response, "We don't deliver to your area yet."));
         return;
       }
       if (!response.ok) {
@@ -278,6 +290,27 @@ export default function CheckoutPage() {
       <h1 className="font-display text-3xl italic text-ink">Checkout</h1>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_340px]">
+        {outOfArea ? (
+          <div className="space-y-6">
+            <WaitlistInvite
+              reason={outOfArea}
+              copy={serviceability}
+              initial={{
+                name: address.full_name ?? "",
+                email: user?.email ?? email,
+                phone: address.phone ?? "",
+                postcode: address.postcode ?? "",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setOutOfArea(null)}
+              className="text-xs uppercase tracking-[0.18em] text-teal underline"
+            >
+              Use a different address
+            </button>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-9">
           {!user && (
             <section className="space-y-4">
@@ -396,6 +429,7 @@ export default function CheckoutPage() {
                 : `Pay ${formatPrice(total)} online`}
           </button>
         </form>
+        )}
 
         <CodConfirmDialog
           open={showCodDialog}

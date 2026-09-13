@@ -39,6 +39,7 @@ from app.routers import (
     recommendation,
     returns,
     sections,
+    waitlist,
     webhooks,
 )
 
@@ -181,6 +182,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(error_logs.router)
     fastapi_app.include_router(contact.router)
     fastapi_app.include_router(payments.router)
+    fastapi_app.include_router(waitlist.router)
     fastapi_app.include_router(webhooks.router)
 
     # StaticFiles picks the Content-Type from Python's `mimetypes`, which reads

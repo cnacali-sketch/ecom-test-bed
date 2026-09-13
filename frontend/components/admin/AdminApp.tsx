@@ -17,6 +17,7 @@ import {
   Images,
   LayoutGrid,
   LayoutTemplate,
+  MapPin,
   LogOut,
   Mail,
   Package,
@@ -49,6 +50,7 @@ import type { BackendProduct } from "@/lib/backend-adapter";
 
 import { Dashboard } from "./screens/Dashboard";
 import { SectionEditor } from "./screens/SectionEditor";
+import { DeliveryArea } from "./screens/DeliveryArea";
 import { LayoutBuilder } from "./screens/LayoutBuilder";
 import { ProductList } from "./screens/ProductList";
 import { ProductEditor } from "./screens/ProductEditor";
@@ -429,6 +431,7 @@ export function AdminApp() {
       {navBtn("categories", FolderTree, "Categories")}
       {navBtn("media", Images, "Media library")}
       {navBtn("analytics", TrendingUp, "Analytics")}
+      {navBtn("deliveryArea", MapPin, "Delivery area")}
       {navBtn("fraud", ShieldAlert, "Fraud & abuse")}
       {navBtn("errorLogs", AlertTriangle, "Error logs")}
       {navBtn("messages", Mail, "Messages")}
@@ -441,6 +444,7 @@ export function AdminApp() {
     dashboard: "Dashboard",
     home: "Homepage editor",
     layout: "Homepage layout",
+    deliveryArea: "Delivery area",
     products: "Products",
     editor: draft?.name || "New product",
     inventory: "Inventory",
@@ -636,6 +640,7 @@ export function AdminApp() {
           )}
           {view === "home" && <SectionEditor />}
           {view === "layout" && <LayoutBuilder />}
+          {view === "deliveryArea" && <DeliveryArea />}
           {view === "products" && (
             <ProductList
               products={products}

@@ -244,7 +244,6 @@ export function Customers() {
       return;
     }
     if (res?.status === 422) {
-      const body = await res.json().catch(() => null);
       setActionError(await errorMessage(res, "Couldn't update that account."));
       return;
     }
@@ -273,7 +272,6 @@ export function Customers() {
       return;
     }
     if (res?.status === 422) {
-      const body = await res.json().catch(() => null);
       setActionError(await errorMessage(res, "Couldn't change that role."));
       return;
     }
@@ -289,7 +287,6 @@ export function Customers() {
       return;
     }
     if (res?.status === 422) {
-      const body = await res.json().catch(() => null);
       setActionError(await errorMessage(res, "Couldn't delete that account."));
       return;
     }

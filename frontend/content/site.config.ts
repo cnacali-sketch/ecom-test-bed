@@ -476,6 +476,34 @@ export const siteConfig = {
   // string stamped onto every order's consent record (see checkout's T&C
   // checkbox); bump it whenever the terms wording changes so old orders keep
   // an accurate record of which version they agreed to.
+  // Where the shop currently delivers, and what a shopper outside that area is
+  // offered instead.
+  //
+  // This is operational policy, not decoration, so it lives in the content
+  // document for one reason: it has to be changeable without a deploy. Opening
+  // a second city should be a toggle in the admin on the morning it happens,
+  // not a code change and a container rebuild.
+  //
+  // `districts` are matched against the district a PIN resolves to in the
+  // postal dataset, NOT against the city someone types -- people write
+  // Bangalore, Bengaluru and Bangalore Urban for the same place. Both Bengaluru
+  // districts are listed because real addresses split across them: Bommanahalli
+  // (560068) files under Bangalore Rural while Koramangala files under
+  // Bengaluru, and dropping either would refuse a genuine neighbourhood.
+  serviceability: {
+    /** Turn the whole restriction off to deliver everywhere. */
+    limitedArea: true,
+    /** Districts, as the postal dataset spells them. */
+    districts: ["Bengaluru", "Bangalore Rural"],
+    /** Shown where a shopper is told their area is not covered yet. */
+    outOfAreaHeading: "We don't deliver to you just yet",
+    outOfAreaBody:
+      "We're starting in Bengaluru while we get deliveries right. Leave your details and we'll tell you the moment we reach your area — and if you'd still like this order, we may be able to make an exception.",
+    waitlistCta: "Tell me when you deliver here",
+    waitlistDone:
+      "Thank you — you're on the list. We'll be in touch when we start delivering to your area.",
+  },
+
   // Wording for the Cash-on-Delivery confirmation dialog. The dialog states
   // two amounts and the shopper agrees to them, so the amounts themselves come
   // from the server (GET /api/checkout/terms) and never from here -- only the

@@ -19,7 +19,7 @@ from app.db import Base, get_db_session
 from app.dependencies.auth import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER
 from app.main import app
 from app.models.user import ROLE_ADMIN, ROLE_CUSTOMER, ROLE_STAFF, User
-from app.services import login_throttle
+from app.services import login_throttle, serviceability
 from app.services.security import create_access_token, hash_password
 
 
@@ -34,6 +34,29 @@ def _clear_login_throttle() -> "Generator[None, None, None]":
     yield
     login_throttle._attempts.clear()
 
+
+@pytest.fixture(autouse=True)
+def _deliver_everywhere(monkeypatch) -> "Generator[None, None, None]":
+    """The shop only delivers to Bengaluru; this suite mostly is not about that.
+
+    Left on, the delivery-area gate would quietly rewrite the meaning of tests
+    that use an out-of-area address to check something else entirely -- the
+    inter-state GST tests need a Kerala address precisely because it is not in
+    Karnataka, and an order-snapshot test uses Mumbai because any address will
+    do. Those would start failing with a 409 about the waitlist, which says
+    nothing about invoicing.
+
+    So the default posture here is "delivers everywhere", and the tests that
+    are about the delivery area turn it back on explicitly. Same reasoning as
+    the cookie fixture above: neutralise the environment, then let the tests
+    that care set it themselves.
+    """
+    monkeypatch.setattr(
+        serviceability,
+        "area_from_document",
+        lambda document: serviceability.Area(limited=False, districts=frozenset()),
+    )
+    yield
 
 @pytest.fixture(autouse=True)
 def _http_test_cookies() -> "Generator[None, None, None]":

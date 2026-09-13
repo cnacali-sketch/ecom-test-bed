@@ -15,7 +15,11 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { Customers } from "./Customers";
 
 const apiFetch = vi.fn();
-vi.mock("@/lib/api-client", () => ({
+vi.mock("@/lib/api-client", async (importOriginal) => ({
+  // errorMessage is the real one on purpose: the test below is about a refusal
+  // reaching the screen intact, and a stubbed formatter would assert nothing
+  // about whether the message survives the trip.
+  ...(await importOriginal<typeof import("@/lib/api-client")>()),
   apiFetch: (...args: unknown[]) => apiFetch(...args),
   apiBaseUrl: () => "https://api.example.com",
 }));

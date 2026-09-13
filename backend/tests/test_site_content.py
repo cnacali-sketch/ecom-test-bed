@@ -39,6 +39,8 @@ EXPECTED_SECTIONS = {
     "nav",
     "policies",
     "seo",
+    # Where the shop delivers, and the waitlist copy for everywhere else.
+    "serviceability",
     "trustBadges",
 }
 
