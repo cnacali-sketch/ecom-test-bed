@@ -513,7 +513,6 @@ export function ProductEditor({
               <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-ink">
                 Product size <span className="text-xs font-normal text-ink-soft/60">(optional)</span>
                 <HelpTip text="Add Height × Width, and Length too if it matters." />
-                <span className="ml-auto"><ShowToggle on={draft.show.dims} onChange={(v) => setShow("dims", v)} /></span>
               </div>
               <div className="flex items-center gap-2">
                 <input type="number" placeholder="H" className={inputCls + " text-center"} value={draft.dims.h} onChange={(e) => setDim("h", e.target.value)} />
@@ -527,7 +526,12 @@ export function ProductEditor({
                   <option value="mm">mm</option>
                 </select>
               </div>
-              {dimStr(draft.dims) && <p className="mt-1 text-xs text-ink-soft/70">Shows on shop as “Size: {dimStr(draft.dims)}”.</p>}
+              {dimStr(draft.dims) && (
+                <p className="mt-1 text-xs text-ink-soft/70">
+                  Shown on the product page as “{dimStr(draft.dims)}”. Size is not shown on
+                  product cards.
+                </p>
+              )}
             </div>
 
             <Field label="Description" help="A line or two on material, size, or care.">

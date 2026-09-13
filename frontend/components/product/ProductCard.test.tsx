@@ -176,30 +176,25 @@ describe("ProductCard", () => {
       ).toBeInTheDocument();
     });
 
-    test("dimensions show as a Size row, and only when turned on", () => {
-      const shown = makeProduct({
-        show: { name: true, category: true, price: true, mrp: true, dims: true },
-      });
-      const { unmount } = render(<ProductCard product={shown} />);
-      expect(screen.getByText(/Size: 9 × 4 × 2 cm/)).toBeInTheDocument();
-      unmount();
-
-      const hidden = makeProduct({
-        show: { name: true, category: true, price: true, mrp: true, dims: false },
-      });
-      render(<ProductCard product={hidden} />);
-      expect(screen.queryByText(/Size:/)).not.toBeInTheDocument();
-    });
-
-    test("no Size row when the product has no measurements", () => {
-      const product = makeProduct({
-        measurements: "",
-        show: { name: true, category: true, price: true, mrp: true, dims: true },
-      });
-
-      render(<ProductCard product={product} />);
-
-      expect(screen.queryByText(/Size:/)).not.toBeInTheDocument();
+    test("size is never shown on the card, whatever the toggle says", () => {
+      /** Size belongs on the product page, where ProductDetail renders it in a
+       * Measurements section. A card briefly showed it because the card was
+       * made to match the admin preview -- which meant ADDING a row the card
+       * had never had, rather than hiding ones it did. This asserts the row is
+       * gone for good, including when a stored product still carries the old
+       * `dims: true` from that period. */
+      for (const dims of [true, false] as const) {
+        const { unmount } = render(
+          <ProductCard
+            product={makeProduct({
+              show: { name: true, category: true, price: true, mrp: true, dims },
+            })}
+          />,
+        );
+        expect(screen.queryByText(/Size:/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/9 × 4 × 2 cm/)).not.toBeInTheDocument();
+        unmount();
+      }
     });
   });
 

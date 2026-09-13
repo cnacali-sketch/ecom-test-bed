@@ -67,7 +67,6 @@ export function ProductCard({ product }: ProductCardProps) {
   const showCategory = show?.category !== false;
   const showPrice = show?.price !== false;
   const showMrp = show?.mrp !== false;
-  const showDims = show?.dims !== false;
 
   const discountPercent = calculateDiscountPercent(product.mrp, product.price);
   // Gated on the price toggle as well: a "20% off" flash over a card that
@@ -180,10 +179,6 @@ export function ProductCard({ product }: ProductCardProps) {
           <p className="text-sm font-semibold text-teal">Price on request</p>
         )}
       </div>
-
-      {showDims && product.measurements && (
-        <p className="mt-1 text-[11px] text-ink-soft">Size: {product.measurements}</p>
-      )}
 
       {stockMode !== "hidden" && product.inStock && stock !== undefined && (
         <p className="mt-1 text-[11px] font-medium text-ink-soft">

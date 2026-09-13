@@ -7,10 +7,10 @@
 // class), so the preview shows that same treatment and there is no per-product
 // frame control anywhere in the editor.
 
-import { ImageIcon, Ruler, ShoppingBag, Star, EyeOff } from "lucide-react";
+import { ImageIcon, ShoppingBag, Star, EyeOff } from "lucide-react";
 import { useState } from "react";
 
-import { discount, dimStr, rupee } from "@/lib/admin/helpers";
+import { discount, rupee } from "@/lib/admin/helpers";
 import { LOW_STOCK, type AdminProduct } from "@/lib/admin/types";
 import { DiscountBadge } from "./atoms";
 
@@ -18,7 +18,6 @@ export function ProductCardPreview({ p }: { p: AdminProduct }) {
   const off = discount(p.mrp, p.price);
   const out = p.stock <= 0;
   const low = p.stock > 0 && p.stock <= LOW_STOCK;
-  const size = dimStr(p.dims);
   const badgeText = (p.badge.text || "").trim() || (off > 0 ? `${off}% OFF` : "");
   const showBadge = p.badge.on && p.show.price && badgeText;
   const [ctaActive, setCtaActive] = useState(false);
@@ -93,11 +92,6 @@ export function ProductCardPreview({ p }: { p: AdminProduct }) {
           )}
           {p.desc && (
             <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-ink-soft">{p.desc}</p>
-          )}
-          {p.show.dims && size && (
-            <p className="mt-2 flex items-center gap-1 text-xs text-ink-soft">
-              <Ruler className="h-3.5 w-3.5 text-ink-soft/60" /> Size: {size}
-            </p>
           )}
           <div className="mt-3">{stockNode}</div>
           <button
