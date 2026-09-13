@@ -19,7 +19,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 import { csvStamp, downloadCsv, toCsv, type CsvColumn } from "@/lib/csv";
 import { useAuth } from "@/lib/auth-context";
 import { inputCls } from "../atoms";
@@ -245,7 +245,7 @@ export function Customers() {
     }
     if (res?.status === 422) {
       const body = await res.json().catch(() => null);
-      setActionError(body?.detail ?? "Couldn't update that account.");
+      setActionError(await errorMessage(res, "Couldn't update that account."));
       return;
     }
     reportFailure(res, "Couldn't update that account. Please try again.");
@@ -274,7 +274,7 @@ export function Customers() {
     }
     if (res?.status === 422) {
       const body = await res.json().catch(() => null);
-      setActionError(body?.detail ?? "Couldn't change that role.");
+      setActionError(await errorMessage(res, "Couldn't change that role."));
       return;
     }
     reportFailure(res, "Couldn't change that role. Please try again.");
@@ -290,7 +290,7 @@ export function Customers() {
     }
     if (res?.status === 422) {
       const body = await res.json().catch(() => null);
-      setActionError(body?.detail ?? "Couldn't delete that account.");
+      setActionError(await errorMessage(res, "Couldn't delete that account."));
       return;
     }
     reportFailure(res, "Couldn't delete that account. Please try again.");

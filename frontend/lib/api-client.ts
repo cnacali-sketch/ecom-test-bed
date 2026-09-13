@@ -97,3 +97,53 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     return null;
   }
 }
+
+/** A message a human can read, from whatever the backend actually returned.
+ *
+ * FastAPI has two different error shapes and only one of them is a string.
+ * An `HTTPException(422, detail="...")` raised in a handler gives
+ * `{"detail": "..."}`; a Pydantic field validator gives
+ * `{"detail": [{"loc": ["body", "postcode"], "msg": "...", ...}]}` -- an
+ * ARRAY OF OBJECTS.
+ *
+ * Every caller here used to do `setError(body?.detail ?? "...")`, which puts
+ * that array straight into React state and then renders it as a child. React
+ * throws "Objects are not valid as a React child" and the page goes white --
+ * on checkout, at the moment of payment, and only for customers whose input
+ * was bad enough to trip a validator. Verified against the live API:
+ *
+ *     POST /api/auth/register {"email": "not-an-email"}
+ *     -> {"detail":[{"type":"value_error","loc":["body","email"],"msg":"..."}]}
+ *
+ * So this is not defensive tidying; it is the difference between an error
+ * message and a broken page.
+ */
+export async function errorMessage(res: Response | null, fallback: string): Promise<string> {
+  if (!res) return "Couldn't reach the server. Check your connection and try again.";
+  if (res.status === 401 || res.status === 403)
+    return "Your session has expired. Please sign in again.";
+
+  const body = await res.json().catch(() => null);
+  const detail = (body as { detail?: unknown } | null)?.detail;
+
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail)) {
+    // Pydantic reports every bad field. Show the first, named -- "postcode:
+    // must be 6 digits" is actionable in a way that the raw validator dump and
+    // a bare fallback both are not.
+    const first = detail.find(
+      (entry): entry is { loc?: unknown[]; msg?: string } =>
+        typeof entry === "object" && entry !== null && typeof (entry as { msg?: unknown }).msg === "string",
+    );
+    if (!first?.msg) return fallback;
+    // loc is ["body", "shipping_address", "postcode"]; the last string segment
+    // is the field the shopper can actually see on the form.
+    const field = Array.isArray(first.loc)
+      ? [...first.loc].reverse().find((part) => typeof part === "string" && part !== "body")
+      : undefined;
+    return field ? `${String(field).replace(/_/g, " ")}: ${first.msg}` : first.msg;
+  }
+
+  return fallback;
+}

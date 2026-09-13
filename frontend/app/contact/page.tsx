@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { apiBaseUrl } from "@/lib/api-client";
+import { apiBaseUrl, errorMessage } from "@/lib/api-client";
 import { useSiteContent } from "@/lib/site-content-context";
 
 const CATEGORIES = [
@@ -54,8 +54,7 @@ export default function ContactPage() {
         }),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setError(body?.detail ?? "Couldn't send your message. Please try again.");
+        setError(await errorMessage(res, "Couldn't send your message. Please try again."));
         return;
       }
       setDone(true);

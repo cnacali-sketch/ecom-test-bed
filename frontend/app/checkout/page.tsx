@@ -11,7 +11,7 @@ import { CodConfirmDialog } from "@/components/checkout/CodConfirmDialog";
 import { AddressFields, seedAddress } from "@/components/ui/AddressFields";
 import { useSiteContent } from "@/lib/site-content-context";
 import { trackEvent } from "@/lib/analytics";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetch, errorMessage } from "@/lib/api-client";
 import { useAuth, type Address } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { codSplit, isCodAvailable } from "@/lib/cod-split";
@@ -105,8 +105,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({ code, subtotal }),
       });
       if (!res?.ok) {
-        const body = await res?.json().catch(() => null);
-        setCouponError(body?.detail ?? "Could not apply that code.");
+        setCouponError(await errorMessage(res, "Could not apply that code."));
         setAppliedCoupon(null);
         return;
       }
@@ -197,8 +196,7 @@ export default function CheckoutPage() {
         return;
       }
       if (!response.ok) {
-        const body = await response.json().catch(() => null);
-        setError(body?.detail ?? "Could not place your order. Please try again.");
+        setError(await errorMessage(response, "Could not place your order. Please try again."));
         return;
       }
       const order = await response.json();
@@ -222,10 +220,11 @@ export default function CheckoutPage() {
         method: "POST",
       });
       if (!init?.ok) {
-        const initBody = await init?.json().catch(() => null);
         setError(
-          initBody?.detail ??
+          await errorMessage(
+            init,
             "Could not start payment. Your order is saved as pending — you can try again.",
+          ),
         );
         return;
       }
