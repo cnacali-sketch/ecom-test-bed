@@ -30,6 +30,9 @@ from app.services.site_content import (
 EXPECTED_SECTIONS = {
     "announcement",
     "brand",
+    # Wording for the Cash-on-Delivery confirmation dialog. The amounts in that
+    # dialog come from GET /api/checkout/terms, never from here.
+    "checkout",
     "contact",
     "footer",
     "home",

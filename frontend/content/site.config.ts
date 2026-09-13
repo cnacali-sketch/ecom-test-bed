@@ -476,6 +476,25 @@ export const siteConfig = {
   // string stamped onto every order's consent record (see checkout's T&C
   // checkbox); bump it whenever the terms wording changes so old orders keep
   // an accurate record of which version they agreed to.
+  // Wording for the Cash-on-Delivery confirmation dialog. The dialog states
+  // two amounts and the shopper agrees to them, so the amounts themselves come
+  // from the server (GET /api/checkout/terms) and never from here -- only the
+  // words around them are editable, which is the point of this layer.
+  checkout: {
+    codDialog: {
+      heading: "Confirm your Cash on Delivery order",
+      intro:
+        "Cash on Delivery is confirmed with a small deposit paid online now. The rest you pay the courier when your parcel arrives.",
+      depositLabel: "Pay now to confirm",
+      balanceLabel: "Pay on delivery",
+      totalLabel: "Order total",
+      nonRefundableNote:
+        "The confirmation deposit is non-refundable once collected, including if the order is later cancelled or refused at the door.",
+      agreeLabel: "I understand — place my order",
+      cancelLabel: "Go back",
+    },
+  },
+
   policies: {
     termsVersion: "2026-07-27",
     terms: {

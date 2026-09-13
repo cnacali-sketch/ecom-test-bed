@@ -20,6 +20,7 @@ from app.routers import (
     audit,
     auth,
     categories,
+    checkout,
     collections,
     contact,
     content,
@@ -165,6 +166,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(recommendation.router)
     fastapi_app.include_router(products.router)
     fastapi_app.include_router(collections.router)
+    fastapi_app.include_router(checkout.router)
     fastapi_app.include_router(orders.router)
     fastapi_app.include_router(customers.router)
     fastapi_app.include_router(events.router)

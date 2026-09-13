@@ -7,12 +7,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CodConfirmDialog } from "@/components/checkout/CodConfirmDialog";
 import { AddressFields, seedAddress } from "@/components/ui/AddressFields";
 import { useSiteContent } from "@/lib/site-content-context";
 import { trackEvent } from "@/lib/analytics";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth, type Address } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
+import { codSplit, isCodAvailable } from "@/lib/cod-split";
 import { formatPrice } from "@/lib/format";
 import { requiresOnlinePayment } from "@/lib/payment-due";
 import { openRazorpayCheckout } from "@/lib/razorpay";
@@ -21,7 +23,7 @@ export default function CheckoutPage() {
   // Same reason as the contact page: importing the config directly ships
   // all of it to the browser. Read here rather than in the handler below,
   // because a hook cannot be called from inside an event callback.
-  const { brand, policies } = useSiteContent();
+  const { brand, policies, checkout } = useSiteContent();
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
   const router = useRouter();
@@ -44,14 +46,36 @@ export default function CheckoutPage() {
   const [checkingCoupon, setCheckingCoupon] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number } | null>(null);
   const total = subtotal - (appliedCoupon?.discount ?? 0);
-  // Cash-on-Delivery requires a non-refundable confirmation deposit paid
-  // online; orders under the deposit amount must pay in full online instead.
-  // Keep in sync with the backend COD_DEPOSIT_AMOUNT.
-  const COD_DEPOSIT = 200;
-  const codAvailable = total >= COD_DEPOSIT;
+
+  // The Cash-on-Delivery deposit comes from the server. It used to be a
+  // constant here with a comment asking whoever changed the backend to change
+  // it here too — survivable for a label, not for a dialog the shopper agrees
+  // to, which states what they are about to be charged.
+  //
+  // Null means "not answered yet". COD is not offered until it is known,
+  // rather than offered against a guessed amount.
+  const [codDeposit, setCodDeposit] = useState<number | null>(null);
+  const [showCodDialog, setShowCodDialog] = useState(false);
+  const codAvailable = codDeposit !== null && isCodAvailable(total, codDeposit);
 
   useEffect(() => {
     trackEvent("checkout_started");
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await apiFetch("/api/checkout/terms");
+      if (!res?.ok || cancelled) return;
+      const terms = await res.json();
+      if (!cancelled) setCodDeposit(Number(terms.cod_deposit_amount));
+    })().catch(() => {
+      // Leaves codDeposit null, which hides COD rather than offering it at an
+      // amount we could not confirm. Online payment still works.
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (items.length === 0) {
@@ -95,35 +119,58 @@ export default function CheckoutPage() {
     }
   }
 
-  async function handlePlaceOrder(event: React.FormEvent) {
+  /**
+   * Validate, then decide whether anything still has to be agreed to.
+   *
+   * A COD order is not placed straight from the button: the shopper is shown
+   * the split first and has to accept it. Validation runs before the dialog so
+   * they are not asked to agree to a purchase that a missing postcode is about
+   * to reject anyway.
+   */
+  function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    if (!validate()) return;
 
+    if (paymentMethod === "cod" && codAvailable) {
+      setShowCodDialog(true);
+      return;
+    }
+    void placeOrder();
+  }
+
+  /** Everything checkout refuses to proceed without. Returns false having set
+   * the message, so the caller reads as a guard rather than a branch. */
+  function validate(): boolean {
     if (!user && !email.includes("@")) {
       setError("Enter a valid email so we can send your order confirmation.");
-      return;
+      return false;
     }
     // The consignee name goes on the waybill — Delhivery, Shiprocket and
     // Bluedart all reject a shipment without one, so an order placed without
     // it cannot actually be dispatched.
     if ((address.full_name ?? "").trim().length < 2) {
       setError("Enter the full name of whoever is receiving the parcel.");
-      return;
+      return false;
     }
     if (!address.line1 || !address.city || !address.postcode) {
       setError("Fill in at least address line 1, city, and postcode.");
-      return;
+      return false;
     }
     // Couriers call before attempting delivery, so this is not optional.
     if ((address.phone ?? "").replace(/\D/g, "").length < 10) {
       setError("Enter a phone number the courier can reach you on.");
-      return;
+      return false;
     }
     if (!termsAccepted) {
       setError("Please accept the Terms & Conditions to place your order.");
-      return;
+      return false;
     }
+    return true;
+  }
 
+  /** Create the order and, when something is owed online, collect it. */
+  async function placeOrder() {
     setSubmitting(true);
     try {
       const response = await apiFetch("/api/orders", {
@@ -232,7 +279,7 @@ export default function CheckoutPage() {
       <h1 className="font-display text-3xl italic text-ink">Checkout</h1>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_340px]">
-        <form onSubmit={handlePlaceOrder} className="space-y-9">
+        <form onSubmit={handleSubmit} className="space-y-9">
           {!user && (
             <section className="space-y-4">
               <h2 className="font-display text-xl italic text-ink">Your email</h2>
@@ -277,7 +324,9 @@ export default function CheckoutPage() {
               <span>
                 <span className="block text-sm font-medium text-ink">Cash on Delivery</span>
                 <span className="block text-xs text-ink-soft">
-                  Pay a non-refundable ₹{COD_DEPOSIT} deposit online to confirm · balance on delivery
+                  {codDeposit === null
+                    ? "Confirmed with a small deposit paid online · balance on delivery"
+                    : `Pay a non-refundable ${formatPrice(codDeposit)} deposit online to confirm · balance on delivery`}
                 </span>
               </span>
             </label>
@@ -300,13 +349,15 @@ export default function CheckoutPage() {
             </label>
             {!codAvailable && (
               <p className="text-xs text-sale">
-                Cash on Delivery needs an order of ₹{COD_DEPOSIT}+ — please pay online instead.
+                {codDeposit === null
+                  ? "Cash on Delivery is unavailable right now — please pay online instead."
+                  : `Cash on Delivery needs an order of ${formatPrice(codDeposit)}+ — please pay online instead.`}
               </p>
             )}
             {paymentMethod === "cod" && codAvailable && (
               <p className="text-xs text-ink-soft">
-                Non-refundable ₹{COD_DEPOSIT} collected now ·{" "}
-                {formatPrice(total - COD_DEPOSIT)} balance on delivery
+                Non-refundable {formatPrice(codSplit(total, codDeposit ?? 0).depositNow)} collected now ·{" "}
+                {formatPrice(codSplit(total, codDeposit ?? 0).balanceOnDelivery)} balance on delivery
               </p>
             )}
           </section>
@@ -346,6 +397,21 @@ export default function CheckoutPage() {
                 : `Pay ${formatPrice(total)} online`}
           </button>
         </form>
+
+        <CodConfirmDialog
+          open={showCodDialog}
+          total={total}
+          depositAmount={codDeposit ?? 0}
+          copy={checkout.codDialog}
+          onCancel={() => setShowCodDialog(false)}
+          onAgree={() => {
+            // Closed before placing, not after: the order can take a while and
+            // leaving the dialog up would invite a second agreement — which is
+            // a second order — while the first is still in flight.
+            setShowCodDialog(false);
+            void placeOrder();
+          }}
+        />
 
         <aside className="h-fit rounded-[28px] border border-rule-soft bg-card p-6">
           <h2 className="font-display text-lg italic text-ink">Order summary</h2>

@@ -80,7 +80,7 @@ def test_a_shop_that_never_opened_the_editor_still_gets_full_content(engine):
 
     document = _document(engine)
     assert set(document) == {
-        "announcement", "brand", "contact", "footer", "home",
+        "announcement", "brand", "checkout", "contact", "footer", "home",
         "nav", "policies", "seo", "trustBadges",
     }
     assert document["home"]["hero"]["headline"]

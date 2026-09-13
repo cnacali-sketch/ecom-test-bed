@@ -530,6 +530,18 @@
     ],
     "fineprint": "Free shipping over ₹1,499"
   },
+  "checkout": {
+    "codDialog": {
+      "heading": "Confirm your Cash on Delivery order",
+      "intro": "Cash on Delivery is confirmed with a small deposit paid online now. The rest you pay the courier when your parcel arrives.",
+      "depositLabel": "Pay now to confirm",
+      "balanceLabel": "Pay on delivery",
+      "totalLabel": "Order total",
+      "nonRefundableNote": "The confirmation deposit is non-refundable once collected, including if the order is later cancelled or refused at the door.",
+      "agreeLabel": "I understand — place my order",
+      "cancelLabel": "Go back"
+    }
+  },
   "policies": {
     "termsVersion": "2026-07-27",
     "terms": {
