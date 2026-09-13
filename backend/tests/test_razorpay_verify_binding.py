@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.routers.orders as orders_module
 from app.models.product import Product
+from tests.test_routers_orders import ADDRESS
 
 
 async def _make_prepaid_order(client: AsyncClient, db_session: AsyncSession, price: str, user_id: str) -> dict:
@@ -36,6 +37,7 @@ async def _make_prepaid_order(client: AsyncClient, db_session: AsyncSession, pri
         json={
             "user_id": user_id,
             "items": [{"product_id": str(product_id), "quantity": 1, "unit_price": price}],
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
             "payment_method": "prepaid",

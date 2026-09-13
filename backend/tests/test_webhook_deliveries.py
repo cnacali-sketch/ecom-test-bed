@@ -25,6 +25,7 @@ from app.models.product import Product
 from app.models.webhook_delivery import WebhookDelivery
 from app.routers import payments
 from app.services import login_throttle, webhook_log
+from tests.test_routers_orders import ADDRESS
 
 WEBHOOK_SECRET = "test-webhook-secret"
 _PRODUCT = uuid.uuid4()
@@ -83,6 +84,7 @@ async def _order(client: AsyncClient, method: str = "prepaid") -> str:
             "user_id": "whlog@example.com",
             "items": [{"product_id": str(_PRODUCT), "quantity": 1, "unit_price": "1000.00"}],
             "payment_method": method,
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
         },

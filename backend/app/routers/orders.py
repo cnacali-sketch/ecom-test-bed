@@ -46,7 +46,7 @@ from app.models.user import ROLE_ADMIN, User
 from app.schemas.auth import Address
 from app.models.site_content import SITE_KEY
 from app.routers import content, waitlist
-from app.services import audit, login_throttle, serviceability, stock
+from app.services import audit, contact_validation, login_throttle, serviceability, stock
 from app.services.coupons import compute_discount
 from app.services.email import send_order_confirmation_email, send_order_shipped_email
 from app.services.razorpay import (
@@ -289,6 +289,36 @@ async def _resolve_order_email(db: AsyncSession, order: Order) -> str | None:
 
 # ---- Endpoints ----
 
+def _require_complete_address(address: Address | None) -> None:
+    """A parcel needs somewhere to go and someone to hand it to.
+
+    Presence is enforced HERE rather than on the `Address` schema, which is
+    documented as all-optional so a half-filled profile still saves. A profile
+    may be incomplete; a shipment may not. Keeping the two apart is what lets
+    the format rules apply everywhere without breaking partial PATCH.
+
+    Format was already checked by the schema, so this only asks whether the
+    fields are there at all -- and names the missing one, because "invalid
+    address" gives a shopper nothing to act on.
+    """
+    if address is None:
+        raise HTTPException(
+            status_code=422, detail="Enter a delivery address for this order."
+        )
+
+    required = (
+        ("full_name", "the name of whoever is receiving the parcel"),
+        ("line1", "a street address"),
+        ("city", "a city or town"),
+        ("state", "a state"),
+        ("postcode", "a PIN code"),
+        ("phone", "a mobile number for the courier"),
+    )
+    missing = [label for field, label in required if not (getattr(address, field, "") or "").strip()]
+    if missing:
+        raise HTTPException(status_code=422, detail=f"Your delivery address needs {missing[0]}.")
+
+
 async def _require_deliverable(db: AsyncSession, address: Address | None) -> None:
     """Refuse an order the shop cannot deliver, and say what to do instead.
 
@@ -386,11 +416,27 @@ async def create_order(
     # nothing and rolls nothing back. Skipped for admins along with the T&C gate
     # above -- an admin placing a phone order has already decided to deliver it.
     if not is_admin_caller:
+        _require_complete_address(payload.shipping_address)
         await _require_deliverable(db, payload.shipping_address)
 
     # Validate + price BEFORE touching stock — an order referencing an unknown
     # product is rejected outright, so there's nothing to roll back.
     prices, flag_reason = await _authoritative_pricing(db, payload.items)
+
+    # Things not worth refusing an order over, but worth a human glance. Merged
+    # with the price-tampering reason rather than kept in a parallel field, so
+    # the Fraud screen keeps showing one reason per order.
+    if payload.shipping_address is not None:
+        soft = contact_validation.suspicions(
+            # Guest checkout puts the shopper's email in user_id (see
+            # _resolve_order_email); an account id is not an address and simply
+            # matches no domain, so passing it through is harmless.
+            email=payload.user_id if "@" in (payload.user_id or "") else "",
+            street=payload.shipping_address.line1 or "",
+            city=payload.shipping_address.city or "",
+        )
+        if soft:
+            flag_reason = "; ".join(filter(None, [flag_reason, *soft]))[:500]
 
     await _reserve_stock(db, payload.items)
 

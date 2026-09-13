@@ -24,11 +24,30 @@ from app.models.product import Product
 
 _PRODUCT = uuid.uuid4()
 
+# A complete, deliverable address. Order creation requires one: a parcel needs
+# somewhere to go and someone to hand it to, and the schema cannot enforce that
+# because Address is deliberately all-optional so half-filled PROFILES still
+# save. Same precedent as the T&C gate -- add the rule, move the shared payload.
+#
+# Field names must match schemas/auth.py Address exactly -- Pydantic drops
+# anything it does not know, so a typo here silently stores a blank address.
+ADDRESS = {
+    "full_name": "Praveen Kumar",
+    "phone": "9738281596",
+    "line1": "12 MG Road",
+    "city": "Bangalore",
+    "state": "Karnataka",
+    "postcode": "560025",
+    "country": "India",
+}
+
 ORDER = {
     "user_id": "audit-test@example.com",
     "items": [{"product_id": str(_PRODUCT), "quantity": 1, "unit_price": "1000.00"}],
+    "shipping_address": ADDRESS,
     "terms_accepted": True,
     "terms_version": "2026-07-22",
+    "shipping_address": ADDRESS,
 }
 
 

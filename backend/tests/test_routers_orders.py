@@ -27,12 +27,30 @@ def product_id():
 _PAYLOAD_PRODUCT_1 = uuid.uuid4()
 _PAYLOAD_PRODUCT_2 = uuid.uuid4()
 
+# A complete, deliverable address. Order creation requires one: a parcel needs
+# somewhere to go and someone to hand it to, and the schema cannot enforce that
+# because Address is deliberately all-optional so half-filled PROFILES still
+# save. Same precedent as the T&C gate -- add the rule, move the shared payload.
+#
+# Field names must match schemas/auth.py Address exactly -- Pydantic drops
+# anything it does not know, so a typo here silently stores a blank address.
+ADDRESS = {
+    "full_name": "Praveen Kumar",
+    "phone": "9738281596",
+    "line1": "12 MG Road",
+    "city": "Bangalore",
+    "state": "Karnataka",
+    "postcode": "560025",
+    "country": "India",
+}
+
 ORDER_PAYLOAD = {
     "user_id": "test-user-001",
     "items": [
         {"product_id": str(_PAYLOAD_PRODUCT_1), "quantity": 2, "unit_price": "649.00"},
         {"product_id": str(_PAYLOAD_PRODUCT_2), "quantity": 1, "unit_price": "999.00"},
     ],
+    "shipping_address": ADDRESS,
     "terms_accepted": True,
     "terms_version": "2026-07-22",
 }
@@ -439,6 +457,7 @@ async def test_order_against_unknown_product_is_rejected(client: AsyncClient) ->
         json={
             "user_id": "u",
             "items": [{"product_id": str(uuid.uuid4()), "quantity": 999, "unit_price": "1.00"}],
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
         },
@@ -481,7 +500,17 @@ async def test_order_snapshots_shipping_address(client: AsyncClient) -> None:
         "/api/orders",
         json={
             **ORDER_PAYLOAD,
-            "shipping_address": {"line1": "12 Rose Ln", "city": "Mumbai", "postcode": "400001"},
+            # Mumbai on purpose: this is about the snapshot storing what it
+            # was handed, not about where it ships. Completed with the fields
+            # order creation now requires -- a parcel needs a name and a phone.
+            "shipping_address": {
+                "full_name": "Asha Menon",
+                "phone": "9820011223",
+                "line1": "12 Rose Ln",
+                "city": "Mumbai",
+                "state": "Maharashtra",
+                "postcode": "400001",
+            },
         },
     )
     assert resp.status_code == 201
@@ -735,6 +764,7 @@ async def test_delete_order_puts_the_stock_back(
         json={
             "user_id": "test-user-restock",
             "items": [{"product_id": str(product.id), "quantity": 5, "unit_price": "100.00"}],
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
         },
@@ -775,6 +805,7 @@ async def test_delete_order_can_skip_the_restock(
             # 3 units, not 1: a 100.00 COD order is below the 200 deposit
             # floor create_order enforces, so a single unit is rejected 422.
             "items": [{"product_id": str(product.id), "quantity": 3, "unit_price": "100.00"}],
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
         },
@@ -814,19 +845,6 @@ async def test_delete_unknown_order_is_404(admin_client: AsyncClient) -> None:
 
 
 # ---- Support search: find an order from what a customer actually quotes ----
-
-
-# Field names must match schemas/auth.py Address exactly -- Pydantic drops
-# anything it does not know, so a typo here silently stores a blank address.
-ADDRESS = {
-    "full_name": "Praveen Kumar",
-    "phone": "9738281596",
-    "line1": "12 MG Road",
-    "city": "Bangalore",
-    "state": "Karnataka",
-    "postcode": "560025",
-    "country": "India",
-}
 
 
 async def _place_searchable_order(client: AsyncClient, user_id: str) -> str:
@@ -993,6 +1011,7 @@ async def _order_for(client: AsyncClient, product: Product, qty: int) -> str:
             "items": [
                 {"product_id": str(product.id), "quantity": qty, "unit_price": "300.00"}
             ],
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
         },

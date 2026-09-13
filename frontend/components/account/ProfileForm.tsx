@@ -6,6 +6,7 @@
 
 import { useState } from "react";
 
+import { phoneProblem, postcodeProblem } from "@/lib/contact-validation";
 import { AddressFields, Field, seedAddress } from "@/components/ui/AddressFields";
 import { useAuth, type Address, type AuthUser } from "@/lib/auth-context";
 
@@ -24,6 +25,24 @@ export function ProfileForm({ user }: { user: AuthUser }) {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+
+    // Format only, and only for fields that were actually filled in. A profile
+    // is allowed to be half-finished — that is the contract the backend's
+    // Address schema deliberately keeps — so an empty field is never an error
+    // here. A field that HAS a value still has to be a real one.
+    const problems = [
+      phone.trim() ? phoneProblem(phone) : null,
+      (postal.phone ?? "").trim() ? phoneProblem(postal.phone ?? "") : null,
+      (postal.postcode ?? "").trim() ? postcodeProblem(postal.postcode ?? "") : null,
+      (billing.postcode ?? "").trim() && !billingSame ? postcodeProblem(billing.postcode ?? "") : null,
+    ];
+    const first = problems.find((problem) => problem !== null);
+    if (first) {
+      setError(first);
+      setNotice(null);
+      return;
+    }
+
     setSaving(true);
     setNotice(null);
     setError(null);

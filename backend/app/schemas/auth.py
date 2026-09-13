@@ -7,6 +7,9 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.services import contact_validation
+from app.services.pincode import is_well_formed
+
 # bcrypt's hard limit is 72 *bytes* (see services.security.MAX_PASSWORD_BYTES).
 # Validated here so an over-long password is a 422, not a 500 from hash_password.
 PASSWORD_MIN = 8
@@ -48,6 +51,35 @@ class ResetPasswordRequest(BaseModel):
     _validate_password = field_validator("new_password")(_check_password_bytes)
 
 
+# Format checks for address fields. These are deliberately FORMAT-ONLY and an
+# empty value always passes: `Address` is documented as all-optional so a
+# half-filled form still saves, and partial PATCH is the contract for
+# /api/auth/me and /api/customers/{id}. Presence is required only where a
+# complete address is actually needed -- at order creation -- so that
+# optionality and validity stay separate concerns.
+#
+# Tightening these into required fields breaks that contract and eight tests
+# that post partial addresses on purpose.
+def _check_postcode_format(value: str) -> str:
+    if not value:
+        return value
+    if not is_well_formed(value.strip()):
+        # Six digits, first digit 1-8 -- measured across all 19,238 real Indian
+        # postcodes, where 0 and 9 never occur as the leading digit. A
+        # length-only check passes "000000" and "999999".
+        raise ValueError("Enter a valid 6-digit Indian PIN code.")
+    return value.strip()
+
+
+def _check_phone_format(value: str) -> str:
+    if not value:
+        return value
+    problem = contact_validation.check_phone(value)
+    if problem:
+        raise ValueError(problem)
+    return value.strip()
+
+
 class Address(BaseModel):
     """A postal or billing address. Every field optional so a half-filled form
     still saves; widths guard against oversized input."""
@@ -68,6 +100,9 @@ class Address(BaseModel):
     # the address rather than the account — a gift order ships to someone whose
     # number isn't the buyer's.
     phone: str = Field(default="", max_length=20)
+
+    _validate_postcode = field_validator("postcode")(_check_postcode_format)
+    _validate_phone = field_validator("phone")(_check_phone_format)
 
 
 class UserRead(BaseModel):

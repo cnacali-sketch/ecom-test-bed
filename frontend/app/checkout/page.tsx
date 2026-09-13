@@ -16,6 +16,13 @@ import { apiFetch, errorMessage } from "@/lib/api-client";
 import { useAuth, type Address } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { codSplit, isCodAvailable } from "@/lib/cod-split";
+import {
+  emailProblem,
+  nameProblem,
+  phoneProblem,
+  postcodeProblem,
+  streetProblem,
+} from "@/lib/contact-validation";
 import { formatPrice } from "@/lib/format";
 import { requiresOnlinePayment } from "@/lib/payment-due";
 import { openRazorpayCheckout } from "@/lib/razorpay";
@@ -147,28 +154,26 @@ export default function CheckoutPage() {
   /** Everything checkout refuses to proceed without. Returns false having set
    * the message, so the caller reads as a guard rather than a branch. */
   function validate(): boolean {
-    if (!user && !email.includes("@")) {
-      setError("Enter a valid email so we can send your order confirmation.");
-      return false;
-    }
-    // The consignee name goes on the waybill — Delhivery, Shiprocket and
-    // Bluedart all reject a shipment without one, so an order placed without
-    // it cannot actually be dispatched.
-    if ((address.full_name ?? "").trim().length < 2) {
-      setError("Enter the full name of whoever is receiving the parcel.");
-      return false;
-    }
-    if (!address.line1 || !address.city || !address.postcode) {
-      setError("Fill in at least address line 1, city, and postcode.");
-      return false;
-    }
-    // Couriers call before attempting delivery, so this is not optional.
-    if ((address.phone ?? "").replace(/\D/g, "").length < 10) {
-      setError("Enter a phone number the courier can reach you on.");
-      return false;
-    }
-    if (!termsAccepted) {
-      setError("Please accept the Terms & Conditions to place your order.");
+    // Every rule here is mirrored in the backend, which is the one that
+    // decides. These run first only so the shopper hears about a typo now
+    // rather than after a round trip.
+    const problems: (string | null)[] = [
+      user ? null : emailProblem(email),
+      // The consignee name goes on the waybill — Delhivery, Shiprocket and
+      // Bluedart all reject a shipment without one, so an order placed without
+      // it cannot actually be dispatched.
+      nameProblem(address.full_name ?? ""),
+      streetProblem(address.line1 ?? ""),
+      (address.city ?? "").trim() ? null : "Enter the city or town for delivery.",
+      postcodeProblem(address.postcode ?? ""),
+      // Couriers call before attempting delivery, so this is not optional.
+      phoneProblem(address.phone ?? ""),
+      termsAccepted ? null : "Please accept the Terms & Conditions to place your order.",
+    ];
+
+    const first = problems.find((problem) => problem !== null);
+    if (first) {
+      setError(first);
       return false;
     }
     return true;

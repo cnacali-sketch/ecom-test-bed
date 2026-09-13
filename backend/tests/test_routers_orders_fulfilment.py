@@ -14,6 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.product import Product
+from tests.test_routers_orders import ADDRESS
 
 _PRODUCT = uuid.uuid4()
 
@@ -41,6 +42,7 @@ async def _order(client: AsyncClient, qty: int = 1) -> str:
         json={
             "user_id": "fulfil@example.com",
             "items": [{"product_id": str(_PRODUCT), "quantity": qty, "unit_price": "500.00"}],
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
         },

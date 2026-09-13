@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.models.order import Order
 from app.models.product import Product
+from tests.test_routers_orders import ADDRESS
 
 WEBHOOK_SECRET = "test-webhook-secret"
 _PRODUCT = uuid.uuid4()
@@ -81,6 +82,7 @@ async def _order(client: AsyncClient, method: str = "prepaid") -> str:
             "user_id": "webhook-test@example.com",
             "items": [{"product_id": str(_PRODUCT), "quantity": 1, "unit_price": "1000.00"}],
             "payment_method": method,
+            "shipping_address": ADDRESS,
             "terms_accepted": True,
             "terms_version": "2026-07-22",
         },

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { apiBaseUrl, errorMessage } from "@/lib/api-client";
+import { emailProblem, phoneProblem } from "@/lib/contact-validation";
 import { useSiteContent } from "@/lib/site-content-context";
 
 const CATEGORIES = [
@@ -33,6 +34,14 @@ export default function ContactPage() {
     setError(null);
     if (!email.trim() && !phone.trim()) {
       setError("Give us an email or phone number so we can get back to you.");
+      return;
+    }
+    // Either may be left blank — but whichever was given has to be one we can
+    // actually reply to, which is the entire point of collecting it.
+    const contactProblem =
+      (email.trim() ? emailProblem(email) : null) ?? (phone.trim() ? phoneProblem(phone) : null);
+    if (contactProblem) {
+      setError(contactProblem);
       return;
     }
     const baseUrl = apiBaseUrl();
