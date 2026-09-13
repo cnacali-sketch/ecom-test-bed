@@ -254,6 +254,22 @@ export const siteConfig = {
 
   // ---------- Homepage ----------
   home: {
+    /** Which sections the homepage renders, and in what order.
+     *
+     * Admin-editable via the Layout screen, which saves the whole document
+     * through PUT /api/content/site. This is the shipped default and the
+     * fallback: a stored layout is a preference expressed against
+     * `HOME_SECTIONS` in lib/home-layout.ts, which stays the authority on what
+     * a section actually is. */
+    layout: [
+      { id: "hero", visible: true },
+      { id: "quickCtas", visible: true },
+      { id: "newIn", visible: true },
+      { id: "ranges", visible: true },
+      { id: "campaign", visible: true },
+      { id: "editorial", visible: true },
+      { id: "seo", visible: true },
+    ],
     hero: {
       /** Small italic kicker above the headline. Admin-editable via
        * hero_accent_word (GET/PATCH /api/sections) — was orphaned for a

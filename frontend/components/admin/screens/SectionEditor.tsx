@@ -18,9 +18,10 @@
 // honest "not built yet."
 
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api-client";
+import { moveEntry } from "@/lib/reorder";
 import { IMG_SPECS, type ImageSpec } from "@/lib/admin/types";
 import { siteConfig } from "@/content/site.config";
 import { inputCls, Toggle } from "../atoms";
@@ -174,14 +175,38 @@ function RepeatableList<T extends object>({
             <span className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
               {itemLabel} {index + 1}
             </span>
-            <button
-              type="button"
-              onClick={() => setItems(items.filter((_, i) => i !== index))}
-              className="rounded-md p-1.5 text-sale hover:bg-sale/5"
-              aria-label={`Remove ${itemLabel.toLowerCase()}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {/* Order matters on every one of these lists -- quick links, tiles,
+                ranges and FAQs all render in the order they are stored. Without
+                this the only way to reorder was to delete entries and retype
+                them, which for an editorial tile means re-uploading an image. */}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setItems(moveEntry(items, index, -1))}
+                disabled={index === 0}
+                className="rounded-md p-1.5 text-ink-soft hover:bg-ink/5 disabled:opacity-30"
+                aria-label={`Move ${itemLabel.toLowerCase()} up`}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setItems(moveEntry(items, index, 1))}
+                disabled={index === items.length - 1}
+                className="rounded-md p-1.5 text-ink-soft hover:bg-ink/5 disabled:opacity-30"
+                aria-label={`Move ${itemLabel.toLowerCase()} down`}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setItems(items.filter((_, i) => i !== index))}
+                className="rounded-md p-1.5 text-sale hover:bg-sale/5"
+                aria-label={`Remove ${itemLabel.toLowerCase()}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {fields.map((f) =>

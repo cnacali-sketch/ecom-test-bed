@@ -16,6 +16,7 @@ import {
   Home,
   Images,
   LayoutGrid,
+  LayoutTemplate,
   LogOut,
   Mail,
   Package,
@@ -48,6 +49,7 @@ import type { BackendProduct } from "@/lib/backend-adapter";
 
 import { Dashboard } from "./screens/Dashboard";
 import { SectionEditor } from "./screens/SectionEditor";
+import { LayoutBuilder } from "./screens/LayoutBuilder";
 import { ProductList } from "./screens/ProductList";
 import { ProductEditor } from "./screens/ProductEditor";
 import { Inventory } from "./screens/Inventory";
@@ -418,6 +420,7 @@ export function AdminApp() {
     <nav className="space-y-1">
       {navBtn("dashboard", BarChart3, "Dashboard")}
       {navBtn("home", Home, "Homepage editor")}
+      {navBtn("layout", LayoutTemplate, "Homepage layout")}
       {navBtn("products", Package, "Products")}
       {navBtn("inventory", Boxes, "Inventory", lowCount)}
       {navBtn("orders", ShoppingBag, "Orders")}
@@ -437,6 +440,7 @@ export function AdminApp() {
   const titles: Record<AdminView, string> = {
     dashboard: "Dashboard",
     home: "Homepage editor",
+    layout: "Homepage layout",
     products: "Products",
     editor: draft?.name || "New product",
     inventory: "Inventory",
@@ -631,6 +635,7 @@ export function AdminApp() {
             <Dashboard products={products} orders={ordersForStats} ordersState={ordersState} />
           )}
           {view === "home" && <SectionEditor />}
+          {view === "layout" && <LayoutBuilder />}
           {view === "products" && (
             <ProductList
               products={products}

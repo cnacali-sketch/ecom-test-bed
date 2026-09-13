@@ -253,6 +253,36 @@
     }
   ],
   "home": {
+    "layout": [
+      {
+        "id": "hero",
+        "visible": true
+      },
+      {
+        "id": "quickCtas",
+        "visible": true
+      },
+      {
+        "id": "newIn",
+        "visible": true
+      },
+      {
+        "id": "ranges",
+        "visible": true
+      },
+      {
+        "id": "campaign",
+        "visible": true
+      },
+      {
+        "id": "editorial",
+        "visible": true
+      },
+      {
+        "id": "seo",
+        "visible": true
+      }
+    ],
     "hero": {
       "accentWord": "Held",
       "headline": "in place, beautifully.",

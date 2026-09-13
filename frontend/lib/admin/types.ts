@@ -134,6 +134,7 @@ export interface MediaItem {
 export type AdminView =
   | "dashboard"
   | "home"
+  | "layout"
   | "products"
   | "editor"
   | "inventory"
