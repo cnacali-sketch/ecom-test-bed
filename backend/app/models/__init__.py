@@ -21,6 +21,7 @@ from app.models.return_request import ReturnRequest
 from app.models.site_content import SiteContent
 from app.models.user import User
 from app.models.user_event import UserEvent
+from app.models.webhook_delivery import WebhookDelivery
 
 __all__ = [
     "AgentDecision",
@@ -32,6 +33,7 @@ __all__ = [
     "ErrorLog",
     "HomepageContent",
     "InventorySnapshot",
+    "WebhookDelivery",
     "Invoice",
     "InvoiceSequence",
     "Order",

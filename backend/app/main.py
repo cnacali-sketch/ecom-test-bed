@@ -1,6 +1,10 @@
 """FastAPI application entrypoint."""
+import asyncio
 import logging
 import mimetypes
+import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from starlette.exceptions import HTTPException
@@ -11,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.middleware.error_logging import ErrorLoggingMiddleware
+from app.services import scheduler
 from app.routers import (
     audit,
     auth,
@@ -33,7 +38,17 @@ from app.routers import (
     recommendation,
     returns,
     sections,
+    webhooks,
 )
+
+
+#: True when this module is imported by a test run.
+#:
+#: The background job is off under pytest. httpx's ASGITransport does not fire
+#: lifespan events, so it would not start anyway -- but "the library we use
+#: happens not to call it" is not a reason for a test suite to be one import
+#: away from spawning a loop that outlives the test.
+_UNDER_PYTEST = "pytest" in sys.modules
 
 
 class _MediaFiles(StaticFiles):
@@ -107,7 +122,32 @@ def create_app() -> FastAPI:
         if settings.is_production
         else {}
     )
-    fastapi_app = FastAPI(title=settings.app_name, **docs_kwargs)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        """Start the daily stock reading, and make sure it stops.
+
+        The task is cancelled and awaited on the way out rather than left to
+        the event loop, so a container restart does not leave a half-finished
+        database write behind. Under pytest it is never started at all: httpx's
+        ASGITransport does not run lifespan events, so this would not fire in
+        the suite anyway, but a loop that outlives the test that started it is
+        not something to leave to a library's current behaviour.
+        """
+        task: asyncio.Task | None = None
+        if settings.inventory_snapshots_enabled and not _UNDER_PYTEST:
+            task = asyncio.create_task(scheduler.run_inventory_snapshots())
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+    fastapi_app = FastAPI(title=settings.app_name, lifespan=lifespan, **docs_kwargs)
 
     fastapi_app.add_middleware(
         CORSMiddleware,
@@ -139,6 +179,7 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(error_logs.router)
     fastapi_app.include_router(contact.router)
     fastapi_app.include_router(payments.router)
+    fastapi_app.include_router(webhooks.router)
 
     # StaticFiles picks the Content-Type from Python's `mimetypes`, which reads
     # the OS table. The slim container image ships no /etc/mime.types, and this

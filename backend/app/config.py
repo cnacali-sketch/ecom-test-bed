@@ -116,6 +116,15 @@ class Settings(BaseSettings):
     # cannot use COD (they must pay in full online).
     cod_deposit_amount: int = 200
 
+    # --- Background jobs ---
+    # Whether the app records a daily stock reading into `inventory_snapshots`.
+    # On by default: the table is useless unless it was being filled before
+    # anyone wanted to read it. Set INVENTORY_SNAPSHOTS_ENABLED=false to stop a
+    # replica from writing the same day a second time if this ever runs as more
+    # than one process -- though the unique constraint on the table is what
+    # actually guarantees that, not this flag.
+    inventory_snapshots_enabled: bool = True
+
     # Only these opt IN to dev conveniences (insecure default secret, open CORS).
     # Anything else — including a typo'd or unset APP_ENV — is treated as
     # production, so a misconfigured deploy fails closed rather than silently
