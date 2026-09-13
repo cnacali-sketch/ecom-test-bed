@@ -5,10 +5,7 @@ import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import { formatPrice } from "@/lib/format";
 
-import { siteConfig } from "@/content/site.config";
-
-// Empty-cart shortcuts mirror the main nav (config-driven).
-const EMPTY_STATE_SHORTCUTS = siteConfig.nav.map(({ label, href }) => ({ label, href }));
+import { useSiteContent } from "@/lib/site-content-context";
 
 const FREE_SHIPPING_THRESHOLD = 1499;
 
@@ -19,6 +16,14 @@ const FREE_SHIPPING_THRESHOLD = 1499;
  * instead of a full-height side drawer).
  */
 export function CartDrawer() {
+  // Read inside the component, not at module scope. The nav used to be
+  // captured once when this module was first evaluated, which a hook cannot
+  // do -- and which would have frozen the shop's navigation at build time
+  // even after it became live content.
+  const EMPTY_STATE_SHORTCUTS = useSiteContent().nav.map(({ label, href }) => ({
+    label,
+    href,
+  }));
   const { items, isOpen, subtotal, closeCart, removeItem, updateQuantity } = useCart();
 
   if (!isOpen) return null;

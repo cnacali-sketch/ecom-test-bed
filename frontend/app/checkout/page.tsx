@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AddressFields, seedAddress } from "@/components/ui/AddressFields";
-import { siteConfig } from "@/content/site.config";
+import { useSiteContent } from "@/lib/site-content-context";
 import { trackEvent } from "@/lib/analytics";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth, type Address } from "@/lib/auth-context";
@@ -17,6 +17,10 @@ import { formatPrice } from "@/lib/format";
 import { openRazorpayCheckout } from "@/lib/razorpay";
 
 export default function CheckoutPage() {
+  // Same reason as the contact page: importing the config directly ships
+  // all of it to the browser. Read here rather than in the handler below,
+  // because a hook cannot be called from inside an event callback.
+  const { brand, policies } = useSiteContent();
   const { items, subtotal, clearCart } = useCart();
   const { user } = useAuth();
   const router = useRouter();
@@ -135,7 +139,7 @@ export default function CheckoutPage() {
           // Orders under the COD deposit amount can't use COD — force prepaid.
           payment_method: paymentMethod === "cod" && !codAvailable ? "prepaid" : paymentMethod,
           terms_accepted: termsAccepted,
-          terms_version: siteConfig.policies.termsVersion,
+          terms_version: policies.termsVersion,
           coupon_code: appliedCoupon?.code,
         }),
       });
@@ -174,8 +178,8 @@ export default function CheckoutPage() {
           orderId: rzp.razorpay_order_id,
           amount: rzp.amount,
           currency: rzp.currency ?? "INR",
-          name: siteConfig.brand.name,
-          description: `${items.length} item${items.length > 1 ? "s" : ""} from ${siteConfig.brand.name}`,
+          name: brand.name,
+          description: `${items.length} item${items.length > 1 ? "s" : ""} from ${brand.name}`,
           prefill: {
             email: user?.email ?? email,
             contact: address.phone,

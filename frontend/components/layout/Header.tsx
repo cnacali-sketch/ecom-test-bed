@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { siteConfig } from "@/content/site.config";
+import { useSiteContent } from "@/lib/site-content-context";
 import { apiBaseUrl } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { adaptProduct, type BackendProduct } from "@/lib/backend-adapter";
@@ -17,16 +17,14 @@ import { SearchOverlay } from "./SearchOverlay";
 /**
  * Global chrome: scrolling announcement marquee, logo, mega-menu nav,
  * search overlay, cart trigger, and mobile accordion nav.
- * All copy/links come from content/site.config.ts.
+ *
+ * Copy and links come from the site content document, via the provider in
+ * layout.tsx. This used to take an `announcementOverride` prop: a bespoke
+ * server-to-client channel for the one live field the ribbon needed, because a
+ * client component cannot fetch for itself. Every other piece of live content
+ * would have needed a prop of its own.
  */
-interface HeaderProps {
-  /** Admin override for the announcement ribbon (see GET /api/sections),
-   * fetched server-side in layout.tsx since this is a client component.
-   * Both fields null means "use content/site.config.ts's default". */
-  announcementOverride?: { enabled: boolean | null; messages: string[] | null };
-}
-
-export function Header({ announcementOverride }: HeaderProps = {}) {
+export function Header() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -39,7 +37,7 @@ export function Header({ announcementOverride }: HeaderProps = {}) {
   const catalogRequested = useRef(false);
   const { itemCount, openCart } = useCart();
   const { user } = useAuth();
-  const { brand, nav } = siteConfig;
+  const { brand, nav, announcement } = useSiteContent();
 
   // Only the homepage has a hero for the header to float over; every other
   // route keeps today's normal in-flow header untouched (no positioning or
@@ -154,14 +152,6 @@ export function Header({ announcementOverride }: HeaderProps = {}) {
   // visual about this is interpolated in CSS; this boolean only drives
   // the things that must be discrete (focusability, hit-testing).
   const overHero = isHome && !pillActive;
-  const announcement = {
-    enabled: announcementOverride?.enabled ?? siteConfig.announcement.enabled,
-    messages:
-      announcementOverride?.messages && announcementOverride.messages.length > 0
-        ? announcementOverride.messages
-        : siteConfig.announcement.messages,
-  };
-
   // Send signed-out shoppers straight to the sign-in page; signed-in ones to
   // their account. Avoids the /account "Loading…" → redirect bounce.
   const accountHref = user ? "/account" : "/login";

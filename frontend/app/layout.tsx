@@ -14,7 +14,8 @@ import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { siteConfig } from "@/content/site.config";
-import { fetchHomepageContent } from "@/lib/api";
+import { getSiteContent } from "@/lib/site-content";
+import { SiteContentProvider } from "@/lib/site-content-context";
 import { organizationJsonLd, websiteJsonLd } from "@/lib/seo";
 import { AuthProvider } from "@/lib/auth-context";
 import { CartProvider } from "@/lib/cart-context";
@@ -89,10 +90,10 @@ export const viewport: Viewport = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const homepageContent = await fetchHomepageContent();
+  const content = await getSiteContent();
   return (
     <html
-      lang={siteConfig.brand.locale.split("-")[0]}
+      lang={content.brand.locale.split("-")[0]}
       className="h-full antialiased"
     >
       <body className="flex min-h-full flex-col">
@@ -100,16 +101,16 @@ export default async function RootLayout({
             sitelinks search box. Emitted once here, not per page. */}
         <JsonLd data={organizationJsonLd()} />
         <JsonLd data={websiteJsonLd()} />
+        {/* Outermost of the four so everything below can read the shop's
+            content, including the other providers' subtrees. Resolved once
+            here rather than per component: `getSiteContent` is cache()d, but
+            only a server component can await it at all. */}
+        <SiteContentProvider value={content}>
         <AuthProvider>
           <WishlistProvider>
             <CartProvider>
               <PageViewTracker />
-              <Header
-                announcementOverride={{
-                  enabled: homepageContent?.announcement_enabled ?? null,
-                  messages: homepageContent?.announcement_messages ?? null,
-                }}
-              />
+              <Header />
               <main className="flex-1">{children}</main>
               <Footer />
               <CartDrawer />
@@ -118,6 +119,7 @@ export default async function RootLayout({
             </CartProvider>
           </WishlistProvider>
         </AuthProvider>
+        </SiteContentProvider>
         <Script
           src="https://static.cloudflareinsights.com/beacon.min.js"
           data-cf-beacon='{"token": "4ca450c993164d0aab91be3ef4491f83"}'

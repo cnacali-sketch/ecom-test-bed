@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { siteConfig } from "@/content/site.config";
+import { useSiteContent } from "@/lib/site-content-context";
 
 interface MobileNavProps {
   onClose: () => void;
@@ -13,6 +13,7 @@ interface MobileNavProps {
  * (the Accessorize mobile pattern). Content comes from site config.
  */
 export function MobileNav({ onClose }: MobileNavProps) {
+  const { nav } = useSiteContent();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
@@ -29,7 +30,7 @@ export function MobileNav({ onClose }: MobileNavProps) {
         </div>
 
         <nav className="flex-1 px-5 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-          {siteConfig.nav.map((item) => (
+          {nav.map((item) => (
             <div key={item.label} className="border-b border-ink/10">
               <div className="flex items-center justify-between">
                 <Link

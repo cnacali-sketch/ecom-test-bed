@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { siteConfig } from "@/content/site.config";
+import { useSiteContent } from "@/lib/site-content-context";
 import { useCart } from "@/lib/cart-context";
 import { formatPrice } from "@/lib/format";
 import { trackEvent } from "@/lib/analytics";
@@ -25,7 +25,7 @@ interface SpecimenRangesProps {
 export function SpecimenRanges({ products }: SpecimenRangesProps) {
   const { addItem } = useCart();
   const { specimenSectionEyebrow, specimenSectionSub, specimenRanges, specimenExploreLabel } =
-    siteConfig.home;
+    useSiteContent().home;
 
   const ranges = specimenRanges
     .map((range) => ({ range, product: products.find((product) => product.id === range.productId) }))

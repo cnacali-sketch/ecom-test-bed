@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { apiBaseUrl } from "@/lib/api-client";
-import { siteConfig } from "@/content/site.config";
+import { useSiteContent } from "@/lib/site-content-context";
 
 const CATEGORIES = [
   { value: "query", label: "General query" },
@@ -16,6 +16,9 @@ const inputCls =
   "mt-1 w-full border border-ink/15 bg-card px-3 py-2 text-sm text-ink outline-none focus:border-teal";
 
 export default function ContactPage() {
+  // Read through the provider rather than imported: a direct import bundles
+  // the whole 584-line config into this page's client JavaScript.
+  const { contact } = useSiteContent();
   const [category, setCategory] = useState("query");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -94,24 +97,24 @@ export default function ContactPage() {
         <div className="flex gap-2">
           <dt className="shrink-0 font-medium text-ink">Address</dt>
           <dd>
-            {siteConfig.contact.address.line1}, {siteConfig.contact.address.line2},{" "}
-            {siteConfig.contact.address.city}, {siteConfig.contact.address.state}{" "}
-            {siteConfig.contact.address.postcode}, {siteConfig.contact.address.country}
+            {contact.address.line1}, {contact.address.line2},{" "}
+            {contact.address.city}, {contact.address.state}{" "}
+            {contact.address.postcode}, {contact.address.country}
           </dd>
         </div>
         <div className="flex gap-2">
           <dt className="shrink-0 font-medium text-ink">Phone</dt>
           <dd>
-            <a href={`tel:${siteConfig.contact.phone.replace(/\s+/g, "")}`} className="hover:text-teal">
-              {siteConfig.contact.phone}
+            <a href={`tel:${contact.phone.replace(/\s+/g, "")}`} className="hover:text-teal">
+              {contact.phone}
             </a>
           </dd>
         </div>
         <div className="flex gap-2">
           <dt className="shrink-0 font-medium text-ink">Email</dt>
           <dd>
-            <a href={`mailto:${siteConfig.contact.email}`} className="hover:text-teal">
-              {siteConfig.contact.email}
+            <a href={`mailto:${contact.email}`} className="hover:text-teal">
+              {contact.email}
             </a>
           </dd>
         </div>

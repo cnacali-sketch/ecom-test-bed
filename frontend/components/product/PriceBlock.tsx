@@ -1,6 +1,6 @@
 import { calculateDiscountPercent, formatPrice } from "@/lib/format";
 import type { Currency } from "@/lib/types";
-import { siteConfig } from "@/content/site.config";
+import { useSiteContent } from "@/lib/site-content-context";
 
 interface PriceBlockProps {
   price: number;
@@ -34,6 +34,7 @@ export function PriceBlock({
   size = "md",
   showMrp = true,
 }: PriceBlockProps) {
+  const { taxLine } = useSiteContent().brand;
   const isOnSale = showMrp && mrp > price;
   const discountPercent = calculateDiscountPercent(mrp, price);
   const sizeClass = SIZE_CLASSES[size];
@@ -47,9 +48,9 @@ export function PriceBlock({
           <span className="font-medium text-sale">{discountPercent}% off</span>
         </>
       )}
-      {siteConfig.brand.taxLine && size !== "sm" && (
+      {taxLine && size !== "sm" && (
         <span className="w-full text-[10px] uppercase tracking-[0.1em] text-ink-soft/70">
-          {siteConfig.brand.taxLine}
+          {taxLine}
         </span>
       )}
     </div>
