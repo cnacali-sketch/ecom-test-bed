@@ -14,6 +14,7 @@ import { apiFetch } from "@/lib/api-client";
 import { useAuth, type Address } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { formatPrice } from "@/lib/format";
+import { requiresOnlinePayment } from "@/lib/payment-due";
 import { openRazorpayCheckout } from "@/lib/razorpay";
 
 export default function CheckoutPage() {
@@ -154,6 +155,17 @@ export default function CheckoutPage() {
         return;
       }
       const order = await response.json();
+
+      // An admin placing a COD order is deliberately given no deposit, and the
+      // backend already confirmed that order — email included — when it was
+      // created. Asking /razorpay/init for it anyway earns a 400 and strands a
+      // saved order behind "Could not start payment". See lib/payment-due.ts.
+      if (!requiresOnlinePayment(order)) {
+        trackEvent("order_placed");
+        clearCart();
+        router.push(`/track-order?order_id=${order.id}&placed=1`);
+        return;
+      }
 
       // Collect payment via Razorpay. Prepaid pays the full total; Cash on
       // Delivery pays its non-refundable confirmation deposit now, with the
