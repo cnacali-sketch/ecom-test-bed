@@ -28,9 +28,15 @@ class Order(Base):
     # off-ramps cancelled / returned.
     status: Mapped[str] = mapped_column(String(32), default="pending")
     # Payment lifecycle, tracked separately from fulfilment: unpaid → paid →
-    # refunded. Set manually by an admin until the payment gateway is wired,
-    # at which point the gateway webhook becomes the source of truth.
-    payment_status: Mapped[str] = mapped_column(String(16), default="unpaid", server_default="unpaid")
+    # partially_refunded → refunded. Set manually by an admin until the payment
+    # gateway is wired, at which point the gateway webhook becomes the source
+    # of truth.
+    #
+    # 32, not 16: "partially_refunded" is eighteen characters, and the column
+    # spent the whole of Phase 8 unable to hold a value three live code paths
+    # were willing to write. SQLite ignores varchar lengths, so the tests never
+    # said so. Kept in step with `status` above rather than trimmed to fit.
+    payment_status: Mapped[str] = mapped_column(String(32), default="unpaid", server_default="unpaid")
     # cod (cash on delivery, live today) or prepaid (online, pending the gateway).
     payment_method: Mapped[str] = mapped_column(String(16), default="cod", server_default="cod")
     # Snapshot of the delivery address AT CHECKOUT TIME — a later profile edit
@@ -104,6 +110,18 @@ class Order(Base):
 
     items: Mapped[list[OrderItem]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
+    )
+    # Return requests die with the order. They are a customer's request about
+    # *this* order and mean nothing once it is gone, so orphaning them would
+    # leave rows pointing at an id that no longer resolves.
+    #
+    # Declared because PostgreSQL enforces the foreign key and SQLite, as
+    # configured here, does not: without this, deleting an order that has ever
+    # been returned raised `ForeignKeyViolationError` on production and passed
+    # every test. Invoices are deliberately NOT cascaded -- see the guard in
+    # `routers/orders.py`, which refuses the delete instead.
+    return_requests: Mapped[list["ReturnRequest"]] = relationship(
+        cascade="all, delete-orphan"
     )
 
 

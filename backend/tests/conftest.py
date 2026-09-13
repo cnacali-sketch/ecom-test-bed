@@ -36,16 +36,29 @@ def _clear_login_throttle() -> "Generator[None, None, None]":
 
 @pytest.fixture(autouse=True)
 def _http_test_cookies() -> "Generator[None, None, None]":
-    """The ASGI test client talks http://; force auth cookies to non-Secure/lax
-    so it stores and resends them. A deploy/preview .env may set Secure +
-    SameSite=None for cross-site HTTPS, which would otherwise make the http
-    test client silently drop the cookie and break every login round-trip."""
+    """The ASGI test client talks http:// to a host called `test`; force the
+    auth cookies to attributes that host can actually accept, so it stores and
+    resends them.
+
+    A deploy environment sets Secure + a real cookie domain, and every one of
+    those attributes makes the http test client silently drop the cookie --
+    silently being the problem, since the response is still a 200 and the
+    failure surfaces much later as an unexplained 401.
+
+    `cookie_domain` is the one that is easiest to miss, because it only bites
+    when the suite runs somewhere that has production settings loaded. Running
+    the whole suite on the production droplet failed 14 auth tests for exactly
+    this reason and for no other: `Domain=.savvyinteal.com` does not match a
+    request to `http://test`, so http.cookiejar discarded all three cookies and
+    `resp.cookies` came back empty. Neutralise it here rather than at 14 call
+    sites, and the suite stops depending on where it is run."""
     settings = get_settings()
-    saved = (settings.cookie_secure, settings.cookie_samesite)
+    saved = (settings.cookie_secure, settings.cookie_samesite, settings.cookie_domain)
     settings.cookie_secure = False
     settings.cookie_samesite = "lax"
+    settings.cookie_domain = ""
     yield
-    settings.cookie_secure, settings.cookie_samesite = saved
+    settings.cookie_secure, settings.cookie_samesite, settings.cookie_domain = saved
 
 
 #: When set, the whole suite runs against this PostgreSQL database instead of

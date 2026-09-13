@@ -39,6 +39,7 @@ from app.dependencies.auth import (
     require_staff,
 )
 from app.models.coupon import Coupon
+from app.models.invoice import Invoice
 from app.models.order import Order, OrderItem
 from app.models.product import Product
 from app.models.user import ROLE_ADMIN, User
@@ -1186,7 +1187,12 @@ async def delete_order(
     Items cascade with the order (Order.items is cascade="all, delete-orphan").
     """
     result = await db.execute(
-        select(Order).options(selectinload(Order.items)).where(Order.id == order_id)
+        select(Order)
+        # `return_requests` is loaded because it cascades: the ORM can only
+        # delete children it can see, and an unloaded collection would try to
+        # lazy-load inside the flush and fail on the async driver.
+        .options(selectinload(Order.items), selectinload(Order.return_requests))
+        .where(Order.id == order_id)
     )
     order = result.scalar_one_or_none()
     if order is None:
@@ -1196,6 +1202,23 @@ async def delete_order(
             status_code=409,
             detail="This order is marked paid. Refund it and set payment to refunded "
             "before deleting, so the payment record is not lost.",
+        )
+
+    # An invoice is a numbered document in a gapless series, and the series is
+    # the point: deleting the order it was issued against would either orphan
+    # the row or, if it cascaded, tear a hole in the sequence. Neither is ours
+    # to do -- an issued invoice is cancelled with a credit note, not erased.
+    #
+    # The `paid` guard above does not already cover this. A refunded order is
+    # not "paid", and a refunded order is exactly the kind that has an invoice.
+    invoiced = await db.scalar(
+        select(Invoice.number).where(Invoice.order_id == order_id).limit(1)
+    )
+    if invoiced:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Invoice {invoiced} was issued for this order. An issued invoice "
+            "cannot be deleted — cancel it with a credit note instead.",
         )
 
     # Guarded on stock_released, not just the `restock` flag: an order that was

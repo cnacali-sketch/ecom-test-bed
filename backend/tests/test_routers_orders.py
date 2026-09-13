@@ -5,9 +5,13 @@ from decimal import Decimal
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.invoice import Invoice
+from app.models.order import Order
 from app.models.product import Product
+from app.models.return_request import ReturnRequest
 from app.routers.orders import ORDER_MAX_PER_IP
 
 
@@ -1146,3 +1150,69 @@ async def test_untracked_products_are_unaffected_by_cancellation(
     assert resp.status_code == 200
     await db_session.refresh(product)
     assert "stock" not in (product.attrs or {})
+
+
+# ---- deleting an order that other tables point at ----
+
+@pytest.mark.asyncio
+async def test_deleting_a_returned_order_takes_its_return_request_with_it(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """`return_requests.order_id` is a real foreign key, and PostgreSQL enforces
+    it. Without a cascade the delete raised `ForeignKeyViolationError` -- a 500
+    on a plausible sequence: customer returns, admin refunds, admin deletes.
+
+    It passed every test for as long as the suite ran on SQLite, which does not
+    enforce foreign keys unless asked to. This asserts both halves: the delete
+    succeeds, and the child row is gone rather than left pointing at nothing.
+    """
+    product = await _product_with_stock(db_session, "FK-RETURN-1", 10)
+    order_id = await _order_for(client, product, 1)
+    await admin_client.patch(f"/api/orders/{order_id}/status?status=delivered")
+    created = await client.post(
+        "/api/returns", json={"order_id": order_id, "reason": "Wrong size sent"}
+    )
+    assert created.status_code == 201, created.text
+
+    resp = await admin_client.delete(f"/api/orders/{order_id}")
+
+    assert resp.status_code == 204, resp.text
+    left = await db_session.execute(
+        select(ReturnRequest).where(ReturnRequest.order_id == uuid.UUID(order_id))
+    )
+    assert left.scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_an_invoiced_order_cannot_be_deleted(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """An invoice is a numbered document in a gapless series. Deleting the order
+    it was issued against would orphan the row -- or, had it cascaded, tear a
+    hole in the sequence, which is the one thing the series exists to prevent.
+
+    Deliberately not covered by the existing `paid` guard: this order is
+    refunded, not paid, and a refunded order is exactly the kind that has an
+    invoice against it.
+    """
+    product = await _product_with_stock(db_session, "FK-INVOICE-1", 10)
+    order_id = await _order_for(client, product, 1)
+    db_session.add(
+        Invoice(
+            order_id=uuid.UUID(order_id),
+            number="SIT/26-27/0007",
+            financial_year="26-27",
+            sequence=7,
+            seller_name="Savvy In Teal",
+        )
+    )
+    await db_session.commit()
+    await admin_client.patch(f"/api/orders/{order_id}/payment?payment_status=paid")
+    await admin_client.patch(f"/api/orders/{order_id}/payment?payment_status=refunded")
+
+    resp = await admin_client.delete(f"/api/orders/{order_id}")
+
+    assert resp.status_code == 409, resp.text
+    assert "SIT/26-27/0007" in resp.json()["detail"]
+    still_there = await db_session.get(Order, uuid.UUID(order_id))
+    assert still_there is not None

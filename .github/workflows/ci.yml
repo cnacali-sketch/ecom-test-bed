@@ -67,19 +67,40 @@ jobs:
           TEST_POSTGRES_URL: postgresql+asyncpg://savvy:savvy@localhost:5432/savvy_test
           JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
           FRAUD_HASH_SECRET: ci-only-fraud-secret-not-used-elsewhere-0123456789
-        # Only these files, not the whole suite.
+        # These files, not the whole suite -- and the reason is now runtime,
+        # not correctness. The whole suite has been run against real
+        # PostgreSQL and passes: 652 passed, 0 failed. It takes 16m28s,
+        # because the `db_session` fixture drops and recreates every table per
+        # test, which SQLite does in memory for free and PostgreSQL does not.
+        # Adding that to every push would buy less than it costs; a
+        # session-scoped schema with truncation between tests is what would
+        # make running everything here affordable.
         #
-        # SQLite cannot express a tsvector, a GIN index or a plpgsql trigger,
-        # so tests covering those take a fallback path and pass against code
-        # production never runs -- which is exactly how a 500 in the search
-        # builder shipped with the suite green.
+        # So this list is the subset where the engines genuinely disagree:
         #
-        # The rest of the suite is *not* PostgreSQL-clean yet. Running it there
-        # today produces a large number of dialect failures that have nothing
-        # to do with the change under test, and a red pipeline nobody can act
-        # on is worse than a narrow green one. Widening this list as files are
-        # made dialect-agnostic is the way that gap closes.
-        run: pytest tests/test_product_search.py tests/test_audit_chain.py -q
+        # * tsvector, GIN and plpgsql cannot be expressed in SQLite at all, so
+        #   those tests take a fallback path and pass against code production
+        #   never runs -- exactly how a 500 in the search builder shipped with
+        #   the suite green.
+        # * SQLite ignores varchar lengths and, as configured here, does not
+        #   enforce foreign keys. Both hid a live bug: `payment_status` was
+        #   varchar(16) while three paths wrote "partially_refunded", and
+        #   deleting an order with a return request violated its foreign key.
+        #   Money, refunds, returns and deletion are all on this list for that
+        #   reason.
+        run: |
+          pytest -q \
+            tests/test_product_search.py \
+            tests/test_audit_chain.py \
+            tests/test_routers_audit.py \
+            tests/test_order_state_machine.py \
+            tests/test_routers_orders.py \
+            tests/test_routers_orders_refunds.py \
+            tests/test_routers_payments.py \
+            tests/test_routers_returns.py \
+            tests/test_product_variants.py \
+            tests/test_site_content.py \
+            tests/test_migration_site_content.py
 
       - name: Fail if a PostgreSQL-only test was skipped
         working-directory: backend

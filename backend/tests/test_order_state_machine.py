@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.audit_log import AuditLog
 from app.models.order import Order, OrderItem
 from app.models.product import Product
+from app.routers.orders import FULFILMENT_TRANSITIONS, PAYMENT_TRANSITIONS
 
 _PRODUCT = uuid.uuid4()
 
@@ -483,3 +484,37 @@ async def test_staff_can_read_the_transitions_but_the_public_cannot(
     something an anonymous caller has any use for."""
     assert (await staff_client.get("/api/orders/transitions")).status_code == 200
     assert (await client.get("/api/orders/transitions")).status_code == 401
+
+
+# ---- the column has to be able to hold the words above ----
+
+@pytest.mark.parametrize(
+    ("column", "states"),
+    [
+        ("status", set(FULFILMENT_TRANSITIONS)),
+        ("payment_status", set(PAYMENT_TRANSITIONS)),
+    ],
+)
+def test_every_declared_state_fits_the_column_that_stores_it(
+    column: str, states: set[str]
+) -> None:
+    """A state machine whose states do not fit in the database is not a state
+    machine, it is a 500 waiting for someone to use the feature.
+
+    `payment_status` was varchar(16) while this module declared
+    "partially_refunded", which is eighteen characters. Three live paths wrote
+    it -- the admin refund endpoint, the Razorpay refund webhook, and the
+    console's payment dropdown -- and every one of them would have raised
+    `StringDataRightTruncationError` on PostgreSQL.
+
+    Nothing caught it for a full phase because SQLite ignores varchar lengths
+    entirely: it stores the eighteen characters and every assertion passes.
+    This check reads the declared length instead of writing a row, so it fails
+    on either engine, in CI, without a PostgreSQL service.
+    """
+    limit = Order.__table__.columns[column].type.length
+    too_long = sorted(s for s in states if len(s) > limit)
+
+    assert not too_long, (
+        f"orders.{column} is varchar({limit}); {too_long} would be truncated"
+    )
